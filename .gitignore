@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.kiro/
+docs/specs/
+*.log
+!package-lock.json
+.DS_Store
