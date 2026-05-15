@@ -119,9 +119,9 @@ function handleExtensionMessage(
     }
 
     case 'OVERLAY_SHOW':
-    case 'OVERLAY_HIDE': {
-      // These will be handled by the overlay module (task 9.1)
-      // For now, dispatch to page for any page-level handling
+    case 'OVERLAY_HIDE':
+    case 'OVERLAY_CLEAR_ALL': {
+      // Forward overlay commands to page script
       const eventId = generateEventId();
       dispatchToPage(type, payload, eventId);
       sendResponse({ success: true });
