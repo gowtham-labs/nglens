@@ -13,17 +13,27 @@
 import type { AnalyzerResult, AnalyzerType, RuntimeMode } from '../types/analyzer';
 import type { DetectionResult, PageMessage, ScanRequestPayload } from '../types/messages';
 import type { PerformanceScore, PerformanceSubScore } from '../types/scoring';
+import type { OverlayConfig } from '../types/overlay';
 import { MAX_ELEMENTS_PER_SCAN } from '../utils/constants';
 import { findAngularComponents } from '../utils/dom-utils';
 import { createBudgetMonitor, type BudgetMonitor } from '../utils/performance-budget';
 import { cleanupAllObservers } from '../utils/sampling';
 import { runAnalyzers, getRegisteredCount } from '../analyzers';
+import {
+  injectOverlayStyles,
+  showOverlay,
+  hideOverlay,
+  clearAllOverlays
+} from './overlay-renderer';
 
 // Side-effect imports: auto-register analyzers
 import '../analyzers/performance-scorer';
 import '../analyzers/dom-inspector';
 import '../analyzers/production-analyzer';
 import '../analyzers/enterprise-optimizer';
+import '../analyzers/best-practices-detector';
+import '../analyzers/subscription-leak-detector';
+import '../analyzers/signals-analyzer';
 
 // --- Event Constants ---
 // These mirror the constants in message-bridge.ts but are defined locally
@@ -281,6 +291,32 @@ function handleContentMessage(event: Event): void {
       handleDetectionStatus(message.eventId);
       break;
 
+    case 'OVERLAY_SHOW': {
+      const config = message.payload as OverlayConfig;
+      const overlayId = showOverlay(config);
+      if (overlayId) {
+        dispatchResult(message.eventId, 'SUCCESS', { overlayId });
+      } else {
+        dispatchResult(message.eventId, 'ERROR', {
+          message: `Element not found: ${config.elementSelector}`
+        });
+      }
+      break;
+    }
+
+    case 'OVERLAY_HIDE': {
+      const { overlayId } = message.payload as { overlayId: string };
+      hideOverlay(overlayId);
+      dispatchResult(message.eventId, 'SUCCESS', {});
+      break;
+    }
+
+    case 'OVERLAY_CLEAR_ALL': {
+      clearAllOverlays();
+      dispatchResult(message.eventId, 'SUCCESS', {});
+      break;
+    }
+
     default:
       // Unknown message type — ignore
       break;
@@ -290,6 +326,10 @@ function handleContentMessage(event: Event): void {
 // --- Initialization ---
 
 function initialize(): void {
+  // Inject overlay styles on page load
+  injectOverlayStyles();
+
+  // Listen for messages from content script
   globalThis.addEventListener(CONTENT_TO_PAGE_EVENT, handleContentMessage);
 }
 

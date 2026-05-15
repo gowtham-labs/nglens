@@ -1,7 +1,52 @@
+# Dependencies
 node_modules/
+package-lock.json
+
+# Build outputs
 dist/
-.kiro/
-docs/specs/
-*.log
-!package-lock.json
+build/
+*.zip
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# API Keys and Secrets
+*.pem
+*.key
+*.cert
+*.pfx
+secrets/
+credentials/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Chrome Extension Private Keys
+*.crx
+key.pem
+
+# Chrome Web Store credentials
+client_secret*.json
+refresh_token.txt
+
+# Build artifacts
+*.tgz
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Security scan results
+.snyk

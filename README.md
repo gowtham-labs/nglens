@@ -14,10 +14,36 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 - **trackBy Detection** — Finds `*ngFor` directives missing `trackBy` functions
 - **Best Practices** — Detects template function calls and common anti-patterns
 - **Performance Budget** — Self-monitors to stay under 3% CPU and 50MB memory
+- **Subscription Leak Detector** — Advanced detection of unsubscribed observables with 10+ cleanup patterns
+- **Signals Analyzer** ⚡ NEW — Detects Angular 16+ Signals performance issues (expensive computed, signal/RxJS mixing)
 
 ## Privacy
 
 All analysis is performed locally in your browser. No data leaves your machine. See [PRIVACY.md](./PRIVACY.md) for details.
+
+## Security
+
+ngLens takes security seriously:
+
+- ✅ **GPL v3 Licensed** - Prevents closed-source malicious forks
+- ✅ **Minimal Permissions** - Only activeTab, scripting, tabs, storage
+- ✅ **Content Security Policy** - Strict CSP prevents code injection
+- ✅ **No Network Access** - All code runs locally, zero external requests
+- ✅ **Open Source** - Fully auditable code
+- ✅ **Signed Extension** - Verified publisher on Chrome Web Store
+
+Found a security issue? See [SECURITY.md](./SECURITY.md) for reporting.
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+**Important:**
+- This project uses GPL v3 (copyleft license)
+- Forks must remain open source
+- "ngLens" trademark is protected (see [TRADEMARK.md](./TRADEMARK.md))
+- Follow secure coding practices
+- Sign your commits
 
 ## Development
 
