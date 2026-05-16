@@ -3,7 +3,7 @@
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  *
- * https://github.com/nglens/nglens
+ * https://github.com/gowtham-labs/nglens
  *
  * Signals Performance Analyzer
  *

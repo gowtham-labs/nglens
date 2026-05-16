@@ -61,7 +61,7 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
 You can verify our privacy claims:
 
 1. **Review the source code:**
-   - GitHub: https://github.com/nglens/nglens
+   - GitHub: https://github.com/gowtham-labs/nglens
    - All code is public and auditable
 
 2. **Check the manifest:**
@@ -103,7 +103,7 @@ As required by Chrome Web Store:
 ## Contact
 
 For privacy questions or concerns:
-- GitHub Issues: https://github.com/nglens/nglens/issues
+- GitHub Issues: https://github.com/gowtham-labs/nglens/issues
 - Email: gowthamdevlabs@gmail.com
 
 ## Compliance

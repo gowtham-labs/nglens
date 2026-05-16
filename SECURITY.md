@@ -193,8 +193,8 @@ Trademark "ngLens" prevents name impersonation.
 ## Contact
 
 - **Security Email:** gowthamdevlabs@gmail.com
-- **GitHub Security:** https://github.com/nglens/nglens/security/advisories
-- **General Issues:** https://github.com/nglens/nglens/issues
+- **GitHub Security:** https://github.com/gowtham-labs/nglens/security/advisories
+- **General Issues:** https://github.com/gowtham-labs/nglens/issues
 
 ## Resources
 

@@ -101,7 +101,7 @@
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  * 
- * https://github.com/nglens/nglens
+ * https://github.com/gowtham-labs/nglens
  */
 ```
 
@@ -267,12 +267,12 @@ Find Angular performance problems and learn how to fix them.
 PRIVACY: All analysis happens locally. Zero network requests.
 Open source, GPL v3 licensed, fully auditable.
 
-GitHub: https://github.com/nglens/nglens
+GitHub: https://github.com/gowtham-labs/nglens
 ```
 
 **Privacy Policy URL:**
 ```
-https://github.com/nglens/nglens/blob/main/PRIVACY.md
+https://github.com/gowtham-labs/nglens/blob/main/PRIVACY.md
 ```
 
 **Permissions Justification:**
