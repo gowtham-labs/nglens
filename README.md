@@ -7,15 +7,18 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 ## Features (V1)
 
 - **Angular Detection** — Automatically detects Angular apps in both development and production mode
-- **Performance Score** — Weighted 0-100 score based on change detection strategy, tree depth, template complexity, and bottlenecks
-- **DOM Inspector** — Detects excessive DOM complexity, layout thrashing potential, and render bottlenecks
-- **Production Heuristics** — Works without `window.ng` using DOM attribute analysis
-- **OnPush Detection** — Identifies components using Default change detection
-- **trackBy Detection** — Finds `*ngFor` directives missing `trackBy` functions
-- **Best Practices** — Detects template function calls and common anti-patterns
+- **Change Detection Analysis** — Flags Default change detection, missing `OnPush`, and `*ngFor` without `trackBy`
+- **Unnecessary Re-render Detection** — Identifies excessive DOM mutation frequency, render bottlenecks, and template anti-patterns
+- **Memory Leak Detection** — Finds leaked subscriptions, unmanaged timers, and DOM listeners
+- **RxJS Subscription Leak Detector** — Detects subscriptions without cleanup and recommends `takeUntil`, `takeUntilDestroyed`, or `async` pipe usage
+- **Bundle/Lazy-loading Guidance** — Highlights initial load risk areas and lazy loading/bundle size improvement opportunities
+- **Zone.js Overhead Awareness** — Supports Zone-trigger and async-change-detection heuristics for Angular apps
+- **Slow Initial Load Insights** — Uses DOM and component tree heuristics to surface slow startup patterns
+- **Large Component Tree Detection** — Flags large tree depth and excessive DOM subtree size that hurt rendering performance
+- **Signals Analyzer** ⚡ NEW — Detects Angular 16+ Signals issues like expensive computed signals, improper signal usage, and Signal/RxJS mixing
+- **State Management & Best Practices** — Calls out poor state management patterns and common Angular anti-patterns
 - **Performance Budget** — Self-monitors to stay under 3% CPU and 50MB memory
-- **Subscription Leak Detector** — Advanced detection of unsubscribed observables with 10+ cleanup patterns
-- **Signals Analyzer** ⚡ NEW — Detects Angular 16+ Signals performance issues (expensive computed, signal/RxJS mixing)
+- **Production Heuristics** — Works without `window.ng` using DOM attribute analysis
 
 ## Privacy
 

@@ -26,16 +26,10 @@ export type AnalyzerType =
   | 'performance-scorer'
   | 'production-analyzer'
   | 'dom-inspector'
-  | 'signals-advisor'
+  | 'signals-analyzer'
   | 'rxjs-leak-detector'
   | 'enterprise-optimizer'
-  | 'best-practices-detector'
-  | 'state-viewer'
-  | 'change-detection-profiler'
-  | 'zone-profiler'
-  | 'component-profiler'
-  | 'bundle-analyzer'
-  | 'network-correlator';
+  | 'best-practices-detector';
 
 export type IssueCategory =
   | 'change-detection'
