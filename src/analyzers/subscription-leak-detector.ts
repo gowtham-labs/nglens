@@ -25,7 +25,21 @@ import { BaseAnalyzer } from './base-analyzer';
 import { registerAnalyzer } from './index';
 import { findAngularComponents, getComponentName } from '../utils/dom-utils';
 import { now } from '../utils/timing';
-import { MAX_ELEMENTS_PER_SCAN } from '../utils/constants';
+import { MAX_ELEMENTS_PER_SCAN, MAX_LEAK_ISSUES } from '../utils/constants';
+
+/**
+ * Generates a deterministic 8-char hex hash from input string.
+ * Used for stable issue IDs across repeated scans.
+ */
+function stableHash(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0').slice(0, 8);
+}
 
 // --- Educational content for leak types ---
 
@@ -127,6 +141,21 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
   readonly requiresDevMode = true;
 
   protected async execute(config: AnalyzerConfig): Promise<AnalyzerResult> {
+    // Runtime guard: verify Angular debug API is available
+    const ng = (globalThis as any).ng;
+    if (!ng?.getComponent) {
+      return {
+        analyzer: this.type,
+        timestamp: Date.now(),
+        duration: 0,
+        issues: [],
+        metadata: {
+          skipped: true,
+          reason: 'ng.getComponent not available — Angular debug API required',
+        },
+      };
+    }
+
     const startTime = now();
     const issues: AnalysisIssue[] = [];
 
@@ -137,14 +166,10 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
     );
 
     for (let i = 0; i < limit; i++) {
+      if (issues.length >= MAX_LEAK_ISSUES) break;
+
       const element = components[i];
       const componentName = getComponentName(element);
-
-      // Get the Angular component instance via globalThis.ng
-      const ng = (globalThis as any).ng;
-      if (!ng?.getComponent) {
-        break;
-      }
 
       let component: any;
       try {
@@ -180,6 +205,11 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         element
       );
       issues.push(...eventListenerIssues);
+    }
+
+    // Cap total issues
+    if (issues.length > MAX_LEAK_ISSUES) {
+      issues.length = MAX_LEAK_ISSUES;
     }
 
     const duration = now() - startTime;
@@ -235,6 +265,11 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
     // If subscriptions detected but no cleanup mechanism
     if (subscriptionCount > 0) {
+      // Check allowlist first
+      if (this.usesKnownCleanupPattern(component)) {
+        return issues; // Known safe pattern, skip
+      }
+
       const hasCleanup =
         hasDestroySubject ||
         hasDestroyRef ||
@@ -244,7 +279,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         const severity = subscriptionCount > 3 ? 'critical' : subscriptionCount > 1 ? 'high' : 'medium';
 
         issues.push({
-          id: `leak-subscription-${componentName}-${Date.now()}`,
+          id: `leak-sub-${componentName}-${stableHash(componentName + 'subscription' + subscriptionProperties.join(','))}`,
           analyzer: this.type,
           component: componentName,
           severity,
@@ -292,7 +327,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
       if (!hasClearTimer) {
         issues.push({
-          id: `leak-timer-${componentName}-${Date.now()}`,
+          id: `leak-timer-${componentName}-${stableHash(componentName + 'timer' + timerMethods.join(','))}`,
           analyzer: this.type,
           component: componentName,
           severity: 'high',
@@ -332,7 +367,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
       if (!hasRemoveListener) {
         issues.push({
-          id: `leak-event-listener-${componentName}-${Date.now()}`,
+          id: `leak-evt-${componentName}-${stableHash(componentName + 'event' + eventListenerMethods.join(','))}`,
           analyzer: this.type,
           component: componentName,
           severity: 'medium',
@@ -358,6 +393,63 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
   }
 
   // --- Helper Methods ---
+
+  /**
+   * Checks if component uses a known safe subscription management pattern.
+   * These patterns handle cleanup automatically and should not trigger warnings.
+   */
+  private usesKnownCleanupPattern(component: any): boolean {
+    try {
+      // Pattern 1: SubSink (has .add() and .unsubscribe() on a single property)
+      for (const key in component) {
+        if (!component.hasOwnProperty(key)) continue;
+        const value = component[key];
+        if (
+          value &&
+          typeof value === 'object' &&
+          typeof value.add === 'function' &&
+          typeof value.unsubscribe === 'function' &&
+          'closed' in value
+        ) {
+          // Looks like SubSink or Subscription used as a sink
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('sub') || lowerKey.includes('sink')) {
+            return true;
+          }
+        }
+      }
+
+      // Pattern 2: ngx-auto-unsubscribe decorator (check for __ngUnsubscribe__ marker)
+      const proto = Object.getPrototypeOf(component);
+      if (proto && proto.constructor) {
+        const constructorStr = proto.constructor.toString();
+        if (constructorStr.includes('AutoUnsubscribe') || constructorStr.includes('ngUnsubscribe')) {
+          return true;
+        }
+      }
+
+      // Pattern 3: Base class with destroy$ Subject that's properly wired
+      // Check prototype chain for a destroy subject
+      let currentProto = Object.getPrototypeOf(component);
+      while (currentProto && currentProto !== Object.prototype) {
+        for (const key of Object.getOwnPropertyNames(currentProto)) {
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('destroy') || lowerKey.includes('unsubscribe')) {
+            try {
+              const value = component[key];
+              if (value && typeof value.next === 'function' && typeof value.complete === 'function') {
+                return true;
+              }
+            } catch { /* skip */ }
+          }
+        }
+        currentProto = Object.getPrototypeOf(currentProto);
+      }
+    } catch {
+      // If introspection fails, don't skip
+    }
+    return false;
+  }
 
   /**
    * Counts subscription properties in component.

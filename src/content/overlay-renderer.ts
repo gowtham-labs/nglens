@@ -3,7 +3,7 @@
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  *
- * https://github.com/[username]/ngLens
+ * https://github.com/nglens/nglens
  *
  * Overlay Renderer Module
  *
@@ -13,6 +13,17 @@
 
 import type { OverlayConfig } from '../types/overlay';
 import type { Severity } from '../types/analyzer';
+
+// --- Security: HTML escaping to prevent XSS from page-derived data ---
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // Active overlays tracking
 const activeOverlays = new Map<string, { element: HTMLElement; timeoutId?: number }>();
@@ -166,7 +177,7 @@ function getSeverityColor(severity: Severity): string {
  * Format overlay label text
  */
 function formatOverlayLabel(config: OverlayConfig): string {
-  return `<strong>${config.componentName}:</strong> ${config.issueType}`;
+  return `<strong>${escapeHtml(config.componentName)}:</strong> ${escapeHtml(config.issueType)}`;
 }
 
 /**
@@ -200,8 +211,8 @@ function createOverlay(config: OverlayConfig, overlayId: string): HTMLElement {
   const tooltip = document.createElement('div');
   tooltip.className = 'ng-lens-overlay-tooltip';
   tooltip.innerHTML = `
-    <div class="tooltip-title">${config.issueType}</div>
-    <div class="tooltip-component">Component: ${config.componentName}</div>
+    <div class="tooltip-title">${escapeHtml(config.issueType)}</div>
+    <div class="tooltip-component">Component: ${escapeHtml(config.componentName)}</div>
     <div class="tooltip-recommendation">Click label to dismiss</div>
   `;
   overlay.appendChild(tooltip);

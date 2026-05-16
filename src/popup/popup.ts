@@ -3,7 +3,7 @@
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  *
- * https://github.com/[username]/ngLens
+ * https://github.com/nglens/nglens
  *
  * Popup UI — Professional Chrome DevTools-style dashboard
  *
@@ -19,6 +19,21 @@ import type { ExtensionMessage, ScanResultsPayload } from '../types/messages';
 import type { AnalysisIssue } from '../types/analyzer';
 import type { OverlayConfig } from '../types/overlay';
 import type { PerformanceScore } from '../types/scoring';
+
+// --- Security: HTML escaping to prevent XSS from analyzer-derived data ---
+
+/**
+ * Escapes HTML special characters to prevent XSS when inserting
+ * analyzer-derived strings (component names, issue titles) into innerHTML.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // DOM elements
 const scanBtn = document.getElementById('scanBtn') as HTMLButtonElement;
@@ -87,7 +102,9 @@ scanBtn.addEventListener('click', async () => {
 
       if (stateResponse?.success && stateResponse.state?.lastScanResults) {
         scanResults = stateResponse.state.lastScanResults;
-        renderScanResults(scanResults);
+        if (scanResults) {
+          renderScanResults(scanResults);
+        }
       } else {
         showStatus('✓ Scan initiated. Results will appear shortly.', 'success');
       }
@@ -259,22 +276,22 @@ function createIssueCard(issue: AnalysisIssue): HTMLElement {
   card.innerHTML = `
     <div class="issue-header">
       <div class="issue-header-left">
-        <span class="severity-indicator ${issue.severity}"></span>
-        <span class="issue-component">${issue.component}</span>
-        <span class="issue-title-text">${issue.title}</span>
+        <span class="severity-indicator ${escapeHtml(issue.severity)}"></span>
+        <span class="issue-component">${escapeHtml(issue.component)}</span>
+        <span class="issue-title-text">${escapeHtml(issue.title)}</span>
       </div>
       <span class="expand-icon">▸</span>
     </div>
     <div class="issue-details">
       <div class="issue-content">
-        <div class="issue-description">${issue.description}</div>
+        <div class="issue-description">${escapeHtml(issue.description)}</div>
         <div class="issue-recommendation">
           <span class="recommendation-label">Recommendation</span>
-          <span class="recommendation-text">${issue.recommendation}</span>
+          <span class="recommendation-text">${escapeHtml(issue.recommendation)}</span>
         </div>
         ${issue.elementSelector ? `
           <div class="issue-actions">
-            <button class="overlay-btn" data-issue-id="${issue.id}">
+            <button class="overlay-btn" data-issue-id="${escapeHtml(issue.id)}">
               <span class="overlay-icon">◉</span>
               <span>Show on Page</span>
             </button>
