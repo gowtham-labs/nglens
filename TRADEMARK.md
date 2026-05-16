@@ -79,7 +79,7 @@ You may use "ngLens" in these contexts without permission:
 ## Requesting Permission
 
 For trademark usage not covered above, contact:
-- Email: gowthambalashanmugam@gmail.com
+- Email: gowthamdevlabs@gmail.com
 - Subject: Trademark Usage Request
 - Include: Intended use, context, duration
 
@@ -117,6 +117,6 @@ This is standard practice (examples):
 
 Contact us:
 - GitHub: https://github.com/nglens/nglens/issues
-- Email: gowthambalashanmugam@gmail.com
+- Email: gowthamdevlabs@gmail.com
 
 Last updated: May 15, 2026

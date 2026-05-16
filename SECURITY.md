@@ -9,7 +9,7 @@ We take security seriously. If you discover a security vulnerability in ngLens, 
 **DO NOT** create a public GitHub issue for security vulnerabilities.
 
 Instead, please email:
-- **Email:** gowthambalashanmugam@gmail.com
+- **Email:** gowthamdevlabs@gmail.com
 - **Subject:** [SECURITY] ngLens Vulnerability Report
 
 ### What to Include
@@ -192,7 +192,7 @@ Trademark "ngLens" prevents name impersonation.
 
 ## Contact
 
-- **Security Email:** gowthambalashanmugam@gmail.com
+- **Security Email:** gowthamdevlabs@gmail.com
 - **GitHub Security:** https://github.com/nglens/nglens/security/advisories
 - **General Issues:** https://github.com/nglens/nglens/issues
 

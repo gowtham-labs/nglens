@@ -30,8 +30,8 @@ grep -r "\[your-security-email\]" .
 
 # Replace with your actual information:
 # [your-username] → your-github-username
-# gowthambalashanmugam@gmail.com → your@email.com
-# gowthambalashanmugam@gmail.com → security@yourdomain.com
+# gowthamdevlabs@gmail.com → your@email.com
+# gowthamdevlabs@gmail.com → security@yourdomain.com
 ```
 
 **Files to update:**
@@ -217,7 +217,7 @@ Verify yourself: https://github.com/nglens/nglens
 
 - GitHub: https://github.com/nglens/nglens
 - Issues: https://github.com/nglens/nglens/issues
-- Email: gowthambalashanmugam@gmail.com
+- Email: gowthamdevlabs@gmail.com
 
 Open source, free forever, built for the Angular community.
 ```
@@ -342,7 +342,7 @@ https://github.com/nglens/nglens
 
 **Support Email:**
 ```
-gowthambalashanmugam@gmail.com
+gowthamdevlabs@gmail.com
 ```
 
 **Privacy Policy:**

@@ -362,8 +362,8 @@ storage: Store scan results locally in your browser
 
 1. **Replace placeholders:**
    - `[username]` → Your GitHub username
-   - `gowthambalashanmugam@gmail.com` → Your security email
-   - `gowthambalashanmugam@gmail.com` → Security contact
+   - `gowthamdevlabs@gmail.com` → Your security email
+   - `gowthamdevlabs@gmail.com` → Security contact
 
 2. **Create icons:**
    - Design ngLens logo
