@@ -10,7 +10,7 @@ Be respectful, inclusive, and professional. We're all here to build great tools 
 
 1. **Fork the repository**
    ```bash
-   gh repo fork nglens/nglens
+   gh repo fork gowtham-labs/nglens
    ```
 
 2. **Clone your fork**
@@ -82,7 +82,7 @@ All source files must include copyright header:
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  * 
- * https://github.com/nglens/nglens
+ * https://github.com/gowtham-labs/nglens
  */
 ```
 
@@ -245,8 +245,8 @@ By contributing, you agree:
 
 ## Questions?
 
-- GitHub Discussions: https://github.com/nglens/nglens/discussions
-- Issues: https://github.com/nglens/nglens/issues
+- GitHub Discussions: https://github.com/gowtham-labs/nglens/discussions
+- Issues: https://github.com/gowtham-labs/nglens/issues
 - Email: gowthamdevlabs@gmail.com
 
 ## Recognition

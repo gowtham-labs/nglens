@@ -211,12 +211,12 @@ ngLens is the FIRST and ONLY tool that analyzes Angular Signals performance:
 - ✅ Minimal permissions (only what's needed)
 - ✅ All code runs locally in your browser
 
-Verify yourself: https://github.com/nglens/nglens
+Verify yourself: https://github.com/gowtham-labs/nglens
 
 ## Support
 
-- GitHub: https://github.com/nglens/nglens
-- Issues: https://github.com/nglens/nglens/issues
+- GitHub: https://github.com/gowtham-labs/nglens
+- Issues: https://github.com/gowtham-labs/nglens/issues
 - Email: gowthamdevlabs@gmail.com
 
 Open source, free forever, built for the Angular community.
@@ -332,12 +332,12 @@ Upload 5 screenshots showing:
 
 **Official URL:**
 ```
-https://github.com/nglens/nglens
+https://github.com/gowtham-labs/nglens
 ```
 
 **Homepage URL:**
 ```
-https://github.com/nglens/nglens
+https://github.com/gowtham-labs/nglens
 ```
 
 **Support Email:**
@@ -347,7 +347,7 @@ gowthamdevlabs@gmail.com
 
 **Privacy Policy:**
 ```
-https://raw.githubusercontent.com/nglens/nglens/main/PRIVACY.md
+https://raw.githubusercontent.com/gowtham-labs/nglens/main/PRIVACY.md
 ```
 
 (Or host on your website/GitHub Pages)

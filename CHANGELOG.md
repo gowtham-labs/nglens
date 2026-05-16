@@ -103,11 +103,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Reporting Issues
 
-Found a bug? [Create an issue](https://github.com/nglens/nglens/issues)
+Found a bug? [Create an issue](https://github.com/gowtham-labs/nglens/issues)
 
 Security vulnerability? See [SECURITY.md](./SECURITY.md)
 
 ---
 
-[1.1.0]: https://github.com/nglens/nglens/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/nglens/nglens/releases/tag/v1.0.0
+[1.1.0]: https://github.com/gowtham-labs/nglens/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/gowtham-labs/nglens/releases/tag/v1.0.0

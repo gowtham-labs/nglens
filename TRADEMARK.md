@@ -116,7 +116,7 @@ This is standard practice (examples):
 ## Questions?
 
 Contact us:
-- GitHub: https://github.com/nglens/nglens/issues
+- GitHub: https://github.com/gowtham-labs/nglens/issues
 - Email: gowthamdevlabs@gmail.com
 
 Last updated: May 15, 2026
