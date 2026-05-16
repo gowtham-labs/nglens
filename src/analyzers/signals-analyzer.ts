@@ -3,7 +3,7 @@
  * Copyright (c) 2026 ngLens Contributors
  * Licensed under GPL v3
  *
- * https://github.com/[username]/ngLens
+ * https://github.com/nglens/nglens
  *
  * Signals Performance Analyzer
  *
@@ -30,11 +30,8 @@ import { registerAnalyzer } from './index';
 class SignalsAnalyzer implements Analyzer {
   readonly type = 'signals-analyzer' as const;
   readonly requiresDevMode = false;
-  readonly name = 'Signals Performance Analyzer';
-  readonly description = 'Detects Angular 16+ Signals performance issues and anti-patterns';
 
   async analyze(config: AnalyzerConfig): Promise<AnalyzerResult> {
-    const startTime = performance.now();
     const issues: AnalysisIssue[] = [];
     const components = findAngularComponents(document);
 
@@ -60,9 +57,9 @@ class SignalsAnalyzer implements Analyzer {
 
     return {
       analyzer: this.type,
-      duration: performance.now() - startTime,
       issues,
       timestamp: Date.now(),
+      duration: 0,
       metadata: {
         componentsScanned: components.length,
         angularVersion: this.detectAngularVersion(),
@@ -489,7 +486,7 @@ class SignalsAnalyzer implements Analyzer {
   }
 
   dispose(): void {
-    // No resources to clean up for signals analyzer
+    /* no-op */
   }
 }
 

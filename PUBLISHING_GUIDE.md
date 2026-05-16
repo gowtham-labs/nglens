@@ -30,8 +30,8 @@ grep -r "\[your-security-email\]" .
 
 # Replace with your actual information:
 # [your-username] → your-github-username
-# [your-email] → your@email.com
-# [your-security-email] → security@yourdomain.com
+# gowthambalashanmugam@gmail.com → your@email.com
+# gowthambalashanmugam@gmail.com → security@yourdomain.com
 ```
 
 **Files to update:**
@@ -211,13 +211,13 @@ ngLens is the FIRST and ONLY tool that analyzes Angular Signals performance:
 - ✅ Minimal permissions (only what's needed)
 - ✅ All code runs locally in your browser
 
-Verify yourself: https://github.com/[your-username]/ngLens
+Verify yourself: https://github.com/nglens/nglens
 
 ## Support
 
-- GitHub: https://github.com/[your-username]/ngLens
-- Issues: https://github.com/[your-username]/ngLens/issues
-- Email: [your-email]
+- GitHub: https://github.com/nglens/nglens
+- Issues: https://github.com/nglens/nglens/issues
+- Email: gowthambalashanmugam@gmail.com
 
 Open source, free forever, built for the Angular community.
 ```
@@ -332,22 +332,22 @@ Upload 5 screenshots showing:
 
 **Official URL:**
 ```
-https://github.com/[your-username]/ngLens
+https://github.com/nglens/nglens
 ```
 
 **Homepage URL:**
 ```
-https://github.com/[your-username]/ngLens
+https://github.com/nglens/nglens
 ```
 
 **Support Email:**
 ```
-[your-email]
+gowthambalashanmugam@gmail.com
 ```
 
 **Privacy Policy:**
 ```
-https://raw.githubusercontent.com/[your-username]/ngLens/main/PRIVACY.md
+https://raw.githubusercontent.com/nglens/nglens/main/PRIVACY.md
 ```
 
 (Or host on your website/GitHub Pages)

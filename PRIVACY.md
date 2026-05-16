@@ -42,10 +42,11 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
    ```
 
 4. **No Network Access:**
-   - Extension has NO host_permissions for network requests
+   - Extension makes ZERO outbound network requests
    - Cannot send data to any server
    - Cannot communicate with external services
    - All code is bundled within the extension
+   - `host_permissions` is required solely for injecting the analysis script into the page context via `chrome.scripting` API
 
 ## Third-Party Services
 
@@ -60,7 +61,7 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
 You can verify our privacy claims:
 
 1. **Review the source code:**
-   - GitHub: https://github.com/[your-username]/ngLens
+   - GitHub: https://github.com/nglens/nglens
    - All code is public and auditable
 
 2. **Check the manifest:**
@@ -102,8 +103,8 @@ As required by Chrome Web Store:
 ## Contact
 
 For privacy questions or concerns:
-- GitHub Issues: https://github.com/[your-username]/ngLens/issues
-- Email: [your-email]
+- GitHub Issues: https://github.com/nglens/nglens/issues
+- Email: gowthambalashanmugam@gmail.com
 
 ## Compliance
 
