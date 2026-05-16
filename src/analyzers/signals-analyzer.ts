@@ -20,20 +20,21 @@
 
 import type {
   Analyzer,
-  AnalyzerContext,
+  AnalyzerConfig,
   AnalyzerResult,
   AnalysisIssue,
-  Severity,
 } from '../types/analyzer';
 import { findAngularComponents } from '../utils/dom-utils';
 import { registerAnalyzer } from './index';
 
 class SignalsAnalyzer implements Analyzer {
   readonly type = 'signals-analyzer' as const;
+  readonly requiresDevMode = false;
   readonly name = 'Signals Performance Analyzer';
   readonly description = 'Detects Angular 16+ Signals performance issues and anti-patterns';
 
-  async analyze(context: AnalyzerContext): Promise<AnalyzerResult> {
+  async analyze(config: AnalyzerConfig): Promise<AnalyzerResult> {
+    const startTime = performance.now();
     const issues: AnalysisIssue[] = [];
     const components = findAngularComponents(document);
 
@@ -59,6 +60,7 @@ class SignalsAnalyzer implements Analyzer {
 
     return {
       analyzer: this.type,
+      duration: performance.now() - startTime,
       issues,
       timestamp: Date.now(),
       metadata: {
@@ -484,6 +486,10 @@ class SignalsAnalyzer implements Analyzer {
     }
 
     return tagName;
+  }
+
+  dispose(): void {
+    // No resources to clean up for signals analyzer
   }
 }
 
