@@ -104,7 +104,7 @@ As required by Chrome Web Store:
 
 For privacy questions or concerns:
 - GitHub Issues: https://github.com/nglens/nglens/issues
-- Email: gowthambalashanmugam@gmail.com
+- Email: gowthamdevlabs@gmail.com
 
 ## Compliance
 

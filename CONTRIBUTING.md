@@ -247,7 +247,7 @@ By contributing, you agree:
 
 - GitHub Discussions: https://github.com/nglens/nglens/discussions
 - Issues: https://github.com/nglens/nglens/issues
-- Email: gowthambalashanmugam@gmail.com
+- Email: gowthamdevlabs@gmail.com
 
 ## Recognition
 
