@@ -29,28 +29,10 @@ import {
 
 export class PerformanceScorer extends BaseAnalyzer {
   readonly type: AnalyzerType = 'performance-scorer';
-  readonly requiresDevMode = true;
+  readonly requiresDevMode = false;
 
   protected async execute(config: AnalyzerConfig): Promise<AnalyzerResult> {
     const startTime = performance.now();
-
-    // In production mode, return score 0 with degradation notice
-    if (config.mode === 'production' || !(window as any).ng) {
-      const score = this.buildDegradedScore();
-      const duration = performance.now() - startTime;
-
-      return {
-        analyzer: this.type,
-        timestamp: Date.now(),
-        duration,
-        issues: [],
-        metadata: {
-          score,
-          degraded: true,
-          reason: 'Full inspection requires development mode (window.ng unavailable)',
-        },
-      };
-    }
 
     // Find all Angular components in the DOM
     const components = findAngularComponents();
@@ -72,10 +54,16 @@ export class PerformanceScorer extends BaseAnalyzer {
       };
     }
 
-    // Compute sub-scores
-    const changeDetectionSubScore = this.computeChangeDetectionScore(components);
+    const hasDevMode = !!(window as any).ng;
+
+    // Compute sub-scores (use heuristics in production, full inspection in dev)
+    const changeDetectionSubScore = hasDevMode
+      ? this.computeChangeDetectionScore(components)
+      : this.computeChangeDetectionHeuristic(components);
     const treeDepthSubScore = this.computeTreeDepthScore(components);
-    const templateComplexitySubScore = this.computeTemplateComplexityScore(components);
+    const templateComplexitySubScore = hasDevMode
+      ? this.computeTemplateComplexityScore(components)
+      : this.computeTemplateComplexityHeuristic(components);
     const bottlenecksSubScore = this.computeBottlenecksScore(components);
 
     // Compute weighted overall score
@@ -98,7 +86,7 @@ export class PerformanceScorer extends BaseAnalyzer {
         detectedBottlenecks: bottlenecksSubScore,
       },
       timestamp: Date.now(),
-      mode: 'development',
+      mode: hasDevMode ? 'development' : 'production',
     };
 
     const duration = performance.now() - startTime;
@@ -110,6 +98,7 @@ export class PerformanceScorer extends BaseAnalyzer {
       issues: [],
       metadata: {
         score,
+        degraded: !hasDevMode,
       },
     };
   }
@@ -240,6 +229,78 @@ export class PerformanceScorer extends BaseAnalyzer {
       score,
       weight: SCORE_WEIGHTS.detectedBottlenecks,
       details: `${issueCount} bottleneck${issueCount !== 1 ? 's' : ''} detected`,
+    };
+  }
+
+  /**
+   * Heuristic CD score for production: estimates based on component count
+   * and DOM structure. Fewer components relative to DOM size suggests
+   * coarse-grained components (likely Default CD). More components suggests
+   * fine-grained (more likely OnPush).
+   */
+  private computeChangeDetectionHeuristic(components: Element[]): PerformanceSubScore {
+    // Heuristic: ratio of components to total DOM nodes
+    // More components per DOM node = better granularity = likely better CD strategy
+    const totalNodes = document.querySelectorAll('*').length;
+    const ratio = components.length / Math.max(totalNodes, 1);
+
+    // ratio > 0.05 (1 component per 20 nodes) = excellent granularity
+    // ratio < 0.01 (1 component per 100 nodes) = poor granularity
+    let score: number;
+    if (ratio >= 0.05) {
+      score = 85;
+    } else if (ratio >= 0.03) {
+      score = 70;
+    } else if (ratio >= 0.01) {
+      score = 50;
+    } else {
+      score = 30;
+    }
+
+    return {
+      name: 'Change Detection Strategy',
+      score,
+      weight: SCORE_WEIGHTS.changeDetection,
+      details: `${components.length} components / ${totalNodes} DOM nodes (heuristic estimate)`,
+    };
+  }
+
+  /**
+   * Heuristic template complexity for production: estimates based on
+   * average child element count per component.
+   */
+  private computeTemplateComplexityHeuristic(components: Element[]): PerformanceSubScore {
+    let totalChildren = 0;
+    let measured = 0;
+
+    for (const el of components) {
+      const directChildren = el.children.length;
+      totalChildren += directChildren;
+      measured++;
+    }
+
+    const avgChildren = measured > 0 ? totalChildren / measured : 0;
+
+    // avgChildren <= 5 = simple templates (score 90)
+    // avgChildren >= 50 = complex templates (score 20)
+    let score: number;
+    if (avgChildren <= 5) {
+      score = 90;
+    } else if (avgChildren <= 15) {
+      score = 75;
+    } else if (avgChildren <= 30) {
+      score = 55;
+    } else if (avgChildren <= 50) {
+      score = 35;
+    } else {
+      score = 20;
+    }
+
+    return {
+      name: 'Template Complexity',
+      score,
+      weight: SCORE_WEIGHTS.templateComplexity,
+      details: `Average ${avgChildren.toFixed(1)} direct children per component (heuristic estimate)`,
     };
   }
 

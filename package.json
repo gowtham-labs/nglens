@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest --run"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.42",
+    "fast-check": "4.8.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "2.1.9"
   }
 }

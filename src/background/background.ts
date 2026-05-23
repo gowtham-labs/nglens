@@ -6,9 +6,11 @@
  * 2. Manage tab lifecycle (navigation, removal) via tab-manager
  * 3. Persist scan results in chrome.storage.session
  * 4. Re-inject content script on navigation
+ * 5. Track extension install event via analytics (pending consent)
  */
 
 import type { ExtensionMessage } from '../types/messages';
+import { analyticsService } from './analytics-instance';
 import { routeMessage } from './message-router';
 import { clearTabState, removeTabState } from './tab-manager';
 
@@ -58,6 +60,23 @@ chrome.tabs.onRemoved.addListener(async (tabId: number) => {
 
 // --- Extension Install ---
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('ngLens installed');
+/**
+ * On first install, attempt to send the install event immediately if consent
+ * is already granted. Otherwise, store a pending flag so the event is sent
+ * later when consent is granted (handled in message-router.ts).
+ * For 'update' or 'chrome_update' reasons, no flag is stored and no event is sent.
+ */
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    const enabled = await analyticsService.isEnabled();
+    if (enabled) {
+      // Consent already granted — send install event now
+      const version = chrome.runtime.getManifest().version;
+      await analyticsService.trackInstall(version);
+    } else {
+      // Consent not yet granted — store pending flag for later
+      await chrome.storage.local.set({ analytics_install_pending: true });
+    }
+  }
+  // For 'update' or 'chrome_update', do nothing — no install event should be sent
 });

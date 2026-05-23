@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated:** May 15, 2026
+**Last Updated:** June 2025
 
 ## Our Commitment
 
@@ -8,14 +8,36 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
 
 ## What We Collect
 
-**Nothing.** Literally nothing.
+### Anonymous Usage Analytics (Opt-In Only)
 
-- ❌ No analytics tracking
-- ❌ No user identification
-- ❌ No usage statistics
-- ❌ No error reporting to external servers
+Starting with version 1.0.1, ngLens collects anonymous usage analytics **only after you grant explicit consent** via an opt-in prompt shown on first use. The extension functions fully regardless of your consent choice — declining analytics does not limit any functionality.
+
+**Data points sent (when opted in):**
+- Event name (e.g., "extension_installed", "analysis_run")
+- Extension version number
+- A randomly-generated Client ID (UUID) that is not linked to any user account or personal information
+
+**What is NOT collected:**
+- ❌ No personally identifiable information (PII)
+- ❌ No page URLs or domain names
+- ❌ No analysis results or code content
 - ❌ No cookies
-- ❌ No network requests
+- ❌ No browsing history
+
+### Opting Out
+
+You can opt out of analytics at any time through the settings toggle in the extension popup. Opting out immediately stops all data transmission — no further events will be sent.
+
+### Analytics Data Recipient
+
+Analytics data is sent to **Google Analytics** (Google LLC) via the GA4 Measurement Protocol. For information on how Google processes this data, refer to [Google's Privacy Policy](https://policies.google.com/privacy) and [Google Analytics Data Retention](https://support.google.com/analytics/answer/7667196).
+
+### If You Decline Analytics
+
+If you select "No thanks" when prompted, or opt out later via settings:
+- No analytics data is collected or transmitted
+- No network requests are made to Google Analytics
+- The extension operates identically to the opted-in experience
 
 ## How It Works
 
@@ -23,11 +45,13 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
    - All code analysis runs in your browser
    - Data is processed locally on your machine
    - Results are displayed in the extension popup
-   - Nothing is transmitted to external servers
+   - Analysis results are never transmitted to external servers
 
 2. **Storage:**
    - Uses Chrome's local storage API only
-   - Stores only scan results temporarily in your browser
+   - Stores scan results temporarily in your browser
+   - Stores your analytics consent preference
+   - Stores a randomly-generated Client ID (if analytics opted in)
    - Data never syncs to cloud
    - Clear browser data to remove all traces
 
@@ -35,26 +59,28 @@ ngLens is built with privacy as a core principle. All analysis happens locally i
    ```json
    {
      "activeTab": "Access current tab to analyze Angular app",
-     "scripting": "Inject analysis scripts into the page",
-     "tabs": "Get tab information (URL, title)",
-     "storage": "Store scan results locally"
+     "storage": "Store scan results and consent preference locally",
+     "host_permissions (google-analytics.com)": "Send anonymous usage events when opted in"
    }
    ```
 
-4. **No Network Access:**
-   - Extension makes ZERO outbound network requests
-   - Cannot send data to any server
-   - Cannot communicate with external services
-   - All code is bundled within the extension
-   - `host_permissions` is required solely for injecting the analysis script into the page context via `chrome.scripting` API
+4. **Network Access:**
+   - The only outbound network request is to Google Analytics (when opted in)
+   - No analysis data, page URLs, or personal information is transmitted
+   - If analytics is declined, the extension makes zero network requests
 
 ## Third-Party Services
 
-**None.** We don't use:
-- ❌ Analytics (Google Analytics, Mixpanel, etc.)
+**Google Analytics (opt-in only):**
+- Used to measure installation counts and active usage
+- Only receives: event name, extension version, and a random Client ID
+- Data is sent via the GA4 Measurement Protocol
+- Only active when you have explicitly opted in
+
+**Not used:**
 - ❌ Error tracking (Sentry, Rollbar, etc.)
 - ❌ CDNs for loading resources
-- ❌ External APIs
+- ❌ External APIs for analysis
 
 ## Open Source Verification
 
@@ -65,13 +91,14 @@ You can verify our privacy claims:
    - All code is public and auditable
 
 2. **Check the manifest:**
-   - No external host_permissions (except for content script injection)
-   - Minimal permissions (activeTab, scripting, storage)
+   - `host_permissions` limited to `https://www.google-analytics.com/*` (for opt-in analytics only)
+   - Minimal permissions: `activeTab`, `storage`
 
 3. **Inspect network traffic:**
    - Open Chrome DevTools → Network tab
    - Use the extension
-   - Zero network requests
+   - If opted in: only requests to `google-analytics.com/mp/collect`
+   - If opted out: zero network requests
 
 ## Your Data Rights
 
@@ -95,10 +122,10 @@ If we ever change our privacy practices (we won't), we will:
 
 As required by Chrome Web Store:
 
-**Data Collection:** None  
-**Data Usage:** None  
-**Data Sharing:** None  
-**Data Storage:** Local only (Chrome storage API)
+**Data Collection:** Anonymous usage events (event name, extension version, random Client ID) — opt-in only  
+**Data Usage:** Measure installation counts and active usage to improve the extension  
+**Data Sharing:** Sent to Google Analytics (Google LLC) only  
+**Data Storage:** Consent preference and Client ID stored locally (Chrome storage API)
 
 ## Contact
 
