@@ -30,3 +30,7 @@ export {
 } from './improvement-tracker';
 
 export type { MetricChange, ImprovementSummary } from './improvement-tracker';
+
+export { ClientIdManager } from './client-id-manager';
+
+export { AnalyticsService } from './analytics-service';

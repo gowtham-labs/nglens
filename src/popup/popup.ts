@@ -56,6 +56,8 @@ let scanResults: ScanResultsPayload | null = null;
 // Initialize
 setupTabNavigation();
 setupFilters();
+checkAndShowConsentPrompt();
+initAnalyticsToggle();
 
 // Scan button handler
 scanBtn.addEventListener('click', async () => {
@@ -104,6 +106,14 @@ scanBtn.addEventListener('click', async () => {
         scanResults = stateResponse.state.lastScanResults;
         if (scanResults) {
           renderScanResults(scanResults);
+
+          // Fire-and-forget: track analysis_run event
+          const analyticsMessage: ExtensionMessage = {
+            type: 'ANALYTICS_TRACK_EVENT',
+            payload: { eventName: 'analysis_run' },
+            timestamp: Date.now(),
+          };
+          chrome.runtime.sendMessage(analyticsMessage);
         }
       } else {
         showStatus('✓ Scan initiated. Results will appear shortly.', 'success');
@@ -487,4 +497,125 @@ function animateValue(element: SVGTextElement, start: number, end: number, durat
     }
     element.textContent = Math.round(current).toString();
   }, 16);
+}
+
+// --- Consent Prompt ---
+
+/**
+ * Checks if the user has been asked for analytics consent.
+ * If not, renders a blocking overlay prompt.
+ */
+async function checkAndShowConsentPrompt(): Promise<void> {
+  try {
+    const result = await chrome.storage.local.get('analytics_consent');
+    const consent = result['analytics_consent'];
+
+    // Only show prompt if consent key is absent
+    if (consent === 'granted' || consent === 'denied') {
+      return;
+    }
+
+    renderConsentPrompt();
+  } catch {
+    // Storage read failure — do not show prompt
+  }
+}
+
+/**
+ * Renders the consent prompt as a full-screen blocking overlay.
+ */
+function renderConsentPrompt(): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'consent-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'consent-title');
+  overlay.setAttribute('aria-describedby', 'consent-description');
+
+  overlay.innerHTML = `
+    <div class="consent-dialog">
+      <div class="consent-title" id="consent-title">Usage Analytics</div>
+      <div class="consent-description" id="consent-description">
+        Help improve ngLens by sharing anonymous usage data. No personal information, page URLs, or analysis results are ever collected.
+      </div>
+      <div class="consent-buttons">
+        <button class="consent-btn consent-btn-allow" id="consentAllow" aria-label="Allow anonymous usage analytics">
+          Allow anonymous usage analytics
+        </button>
+        <button class="consent-btn consent-btn-deny" id="consentDeny" aria-label="No thanks">
+          No thanks
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const allowBtn = document.getElementById('consentAllow') as HTMLButtonElement;
+  const denyBtn = document.getElementById('consentDeny') as HTMLButtonElement;
+
+  allowBtn.addEventListener('click', () => handleConsentChoice('granted', overlay));
+  denyBtn.addEventListener('click', () => handleConsentChoice('denied', overlay));
+
+  // Focus the allow button for keyboard accessibility
+  allowBtn.focus();
+}
+
+/**
+ * Handles the user's consent choice: persists to storage, notifies background, removes overlay.
+ */
+async function handleConsentChoice(consent: 'granted' | 'denied', overlay: HTMLElement): Promise<void> {
+  // Persist consent to storage
+  await chrome.storage.local.set({ analytics_consent: consent });
+
+  // Notify background service worker
+  const message: ExtensionMessage = {
+    type: 'ANALYTICS_CONSENT_CHANGED',
+    payload: { consent },
+    timestamp: Date.now(),
+  };
+  chrome.runtime.sendMessage(message);
+
+  // Remove overlay
+  overlay.remove();
+
+  // Update the toggle to reflect the new state
+  const toggle = document.getElementById('analyticsToggle') as HTMLInputElement;
+  if (toggle) {
+    toggle.checked = consent === 'granted';
+  }
+}
+
+// --- Analytics Settings Toggle ---
+
+/**
+ * Initializes the analytics settings toggle in the popup footer.
+ * Reflects the current consent state and handles toggle changes.
+ */
+async function initAnalyticsToggle(): Promise<void> {
+  const toggle = document.getElementById('analyticsToggle') as HTMLInputElement;
+  if (!toggle) return;
+
+  try {
+    const result = await chrome.storage.local.get('analytics_consent');
+    const value = result['analytics_consent'];
+    toggle.checked = value === 'granted';
+  } catch {
+    toggle.checked = false;
+  }
+
+  toggle.addEventListener('change', async () => {
+    const newConsent: 'granted' | 'denied' = toggle.checked ? 'granted' : 'denied';
+
+    // Persist consent to storage
+    await chrome.storage.local.set({ analytics_consent: newConsent });
+
+    // Notify background service worker
+    const message: ExtensionMessage = {
+      type: 'ANALYTICS_CONSENT_CHANGED',
+      payload: { consent: newConsent },
+      timestamp: Date.now(),
+    };
+    chrome.runtime.sendMessage(message);
+  });
 }

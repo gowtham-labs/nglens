@@ -1,20 +1,18 @@
 {
   "manifest_version": 3,
   "name": "ngLens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Find Angular performance problems and learn how to fix them. All analysis is local. No data leaves the browser.",
   "author": "ngLens Contributors",
   "homepage_url": "https://github.com/gowtham-labs/nglens",
 
   "permissions": [
     "activeTab",
-    "scripting",
-    "tabs",
     "storage"
   ],
 
   "host_permissions": [
-    "<all_urls>"
+    "https://www.google-analytics.com/*"
   ],
 
   "content_security_policy": {

@@ -45,3 +45,12 @@ export type {
   BudgetViolation,
   SamplingConfig,
 } from './performance-budget';
+
+export type {
+  AnalyticsEvent,
+  MeasurementProtocolPayload,
+  ConsentStatus,
+  ConsentState,
+  AnalyticsConsentPayload,
+  AnalyticsTrackEventPayload,
+} from './analytics';

@@ -18,7 +18,9 @@ export type MessageType =
   | 'OVERLAY_CLEAR_ALL'
   | 'DETECTION_STATUS'
   | 'TAB_NAVIGATED'
-  | 'ERROR';
+  | 'ERROR'
+  | 'ANALYTICS_CONSENT_CHANGED'
+  | 'ANALYTICS_TRACK_EVENT';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

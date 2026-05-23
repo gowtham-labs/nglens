@@ -50,3 +50,6 @@ Desktop.ini
 
 # Security scan results
 .snyk
+
+# Kiro
+.kiro/
