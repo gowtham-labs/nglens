@@ -15,30 +15,9 @@ import type { RenderEvent } from '../../../../../types/render-events';
           <p class="text-xs text-gray-400 mt-1">Last 100 render events with detailed metrics</p>
         </div>
         <div class="flex gap-1">
-          <button
-            (click)="zoomLevel.set(1)"
-            [class.bg-blue-600/80]="zoomLevel() === 1"
-            [class.bg-gray-700]="zoomLevel() !== 1"
-            class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors"
-          >
-            1m
-          </button>
-          <button
-            (click)="zoomLevel.set(5)"
-            [class.bg-blue-600/80]="zoomLevel() === 5"
-            [class.bg-gray-700]="zoomLevel() !== 5"
-            class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors"
-          >
-            5m
-          </button>
-          <button
-            (click)="zoomLevel.set(10)"
-            [class.bg-blue-600/80]="zoomLevel() === 10"
-            [class.bg-gray-700]="zoomLevel() !== 10"
-            class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors"
-          >
-            10m
-          </button>
+          <button (click)="zoomLevel.set(1)" [ngClass]="zoomLevel() === 1 ? 'bg-blue-600' : 'bg-gray-700'" class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors">1m</button>
+          <button (click)="zoomLevel.set(5)" [ngClass]="zoomLevel() === 5 ? 'bg-blue-600' : 'bg-gray-700'" class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors">5m</button>
+          <button (click)="zoomLevel.set(10)" [ngClass]="zoomLevel() === 10 ? 'bg-blue-600' : 'bg-gray-700'" class="px-3 py-1 rounded text-xs font-medium text-gray-200 hover:bg-gray-600 transition-colors">10m</button>
         </div>
       </div>
 

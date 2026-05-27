@@ -25,14 +25,8 @@ interface RenderCascade {
         </div>
         <button
           (click)="showCascades.set(!showCascades())"
-          class="text-xs px-3 py-1.5 rounded font-medium"
-          [class.bg-blue-600/80]="showCascades()"
-          [class.bg-gray-700]="!showCascades()"
-          [class.text-gray-100]="showCascades()"
-          [class.text-gray-300]="!showCascades()"
-        >
-          {{ showCascades() ? '▼ Showing' : '▶ Hidden' }}
-        </button>
+          [ngClass]="showCascades() ? 'bg-blue-600 text-gray-100' : 'bg-gray-700 text-gray-300'"
+          class="text-xs px-3 py-1.5 rounded font-medium">{{ showCascades() ? '▼ Showing' : '▶ Hidden' }}</button>
       </div>
 
       @if (cascades().length === 0) {

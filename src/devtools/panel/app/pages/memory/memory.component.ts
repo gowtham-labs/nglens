@@ -53,7 +53,7 @@ import type { LeakEvent } from '../../../../../types/leak-events';
               <div
                 class="px-4 py-3 hover:bg-gray-700/30 cursor-pointer transition-colors group"
                 (click)="selectLeak(event)"
-                [class.bg-gray-700/20]="state.selectedIssue()?.id === event.id"
+                [ngClass]="state.selectedIssue()?.id === event.id ? 'bg-gray-700/20' : ''"
               >
                 <div class="flex items-start gap-3">
                   <span
@@ -73,7 +73,7 @@ import type { LeakEvent } from '../../../../../types/leak-events';
                       </span>
                     </div>
                     <div class="text-xs text-gray-500 mt-2">
-                      {{ event.message || 'Unclean resource after component destruction' }}
+                      Unclean resource after component destruction
                     </div>
                   </div>
                   <span class="text-[10px] text-gray-500 whitespace-nowrap mt-0.5">
@@ -164,28 +164,15 @@ export class MemoryComponent {
   }
 
   selectLeak(event: LeakEvent): void {
+    const leakType = event.leakType.charAt(0).toUpperCase() + event.leakType.slice(1);
     this.state.selectedIssue.set({
       id: event.id,
       type: 'leak',
       componentName: event.componentName,
       severity: event.severity,
-      title: `${event.leakType | titlecase} leak in ${event.componentName}`,
+      title: `${leakType} leak in ${event.componentName}`,
       description: `Unclean ${event.leakType} from "${event.source}" detected after component destruction. This can cause memory buildup over time.`,
       timestamp: event.detectedAt,
     });
-  }
-
-  private titlecase = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-  severityClass(severity: string): string {
-    switch (severity) {
-      case 'CRITICAL':
-        return 'bg-red-500/20 text-red-400';
-      case 'WARNING':
-        return 'bg-amber-500/20 text-amber-400';
-      default:
-        return 'bg-blue-500/20 text-blue-400';
-    }
   }
 }
