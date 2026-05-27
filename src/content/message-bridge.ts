@@ -44,9 +44,19 @@ export function listenFromPage(
 
 /**
  * Sends a message to the background service worker via chrome.runtime.
+ * Silently fails if the extension context has been invalidated (e.g., after extension reload).
  */
 export function sendToBackground<T>(message: ExtensionMessage<T>): Promise<unknown> {
-  return chrome.runtime.sendMessage(message);
+  try {
+    if (!chrome.runtime?.id) {
+      // Extension context invalidated — silently ignore
+      return Promise.resolve();
+    }
+    return chrome.runtime.sendMessage(message);
+  } catch {
+    // Extension context invalidated
+    return Promise.resolve();
+  }
 }
 
 /**

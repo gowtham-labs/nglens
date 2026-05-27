@@ -5,10 +5,12 @@
  * 1. Inject page-script.js into the page's MAIN world
  * 2. Relay messages between page script (CustomEvent) and background worker (chrome.runtime)
  * 3. Handle V1 MessageType protocol: SCAN_REQUEST, SCAN_RESULTS, OVERLAY_SHOW, OVERLAY_HIDE, DETECTION_STATUS, ERROR
- * 4. Enforce PAGE_SCRIPT_TIMEOUT_MS for scan requests
+ * 4. Handle V2 port-based panel commands: START_TRACKING, STOP_TRACKING, SELECT_COMPONENT, CLEAR_DATA
+ * 5. Forward async page-script events to background: EVENT_BATCH, LEAK_EVENT, TRACKBY_ISSUE, ONPUSH_RESULT, DEGRADED_MODE
+ * 6. Enforce PAGE_SCRIPT_TIMEOUT_MS for scan requests
  */
 
-import type { ExtensionMessage, PageMessage } from '../types/messages';
+import type { ExtensionMessage, MessageType, PageMessage } from '../types/messages';
 import {
   dispatchToPage,
   generateEventId,
@@ -19,6 +21,33 @@ import {
 
 /** Page script response timeout in ms (inlined to avoid shared chunk with page-script) */
 const PAGE_SCRIPT_TIMEOUT_MS = 3000;
+
+/**
+ * Panel commands forwarded from background (originated from DevTools panel).
+ * These are dispatched to the page-script via CustomEvent.
+ */
+const PANEL_COMMANDS: ReadonlySet<MessageType> = new Set([
+  'START_TRACKING',
+  'STOP_TRACKING',
+  'SELECT_COMPONENT',
+  'CLEAR_DATA',
+]);
+
+/**
+ * Async events from the page-script that should be forwarded to the background.
+ * The background will relay these to the DevTools panel via port.
+ */
+const PAGE_SCRIPT_ASYNC_EVENTS: ReadonlySet<MessageType> = new Set([
+  'EVENT_BATCH',
+  'LEAK_EVENT',
+  'TRACKBY_ISSUE',
+  'ONPUSH_RESULT',
+  'DEGRADED_MODE',
+  'ROUTE_CHANGED',
+  'TRACKING_STARTED',
+  'TRACKING_STOPPED',
+  'ERROR',
+]);
 
 // --- Page Script Injection ---
 
@@ -91,8 +120,19 @@ function handleExtensionMessage(
 ): boolean | void {
   const { type, payload } = message;
 
+  // --- V2: Panel commands forwarded from background ---
+  if (PANEL_COMMANDS.has(type)) {
+    ensurePageScriptInjected();
+    const eventId = generateEventId();
+    dispatchToPageWithRetry(type, payload, eventId);
+    sendResponse({ success: true, eventId });
+    return true;
+  }
+
+  // --- V1: Existing message handling ---
   switch (type) {
     case 'SCAN_REQUEST': {
+      ensurePageScriptInjected();
       const eventId = generateEventId();
 
       // Set up timeout for page script response
@@ -121,6 +161,7 @@ function handleExtensionMessage(
     case 'OVERLAY_SHOW':
     case 'OVERLAY_HIDE':
     case 'OVERLAY_CLEAR_ALL': {
+      ensurePageScriptInjected();
       // Forward overlay commands to page script
       const eventId = generateEventId();
       dispatchToPage(type, payload, eventId);
@@ -129,6 +170,7 @@ function handleExtensionMessage(
     }
 
     case 'DETECTION_STATUS': {
+      ensurePageScriptInjected();
       // Request detection status from page script
       const eventId = generateEventId();
 
@@ -155,14 +197,64 @@ function handleExtensionMessage(
   }
 }
 
+// --- nglens-event Handler (for async instrumentation events like DEGRADED_MODE) ---
+
+function handleNglensEvent(event: Event): void {
+  const customEvent = event as CustomEvent<{ type: string; payload?: unknown }>;
+  const detail = customEvent.detail;
+  if (!detail?.type) return;
+
+  // Only forward known async event types
+  if (PAGE_SCRIPT_ASYNC_EVENTS.has(detail.type as MessageType)) {
+    const extensionMessage: ExtensionMessage = {
+      type: detail.type as MessageType,
+      payload: detail.payload,
+      timestamp: Date.now(),
+    };
+    sendToBackground(extensionMessage).catch(() => {
+      // Background not available; silently ignore
+    });
+  }
+}
+
 // --- Initialization ---
 
-function initialize(): void {
-  // Inject the page script into the main world
-  injectPageScript();
+/** Whether the page script has been injected */
+let pageScriptInjected = false;
 
-  // Listen for messages from the page script
+/**
+ * Ensures the page script is injected. Only injects once.
+ * Called lazily when the first message arrives that needs the page script.
+ */
+function ensurePageScriptInjected(): void {
+  if (pageScriptInjected) return;
+  pageScriptInjected = true;
+  injectPageScript();
+}
+
+/**
+ * Dispatches a message to the page script with retries to handle
+ * the async loading delay of the page-script module.
+ */
+function dispatchToPageWithRetry(type: MessageType, payload: unknown, eventId: string): void {
+  // Dispatch immediately (in case page-script is already loaded)
+  dispatchToPage(type, payload, eventId);
+
+  // Also retry after delays in case the page-script hasn't loaded yet
+  setTimeout(() => dispatchToPage(type, payload, eventId), 200);
+  setTimeout(() => dispatchToPage(type, payload, eventId), 500);
+  setTimeout(() => dispatchToPage(type, payload, eventId), 1000);
+}
+
+function initialize(): void {
+  // Do NOT inject page-script eagerly — it's 81KB and slows down every page.
+  // Instead, inject lazily when the first scan/tracking command arrives.
+
+  // Listen for messages from the page script (both V1 scan results and V2 async events)
   listenFromPage(handlePageMessage);
+
+  // Listen for nglens-event CustomEvents from the page-script (async instrumentation events)
+  globalThis.addEventListener('nglens-event', handleNglensEvent);
 
   // Listen for messages from the background worker / popup
   listenFromExtension(handleExtensionMessage);

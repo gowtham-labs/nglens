@@ -7,12 +7,131 @@
  * 3. Persist scan results in chrome.storage.session
  * 4. Re-inject content script on navigation
  * 5. Track extension install event via analytics (pending consent)
+ * 6. Manage port-based panel connections for DevTools panel
  */
 
 import type { ExtensionMessage } from '../types/messages';
+import type { PortMessage } from '../types/port-messages';
 import { analyticsService } from './analytics-instance';
 import { routeMessage } from './message-router';
 import { clearTabState, removeTabState } from './tab-manager';
+
+// --- Panel Port Registry ---
+
+/**
+ * Maps tab IDs to their connected DevTools panel ports.
+ * Used to forward messages between content scripts and the DevTools panel.
+ */
+export const panelPorts = new Map<number, chrome.runtime.Port>();
+
+// --- Panel Port Connection Handling ---
+
+/**
+ * Listens for port connections from the DevTools panel.
+ * Handles INIT message to register the port, forwards panel messages
+ * to the content script, and cleans up on disconnect.
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'ngLens-panel') return;
+
+  let tabId: number | null = null;
+
+  port.onMessage.addListener(async (message: PortMessage) => {
+    if (message.type === 'INIT') {
+      tabId = message.tabId ?? null;
+      if (tabId !== null) {
+        panelPorts.set(tabId, port);
+        port.postMessage({ type: 'CONNECTION_ACK', timestamp: Date.now() });
+      }
+    } else if (tabId !== null) {
+      // Forward panel messages to content script on the inspected tab
+      try {
+        const response = await sendPanelMessageToContent(tabId, message);
+        if (response) {
+          port.postMessage(response);
+        }
+      } catch (err) {
+        port.postMessage({
+          type: 'ERROR',
+          payload: { message: String(err) },
+          timestamp: Date.now(),
+        });
+      }
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (tabId !== null) {
+      panelPorts.delete(tabId);
+    }
+  });
+});
+
+async function sendPanelMessageToContent(
+  tabId: number,
+  message: PortMessage
+): Promise<unknown> {
+  const forwardedMessage = {
+    ...message,
+    timestamp: Date.now(),
+  };
+
+  try {
+    return await chrome.tabs.sendMessage(tabId, forwardedMessage);
+  } catch (firstError) {
+    if (!isPanelCommand(message.type)) {
+      throw firstError;
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js'],
+    });
+
+    return chrome.tabs.sendMessage(tabId, {
+      ...forwardedMessage,
+      timestamp: Date.now(),
+    });
+  }
+}
+
+function isPanelCommand(type: string): boolean {
+  return (
+    type === 'START_TRACKING' ||
+    type === 'STOP_TRACKING' ||
+    type === 'SELECT_COMPONENT' ||
+    type === 'CLEAR_DATA'
+  );
+}
+
+/**
+ * Forwards a message to the panel port associated with the given tab ID.
+ * No-op if no panel port is registered for the tab.
+ */
+export function forwardToPanel(tabId: number, message: unknown): void {
+  const port = panelPorts.get(tabId);
+  if (port) {
+    port.postMessage(message);
+  }
+}
+
+// --- Async Event Types (forwarded from content script to panel) ---
+
+/**
+ * Message types that represent async instrumentation events from the content script.
+ * These are pushed directly to the DevTools panel without going through routeMessage().
+ */
+const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'EVENT_BATCH',
+  'LEAK_EVENT',
+  'TRACKBY_ISSUE',
+  'ONPUSH_RESULT',
+  'DEGRADED_MODE',
+  'ROUTE_CHANGED',
+  'TRACKING_STARTED',
+  'TRACKING_STOPPED',
+  'ERROR',
+]);
 
 // --- Message Handling ---
 
@@ -22,7 +141,18 @@ chrome.runtime.onMessage.addListener(
     sender: chrome.runtime.MessageSender,
     sendResponse: (response?: unknown) => void
   ) => {
-    // Route the message asynchronously
+    // Check if this is an async event from the content script that should be forwarded to the panel
+    const senderTabId = sender.tab?.id;
+    if (senderTabId != null && ASYNC_EVENT_TYPES.has(message.type)) {
+      const port = panelPorts.get(senderTabId);
+      if (port) {
+        port.postMessage(message);
+        sendResponse({ success: true });
+        return true;
+      }
+    }
+
+    // Route the message asynchronously through the standard message router
     routeMessage(message, sender)
       .then(sendResponse)
       .catch((error) => {
@@ -40,13 +170,26 @@ chrome.runtime.onMessage.addListener(
 // --- Tab Lifecycle ---
 
 /**
- * When a tab navigates to a new URL, clear stored state and re-inject the content script.
+ * When a tab navigates to a new URL, clear stored state, re-inject the content script,
+ * and notify the DevTools panel (if connected) so it can reset its state.
  */
 chrome.tabs.onUpdated.addListener(
-  async (tabId, changeInfo) => {
+  async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete') {
       // Clear previous state for this tab on full navigation
       await clearTabState(tabId);
+
+      // Notify the DevTools panel that the tab navigated
+      const port = panelPorts.get(tabId);
+      if (port) {
+        const message: PortMessage<{ url: string }> = {
+          type: 'TAB_NAVIGATED',
+          payload: { url: tab.url || '' },
+          tabId: tabId,
+          timestamp: Date.now(),
+        };
+        port.postMessage(message);
+      }
     }
   }
 );

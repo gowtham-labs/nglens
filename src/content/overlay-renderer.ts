@@ -245,7 +245,7 @@ export function showOverlay(config: OverlayConfig): string | null {
   // Find target element
   const targetElement = document.querySelector(config.elementSelector);
   if (!targetElement) {
-    console.warn(`[ngLens] Element not found: ${config.elementSelector}`);
+    // console.warn(`[ngLens] Element not found: ${config.elementSelector}`);
     return null;
   }
 

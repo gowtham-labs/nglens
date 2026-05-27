@@ -20,7 +20,20 @@ export type MessageType =
   | 'TAB_NAVIGATED'
   | 'ERROR'
   | 'ANALYTICS_CONSENT_CHANGED'
-  | 'ANALYTICS_TRACK_EVENT';
+  | 'ANALYTICS_TRACK_EVENT'
+  // Port-based panel commands (forwarded from background)
+  | 'START_TRACKING'
+  | 'STOP_TRACKING'
+  | 'TRACKING_STARTED'
+  | 'TRACKING_STOPPED'
+  | 'SELECT_COMPONENT'
+  | 'CLEAR_DATA'
+  // Async events from page-script (forwarded to background)
+  | 'EVENT_BATCH'
+  | 'LEAK_EVENT'
+  | 'TRACKBY_ISSUE'
+  | 'ONPUSH_RESULT'
+  | 'DEGRADED_MODE';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
