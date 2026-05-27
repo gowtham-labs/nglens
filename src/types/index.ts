@@ -54,3 +54,35 @@ export type {
   AnalyticsConsentPayload,
   AnalyticsTrackEventPayload,
 } from './analytics';
+
+export type {
+  RenderEvent,
+  RenderCause,
+  EventBatch,
+} from './render-events';
+
+export type {
+  LeakEvent,
+  ComponentLifecycle,
+  SubscriptionRecord,
+  TimerRecord,
+} from './leak-events';
+
+export type {
+  TrackByIssue,
+  OnPushScore,
+  OnPushFactor,
+} from './recommendation-events';
+
+export type {
+  SeverityLevel,
+  Issue,
+  ComponentStats,
+  HeatmapSortField,
+  SortDirection,
+} from './panel';
+
+export type {
+  PortMessageType,
+  PortMessage,
+} from './port-messages';

@@ -1,16 +1,38 @@
 {
   "name": "nglens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:panel && npm run build:extension",
+    "build:panel": "ng build --configuration production --output-path dist/panel",
+    "build:extension": "vite build",
+    "dev:panel": "ng build --watch --configuration development",
+    "dev:extension": "vite build --watch",
     "test": "vitest --run"
   },
+  "dependencies": {
+    "@angular/animations": "~19.2.0",
+    "@angular/cdk": "~19.2.0",
+    "@angular/common": "~19.2.0",
+    "@angular/compiler": "~19.2.0",
+    "@angular/core": "~19.2.0",
+    "@angular/platform-browser": "~19.2.0",
+    "@angular/router": "~19.2.0",
+    "rxjs": "^7.8.1",
+    "tslib": "^2.6.3",
+    "zone.js": "^0.15.0"
+  },
   "devDependencies": {
+    "@angular-devkit/build-angular": "~19.2.0",
+    "@angular/cli": "~19.2.0",
+    "@angular/compiler-cli": "~19.2.0",
     "@types/chrome": "^0.1.42",
+    "autoprefixer": "^10.4.20",
     "fast-check": "4.8.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
     "vitest": "2.1.9"

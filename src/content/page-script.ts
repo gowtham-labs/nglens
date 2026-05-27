@@ -323,14 +323,31 @@ function handleContentMessage(event: Event): void {
   }
 }
 
+// --- Orchestrator Import ---
+import { initOrchestrator } from '../instrumentation/orchestrator';
+
 // --- Initialization ---
 
 function initialize(): void {
+  // console.log('[ngLens page-script] Initializing...');
+
   // Inject overlay styles on page load
   injectOverlayStyles();
 
   // Listen for messages from content script
   globalThis.addEventListener(CONTENT_TO_PAGE_EVENT, handleContentMessage);
+
+  // Initialize the instrumentation orchestrator (V2 command handling)
+  try {
+    initOrchestrator();
+    // console.log('[ngLens page-script] Orchestrator initialized');
+  } catch (err) {
+    // console.error('[ngLens page-script] Orchestrator init failed:', err);
+  }
+
+  // Signal to the content script that the page-script is ready to receive commands
+  // console.log('[ngLens page-script] Ready');
+  globalThis.dispatchEvent(new CustomEvent('nglens-ready'));
 }
 
 // Start immediately
