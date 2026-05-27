@@ -18,6 +18,9 @@ import { TrackByDetector } from './trackby-detector';
 import { OnPushEngine } from './onpush-engine';
 import { PerformanceGuard } from './performance-guard';
 import { SelectiveAnalyzer } from './selective-analyzer';
+import { TemplateExpressionTracker } from './template-expression-tracker';
+import { FreezeDetector } from './freeze-detector';
+import { ZonePollutionDetector } from './zone-pollution-detector';
 import { checkAngularVersion } from './version-check';
 
 /** Event name used by the content script to dispatch commands to the page script */
@@ -33,6 +36,9 @@ const trackByDetector = new TrackByDetector();
 const onPushEngine = new OnPushEngine();
 const performanceGuard = PerformanceGuard.getInstance();
 const selectiveAnalyzer = new SelectiveAnalyzer();
+const templateExpressionTracker = new TemplateExpressionTracker(null);
+const freezeDetector = new FreezeDetector();
+const zonePollutionDetector = new ZonePollutionDetector();
 
 /**
  * Handles START_TRACKING command from the panel.
@@ -71,6 +77,41 @@ function handleStartTracking(): void {
     // console.log('[ngLens] PerformanceGuard started');
   } catch (err) {
     // console.error('[ngLens] PerformanceGuard failed to start:', err);
+  }
+
+  try {
+    freezeDetector.start();
+    // console.log('[ngLens] FreezeDetector started');
+  } catch (err) {
+    // console.error('[ngLens] FreezeDetector failed to start:', err);
+  }
+
+  try {
+    zonePollutionDetector.start();
+    // console.log('[ngLens] ZonePollutionDetector started');
+  } catch (err) {
+    // console.error('[ngLens] ZonePollutionDetector failed to start:', err);
+  }
+
+  // Instrument components for template expression tracking
+  try {
+    const ng = (globalThis as any).ng;
+    if (ng?.getComponent) {
+      const components = document.querySelectorAll('*');
+      const limit = Math.min(components.length, 200);
+      
+      for (let i = 0; i < limit; i++) {
+        try {
+          const comp = ng.getComponent(components[i]);
+          if (!comp) continue;
+          const name = comp.constructor?.name ?? `Component_${i}`;
+          templateExpressionTracker.instrumentComponent(comp, name);
+        } catch { continue; }
+      }
+      // console.log('[ngLens] TemplateExpressionTracker initialized for', limit, 'components');
+    }
+  } catch (err) {
+    // console.error('[ngLens] TemplateExpressionTracker initialization failed:', err);
   }
 
   // Run one-time analyzers
@@ -148,6 +189,9 @@ function handleStopTracking(): void {
   renderTracker.stop();
   leakDetector.stop();
   performanceGuard.stop();
+  freezeDetector.stop();
+  zonePollutionDetector.stop();
+  templateExpressionTracker.setEnabled(false);
   dispatchToContent('TRACKING_STOPPED', {
     timestamp: performance.now(),
   });
@@ -160,6 +204,29 @@ function handleStopTracking(): void {
 function handleSelectComponent(payload: { name: string } | null): void {
   const name = payload?.name ?? null;
   selectiveAnalyzer.setSelectedComponent(name);
+
+  // Also instrument the selected component for template expression tracking
+  if (name) {
+    try {
+      const ng = (globalThis as any).ng;
+      if (ng?.getComponent) {
+        const components = document.querySelectorAll('*');
+        for (let i = 0; i < components.length; i++) {
+          try {
+            const comp = ng.getComponent(components[i]);
+            if (!comp) continue;
+            const compName = comp.constructor?.name ?? '';
+            if (compName === name) {
+              templateExpressionTracker.instrumentComponent(comp, name);
+              break;
+            }
+          } catch { continue; }
+        }
+      }
+    } catch (err) {
+      // console.error('[ngLens] Failed to instrument selected component:', err);
+    }
+  }
 }
 
 /**
