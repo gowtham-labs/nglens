@@ -17,3 +17,19 @@ export interface EventBatch {
   batchTimestamp: number;
   sequenceNumber: number;
 }
+
+export interface TemplateExpressionEvent {
+  componentName: string;
+  expressionName: string;
+  expressionType: 'method' | 'getter' | 'pipe';
+  duration: number;
+  timestamp: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  args: string[];
+}
+
+export interface TemplateExpressionBatch {
+  expressions: TemplateExpressionEvent[];
+  batchTimestamp: number;
+  componentCount: number;
+}
