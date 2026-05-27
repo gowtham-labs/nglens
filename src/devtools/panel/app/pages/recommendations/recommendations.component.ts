@@ -58,7 +58,7 @@ import type { OnPushScore, TrackByIssue } from '../../../../../types/recommendat
                     <div class="font-semibold text-gray-100 group-hover:text-purple-200 transition-colors">{{ displayName(item.component) }}</div>
                     <div class="text-xs text-gray-400 mt-1">
                       <span class="inline-block mr-2">✓ Input-driven:</span>
-                      {{ item.factors.filter(f => f.name === 'Has inputs')[0]?.description }}
+                      {{ getInputDescription(item) }}
                     </div>
                     <div class="mt-2 p-2 rounded bg-purple-900/40 border border-purple-800/30 text-xs text-gray-300">
                       <strong class="text-purple-200">Recommendation:</strong> {{ item.recommendation }}
@@ -143,7 +143,7 @@ export class RecommendationsComponent {
   readonly displayName = displayName;
 
   getOnPushCandidates(): OnPushScore[] {
-    return this.state.onPushResults().filter(r => r.score > 50);
+    return this.state.onPushRecommendations().filter(r => r.score > 50);
   }
 
   getTrackByIssues(): TrackByIssue[] {
@@ -159,72 +159,9 @@ export class RecommendationsComponent {
       this.state.selectedComponent.set((item as TrackByIssue).componentName);
     }
   }
-}
-                <!-- Cause -->
-                <div>
-                  <span class="text-[10px] text-gray-500 uppercase font-medium block">Cause</span>
-                  <span class="text-xs text-gray-300">{{ card.cause }}</span>
-                </div>
-                <!-- Suggested Fix -->
-                <div>
-                  <span class="text-[10px] text-gray-500 uppercase font-medium block">Suggested Fix</span>
-                  <span class="text-xs text-gray-300">{{ card.fix }}</span>
-                </div>
-              </div>
-            }
-          }
-        }
-      </div>
-    }
-  `,
-})
-export class RecommendationsComponent {
-  private readonly state = inject(PanelState);
 
-  readonly trackByIssues = this.state.trackByIssues;
-  readonly onPushRecommendations = this.state.onPushRecommendations;
-
-  readonly isEmpty = computed(
-    () => this.trackByIssues().length === 0 && this.onPushRecommendations().length === 0
-  );
-
-  private readonly expandedGroups = signal<Set<string>>(new Set());
-
-  readonly groupedRecommendations = computed<RecommendationGroup[]>(() => {
-    const groupMap = new Map<string, RecommendationCard[]>();
-
-    for (const rec of this.onPushRecommendations()) {
-      const cards = groupMap.get(rec.component) ?? [];
-      cards.push(deriveRecommendationCard(rec, 'onpush'));
-      groupMap.set(rec.component, cards);
-    }
-
-    for (const issue of this.trackByIssues()) {
-      const cards = groupMap.get(issue.componentName) ?? [];
-      cards.push(deriveRecommendationCard(issue, 'trackby'));
-      groupMap.set(issue.componentName, cards);
-    }
-
-    return Array.from(groupMap.entries()).map(([componentName, cards]) => ({
-      componentName,
-      displayName: displayName(componentName),
-      cards,
-    }));
-  });
-
-  isGroupCollapsed(componentName: string): boolean {
-    return !this.expandedGroups().has(componentName);
-  }
-
-  toggleGroup(componentName: string): void {
-    this.expandedGroups.update(set => {
-      const next = new Set(set);
-      if (next.has(componentName)) {
-        next.delete(componentName);
-      } else {
-        next.add(componentName);
-      }
-      return next;
-    });
+  getInputDescription(item: OnPushScore): string {
+    const factor = item.factors?.find(f => f.name === 'Has inputs');
+    return factor?.description ?? '';
   }
 }
