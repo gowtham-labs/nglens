@@ -2,6 +2,7 @@ import { Injectable, signal, computed } from '@angular/core';
 import type { RenderEvent, RenderCause } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
+import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
 import type {
   ComponentHotspot,
   ComponentStats,
@@ -33,6 +34,7 @@ export class PanelState {
   readonly trackByIssues = signal<TrackByIssue[]>([]);
   readonly onPushRecommendations = signal<OnPushScore[]>([]);
   readonly snapshots = signal<PerformanceSnapshot[]>([]);
+  readonly zonePollutionSources = signal<PollutionSourceMetrics[]>([]);
 
   // Computed: aggregate render events into per-component stats
   readonly componentStats = computed(() => this.aggregateStats(this.renderEvents()));
@@ -72,6 +74,16 @@ export class PanelState {
     };
   });
 
+  readonly criticalPollutionCount = computed<number>(() =>
+    this.zonePollutionSources().filter(s => s.severity === 'critical').length
+  );
+
+  readonly zonePollutionIssues = computed<Issue[]>(() =>
+    this.zonePollutionSources()
+      .filter(s => s.severity !== 'low')
+      .map(s => this.pollutionSourceToIssue(s))
+  );
+
   // Computed: per-component render count derived from cumulative render events
   readonly renderCountMap = computed<Map<string, number>>(() => {
     const counts = new Map<string, number>();
@@ -89,7 +101,8 @@ export class PanelState {
     const hotspots = this.componentHotspots()
       .filter(h => h.score >= 70)
       .map(h => this.hotspotToIssue(h));
-    return [...leaks, ...trackby, ...hot, ...hotspots];
+    const pollution = this.zonePollutionIssues();
+    return [...leaks, ...trackby, ...hot, ...hotspots, ...pollution];
   });
 
   /**
@@ -108,6 +121,7 @@ export class PanelState {
     this.trackByIssues.set([]);
     this.onPushRecommendations.set([]);
     this.snapshots.set([]);
+    this.zonePollutionSources.set([]);
   }
 
   captureSnapshot(label?: string): void {
@@ -127,6 +141,7 @@ export class PanelState {
     this.leakEvents.set([]);
     this.trackByIssues.set([]);
     this.onPushRecommendations.set([]);
+    this.zonePollutionSources.set([]);
     this.selectedIssue.set(null);
     this.selectedComponent.set(null);
   }
@@ -380,6 +395,23 @@ export class PanelState {
       title: `Performance hotspot: ${hotspot.componentName}`,
       description: `${hotspot.score}/100 hotspot score from ${hotspot.reasons.join(', ')}.`,
       timestamp: Date.now(),
+    };
+  }
+
+  private pollutionSourceToIssue(source: PollutionSourceMetrics): Issue {
+    const severityMap: Record<string, Issue['severity']> = {
+      critical: 'CRITICAL',
+      high: 'WARNING',
+      medium: 'WARNING',
+    };
+    return {
+      id: `zone-pollution-${source.source}`,
+      type: 'zone-pollution',
+      componentName: source.library ?? source.source,
+      severity: severityMap[source.severity] ?? 'WARNING',
+      title: `Zone pollution: ${source.library ?? source.source} (${Math.round(source.cdCyclesPerMinute)} CD/min)`,
+      description: source.fixSuggestion ?? `${source.source} is triggering excessive change detection`,
+      timestamp: source.lastSeen,
     };
   }
 }

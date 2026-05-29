@@ -47,6 +47,7 @@ const PAGE_SCRIPT_ASYNC_EVENTS: ReadonlySet<MessageType> = new Set([
   'TRACKING_STARTED',
   'TRACKING_STOPPED',
   'ERROR',
+  'ZONE_POLLUTION_EVENT',
 ]);
 
 // --- Page Script Injection ---

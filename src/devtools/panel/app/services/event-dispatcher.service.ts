@@ -5,6 +5,7 @@ import type { PortMessage } from '../../../../types/port-messages';
 import type { RenderEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
+import type { ZonePollutionEvent } from '../../../../types/zone-pollution-events';
 
 @Injectable({ providedIn: 'root' })
 export class EventDispatcherService {
@@ -37,6 +38,9 @@ export class EventDispatcherService {
         break;
       case 'ONPUSH_RESULT':
         this.handleOnPushResult(message.payload as OnPushScore);
+        break;
+      case 'ZONE_POLLUTION_EVENT':
+        this.handleZonePollutionEvent(message.payload as ZonePollutionEvent);
         break;
       case 'DEGRADED_MODE':
         this.state.degradedMode.set(true);
@@ -102,5 +106,9 @@ export class EventDispatcherService {
     this.state.setTrackingError(
       payload.message ?? payload.error ?? 'ngLens could not start tracking this page.'
     );
+  }
+
+  private handleZonePollutionEvent(payload: ZonePollutionEvent): void {
+    this.state.zonePollutionSources.set(payload.sources);
   }
 }

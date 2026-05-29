@@ -78,6 +78,7 @@ export class IssuesExplorerComponent {
       'leak': { label: 'Memory Leaks', icon: '💧', order: 2 },
       'trackby': { label: 'Missing trackBy', icon: '🔄', order: 3 },
       'onpush': { label: 'OnPush Candidates', icon: '⚡', order: 4 },
+      'zone-pollution': { label: 'Zone Pollution', icon: '⚡🔄', order: 5 },
     };
 
     const groups: IssueGroup[] = [];

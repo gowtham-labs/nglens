@@ -33,7 +33,8 @@ export type MessageType =
   | 'LEAK_EVENT'
   | 'TRACKBY_ISSUE'
   | 'ONPUSH_RESULT'
-  | 'DEGRADED_MODE';
+  | 'DEGRADED_MODE'
+  | 'ZONE_POLLUTION_EVENT';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

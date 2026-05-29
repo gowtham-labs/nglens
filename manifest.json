@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ngLens",
-  "version": "1.0.1",
-  "description": "Find Angular performance problems and learn how to fix them. All analysis is local. No data leaves the browser.",
+  "version": "1.0.2",
+  "description": "Angular Runtime Health Monitor. Explains WHY components re-render, detects Zone.js pollution, finds memory leaks, and tells you exactly how to fix them. All analysis is local — no data leaves your browser.",
   "author": "ngLens Contributors",
   "homepage_url": "https://github.com/gowtham-labs/nglens",
 
@@ -28,8 +28,7 @@
   },
 
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "ngLens - Angular Performance Analyzer",
+    "default_title": "ngLens - Angular Runtime Health Monitor",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -59,5 +58,5 @@
     }
   ],
 
-  "minimum_chrome_version": "96"
+  "minimum_chrome_version": "116"
 }

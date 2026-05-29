@@ -41,9 +41,6 @@ export default defineConfig({
         // Copy devtools.html
         copyFileSync(resolve(__dirname, 'src/devtools/devtools.html'), resolve(dist, 'devtools.html'));
 
-        // Copy popup.html
-        copyFileSync(resolve(__dirname, 'popup.html'), resolve(dist, 'popup.html'));
-
         // Copy icons
         const iconsDir = resolve(__dirname, 'public/icons');
         if (existsSync(iconsDir)) {

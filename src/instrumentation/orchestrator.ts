@@ -38,7 +38,7 @@ const performanceGuard = PerformanceGuard.getInstance();
 const selectiveAnalyzer = new SelectiveAnalyzer();
 const templateExpressionTracker = new TemplateExpressionTracker(null);
 const freezeDetector = new FreezeDetector();
-const zonePollutionDetector = new ZonePollutionDetector();
+const zonePollutionDetector = ZonePollutionDetector.getInstance();
 
 /**
  * Handles START_TRACKING command from the panel.
@@ -235,6 +235,7 @@ function handleSelectComponent(payload: { name: string } | null): void {
  */
 function handleClearData(): void {
   renderTracker.clearBuffer();
+  zonePollutionDetector.clear();
   // LeakDetector doesn't expose a buffer clear — it tracks live components
   // TrackByDetector and OnPushEngine are on-demand analyzers, no persistent buffer
 }
