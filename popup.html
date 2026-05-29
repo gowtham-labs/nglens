@@ -6,11 +6,81 @@
   <link rel="stylesheet" href="./src/popup/popup.css">
 </head>
 <body>
-  <div class="container">
-    <h1>🔍 ngLens</h1>
-    <button id="scanBtn">Scan Application</button>
-    <div id="status"></div>
-    <div id="results"></div>
+  <div class="devtools-container">
+    <!-- Header with tabs -->
+    <div class="devtools-header">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">ngLens</span>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="issues">Issues</button>
+        <button class="tab" data-tab="performance">Performance</button>
+      </div>
+    </div>
+
+    <!-- Toolbar with scan button and filters -->
+    <div class="devtools-toolbar">
+      <button id="scanBtn" class="scan-button">
+        <span class="scan-icon">▶</span> Run Analysis
+      </button>
+      <div class="filter-controls" style="display: none;">
+        <select id="severityFilter" class="filter-select">
+          <option value="">All Severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+        <select id="categoryFilter" class="filter-select">
+          <option value="">All Categories</option>
+          <option value="change-detection">Change Detection</option>
+          <option value="dom-complexity">DOM Complexity</option>
+          <option value="render-performance">Render Performance</option>
+          <option value="best-practices">Best Practices</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Content area -->
+    <div class="devtools-content">
+      <!-- Status messages -->
+      <div id="status" class="status-area"></div>
+
+      <!-- Score panel (performance tab) -->
+      <div id="scorePanel" class="score-panel" style="display: none;">
+        <div class="score-gauge-container">
+          <svg class="score-gauge" viewBox="0 0 200 200">
+            <circle class="gauge-bg" cx="100" cy="100" r="80" />
+            <circle class="gauge-progress" cx="100" cy="100" r="80" />
+            <text class="gauge-score" x="100" y="90"></text>
+            <text class="gauge-label" x="100" y="125">Performance</text>
+          </svg>
+        </div>
+        <div class="subscores-container"></div>
+      </div>
+
+      <!-- Issues panel (issues tab) -->
+      <div id="issuesPanel" class="issues-panel">
+        <div id="results" class="issues-list"></div>
+      </div>
+    </div>
+
+    <!-- Footer with stats -->
+    <div class="devtools-footer">
+      <div class="footer-stats">
+        <span id="componentCount"></span>
+        <span id="issueCount"></span>
+      </div>
+      <div class="analytics-setting" id="analyticsSettingContainer">
+        <span class="analytics-setting-label" id="analyticsSettingLabel">Usage analytics</span>
+        <label class="analytics-toggle">
+          <input type="checkbox" id="analyticsToggle" aria-labelledby="analyticsSettingLabel" />
+          <span class="analytics-toggle-slider"></span>
+        </label>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./src/popup/popup.ts"></script>

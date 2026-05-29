@@ -1,0 +1,77 @@
+// src/types/panel.ts
+
+import type { RenderCause } from './render-events';
+
+export type SeverityLevel = 'CRITICAL' | 'WARNING' | 'INFO';
+
+export interface Issue {
+  id: string;
+  type: 'render-hot' | 'leak' | 'trackby' | 'onpush' | 'hotspot' | 'zone-pollution';
+  componentName: string;
+  severity: SeverityLevel;
+  title: string;
+  description: string;
+  timestamp: number;
+}
+
+export interface ComponentStats {
+  componentName: string;
+  renderCount: number;
+  rendersPerMinute: number;
+  averageDuration: number;
+  totalDuration: number;
+  causesBreakdown: Record<RenderCause['type'], number>;
+  firstSeen: number;
+  lastSeen: number;
+}
+
+export interface ComponentHotspot {
+  componentName: string;
+  score: number;
+  renderCount: number;
+  rendersPerMinute: number;
+  averageDuration: number;
+  totalDuration: number;
+  primaryCause: RenderCause['type'] | 'unknown';
+  reasons: string[];
+}
+
+export interface InteractionProfile {
+  id: string;
+  label: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  renderCount: number;
+  componentCount: number;
+  totalRenderDuration: number;
+  averageRenderDuration: number;
+  slowestComponent: string | null;
+  dominantCause: RenderCause['type'] | 'unknown';
+}
+
+export interface PerformanceSnapshot {
+  id: string;
+  label: string;
+  createdAt: number;
+  metrics: {
+    issues: number;
+    components: number;
+    renders: number;
+    rendersPerMinute: number;
+    averageRenderDuration: number;
+    totalRenderDuration: number;
+    leaks: number;
+    recommendations: number;
+    hotspots: number;
+  };
+}
+
+export interface SnapshotComparison {
+  baseline: PerformanceSnapshot;
+  current: PerformanceSnapshot;
+  delta: PerformanceSnapshot['metrics'];
+}
+
+export type HeatmapSortField = 'renderCount' | 'rendersPerMinute' | 'averageDuration' | 'totalDuration';
+export type SortDirection = 'asc' | 'desc';

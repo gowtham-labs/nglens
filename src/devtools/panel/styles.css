@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-critical: #EF4444;
+    --color-warning: #F59E0B;
+    --color-info: #3B82F6;
+    --color-success: #22C55E;
+    --color-bg-primary: #111827;
+    --color-bg-secondary: #1F2937;
+    --color-border: #374151;
+    --color-text-primary: #F3F4F6;
+    --color-text-secondary: #9CA3AF;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+}
+
+@layer components {
+  .severity-critical {
+    color: var(--color-critical);
+  }
+
+  .severity-warning {
+    color: var(--color-warning);
+  }
+
+  .severity-info {
+    color: var(--color-info);
+  }
+
+  .severity-success {
+    color: var(--color-success);
+  }
+}

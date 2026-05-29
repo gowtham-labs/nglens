@@ -128,9 +128,9 @@ export function createBudgetMonitor(
         timestamp: Date.now(),
       };
       violations.push(violation);
-      console.warn(
-        `[ngLens] Memory budget exceeded: ${(memoryBytes / (1024 * 1024)).toFixed(1)}MB / ${config.maxMemoryMB}MB limit`
-      );
+      // console.warn(
+      //   `[ngLens] Memory budget exceeded: ${(memoryBytes / (1024 * 1024)).toFixed(1)}MB / ${config.maxMemoryMB}MB limit`
+      // );
     }
 
     return { memoryBytes: memoryAvailable ? memoryBytes : 0, memoryAvailable };
@@ -150,9 +150,9 @@ export function createBudgetMonitor(
         timestamp: Date.now(),
       };
       violations.push(violation);
-      console.warn(
-        `[ngLens] CPU budget exceeded: ${cpuPercent.toFixed(1)}% / ${config.maxCpuPercent}% limit`
-      );
+      // console.warn(
+      //   `[ngLens] CPU budget exceeded: ${cpuPercent.toFixed(1)}% / ${config.maxCpuPercent}% limit`
+      // );
     }
 
     return cpuPercent;
@@ -231,9 +231,9 @@ export function createBudgetMonitor(
           timestamp: Date.now(),
         };
         violations.push(violation);
-        console.warn(
-          `[ngLens] Observer disconnect exceeded budget: ${disconnectDuration.toFixed(1)}ms / ${config.observerDisconnectMs}ms limit`
-        );
+        // console.warn(
+        //   `[ngLens] Observer disconnect exceeded budget: ${disconnectDuration.toFixed(1)}ms / ${config.observerDisconnectMs}ms limit`
+        // );
       }
     },
 

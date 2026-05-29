@@ -15,9 +15,26 @@ export type MessageType =
   | 'STATE_RESPONSE'
   | 'OVERLAY_SHOW'
   | 'OVERLAY_HIDE'
+  | 'OVERLAY_CLEAR_ALL'
   | 'DETECTION_STATUS'
   | 'TAB_NAVIGATED'
-  | 'ERROR';
+  | 'ERROR'
+  | 'ANALYTICS_CONSENT_CHANGED'
+  | 'ANALYTICS_TRACK_EVENT'
+  // Port-based panel commands (forwarded from background)
+  | 'START_TRACKING'
+  | 'STOP_TRACKING'
+  | 'TRACKING_STARTED'
+  | 'TRACKING_STOPPED'
+  | 'SELECT_COMPONENT'
+  | 'CLEAR_DATA'
+  // Async events from page-script (forwarded to background)
+  | 'EVENT_BATCH'
+  | 'LEAK_EVENT'
+  | 'TRACKBY_ISSUE'
+  | 'ONPUSH_RESULT'
+  | 'DEGRADED_MODE'
+  | 'ZONE_POLLUTION_EVENT';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

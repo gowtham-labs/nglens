@@ -8,9 +8,13 @@
  * - Forwarding OVERLAY_SHOW/OVERLAY_HIDE to content script
  * - Forwarding DETECTION_STATUS requests
  * - Reporting ERROR messages to popup
+ * - ANALYTICS_CONSENT_CHANGED: triggers pending install event on consent grant
+ * - ANALYTICS_TRACK_EVENT: fires analytics events (e.g., analysis_run)
  */
 
-import type { ExtensionMessage, MessageType, ScanResultsPayload } from '../types/messages';
+import type { AnalyticsConsentPayload, AnalyticsTrackEventPayload } from '../types/analytics';
+import type { ExtensionMessage, ScanResultsPayload } from '../types/messages';
+import { analyticsService } from './analytics-instance';
 import { getTabState, storeScanResults, updateTabState } from './tab-manager';
 
 /**
@@ -36,6 +40,7 @@ export async function routeMessage(
 
     case 'OVERLAY_SHOW':
     case 'OVERLAY_HIDE':
+    case 'OVERLAY_CLEAR_ALL':
       return forwardToContentScript(message, tabId);
 
     case 'ERROR':
@@ -43,6 +48,12 @@ export async function routeMessage(
 
     case 'STATE_REQUEST':
       return handleStateRequest(tabId);
+
+    case 'ANALYTICS_CONSENT_CHANGED':
+      return handleAnalyticsConsentChanged(payload as AnalyticsConsentPayload);
+
+    case 'ANALYTICS_TRACK_EVENT':
+      return handleAnalyticsTrackEvent(payload as AnalyticsTrackEventPayload);
 
     default:
       return { success: false, error: `Unknown message type: ${type}` };
@@ -162,4 +173,46 @@ async function handleStateRequest(tabId: number | undefined): Promise<unknown> {
   }
 
   return { success: true, state };
+}
+
+/**
+ * Handles ANALYTICS_CONSENT_CHANGED messages from the popup.
+ * When consent is granted, checks if there is a pending install event
+ * (first install where consent was not yet granted) and sends it.
+ */
+async function handleAnalyticsConsentChanged(
+  payload: AnalyticsConsentPayload
+): Promise<unknown> {
+  if (payload.consent === 'granted') {
+    // Check if there's a pending install event waiting for consent
+    try {
+      const result = await chrome.storage.local.get('analytics_install_pending');
+      if (result.analytics_install_pending === true) {
+        // Clear the pending flag before sending
+        await chrome.storage.local.remove('analytics_install_pending');
+
+        const version = chrome.runtime.getManifest().version;
+        await analyticsService.trackInstall(version);
+      }
+    } catch {
+      // Storage read failure — non-critical, skip install tracking
+    }
+  }
+
+  return { success: true };
+}
+
+/**
+ * Handles ANALYTICS_TRACK_EVENT messages from the popup.
+ * Routes to the appropriate AnalyticsService method based on eventName.
+ */
+async function handleAnalyticsTrackEvent(
+  payload: AnalyticsTrackEventPayload
+): Promise<unknown> {
+  if (payload.eventName === 'analysis_run') {
+    const version = chrome.runtime.getManifest().version;
+    analyticsService.trackAnalysisRun(version);
+  }
+
+  return { success: true };
 }

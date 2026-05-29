@@ -1,35 +1,67 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, unlinkSync, rmSync } from 'node:fs';
 
 export default defineConfig({
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
-    // Disable minification to avoid variable name collisions in chunk inlining
+    emptyOutDir: false,
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, 'popup.html'),
         background: resolve(__dirname, 'src/background/background.ts'),
         content: resolve(__dirname, 'src/content/content.ts'),
-        'page-script': resolve(__dirname, 'src/content/page-script.ts')
+        'page-script': resolve(__dirname, 'src/content/page-script.ts'),
+        devtools: resolve(__dirname, 'src/devtools/devtools.ts')
       },
       output: {
+        format: 'es',
         entryFileNames: '[name].js',
-        // Put shared chunks in the root (not a subdirectory) so content scripts can load them
         chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]'
+        assetFileNames: '[name].[ext]',
+        // Prevent code splitting — each entry point is self-contained
+        manualChunks: undefined
       }
     }
   },
   plugins: [
     {
-      name: 'copy-manifest',
+      name: 'copy-extension-assets',
       closeBundle() {
-        copyFileSync(
-          resolve(__dirname, 'manifest.json'),
-          resolve(__dirname, 'dist/manifest.json')
-        );
+        const dist = resolve(__dirname, 'dist');
+
+        // Remove .DS_Store files
+        const dsStore = resolve(dist, '.DS_Store');
+        if (existsSync(dsStore)) {
+          unlinkSync(dsStore);
+        }
+
+        // Copy manifest.json
+        copyFileSync(resolve(__dirname, 'manifest.json'), resolve(dist, 'manifest.json'));
+
+        // Copy devtools.html
+        copyFileSync(resolve(__dirname, 'src/devtools/devtools.html'), resolve(dist, 'devtools.html'));
+
+        // Copy icons
+        const iconsDir = resolve(__dirname, 'public/icons');
+        if (existsSync(iconsDir)) {
+          cpSync(iconsDir, resolve(dist, 'icons'), { recursive: true });
+        }
+
+        // Flatten Angular panel output (browser/ → panel/) and remove browser/ dir
+        const panelBrowser = resolve(dist, 'panel/browser');
+        if (existsSync(panelBrowser)) {
+          cpSync(panelBrowser, resolve(dist, 'panel'), { recursive: true });
+          rmSync(panelBrowser, { recursive: true, force: true });
+        }
+
+        // Remove unnecessary Angular build artifacts
+        const artifacts = ['panel/prerendered-routes.json', 'panel/3rdpartylicenses.txt'];
+        for (const artifact of artifacts) {
+          const artifactPath = resolve(dist, artifact);
+          if (existsSync(artifactPath)) {
+            unlinkSync(artifactPath);
+          }
+        }
       }
     }
   ]
