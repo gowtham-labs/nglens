@@ -1,403 +1,424 @@
 /**
- * ngLens - Angular Performance Analyzer
- * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Zone Pollution Detector — production-ready singleton.
  *
- * https://github.com/gowtham-labs/nglens
- *
- * Zone Pollution Detector (Enhanced)
- *
- * Detects async sources causing excessive change detection cycles:
- * - setTimeout/setInterval
- * - addEventListener
- * - fetch/XHR
- * - WebSocket
- * - Microtasks
- * - Third-party libraries (Chart.js, moment.js, etc.)
- *
- * Provides per-source attribution and aggregated metrics.
+ * Hooks Zone.js scheduleTask and intercepts ApplicationRef.tick() to correlate
+ * async task sources with actual Angular change detection cycles.
+ * Maintains a circular buffer of TaskRecords, computes per-source CD/min metrics,
+ * classifies severity, and emits ranked pollution events to the content script.
  */
 
-export interface ZonePollutionSource {
-  type: 'timeout' | 'interval' | 'listener' | 'fetch' | 'websocket' | 'microtask' | 'unknown';
-  library?: string;
-  callCount: number;
-  cdCycles: number;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  lastOccurrence: number;
-  stack?: string;
-}
+import type { TaskRecord, PollutionSourceMetrics, ZonePollutionEvent } from '../types/zone-pollution-events';
+import {
+  evictExpiredRecords,
+  computeCdPerMinute,
+  classifySeverity,
+  rankSources,
+  extractLibraryFromStack,
+  getFixSuggestion,
+  shouldAttributeCd,
+  isInStartupPeriod,
+} from './zone-pollution-utils';
+import { PerformanceGuard } from './performance-guard';
 
-export interface ZonePollutionEvent {
-  source: string;
-  type: string;
-  cdCycles: number;
-  timestamp: number;
-  library?: string;
-  stack?: string;
-}
+const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
+
+/** Maximum records held in the circular buffer */
+const MAX_BUFFER_SIZE = 10_000;
+
+/** Rolling window for metrics computation (60 seconds) */
+const WINDOW_MS = 60_000;
+
+/** Default batch emission interval */
+const DEFAULT_BATCH_INTERVAL_MS = 100;
+
+/** Reduced batch interval when overhead is high */
+const DEGRADED_BATCH_INTERVAL_MS = 500;
+
+/** CD attribution threshold — one frame at 60fps */
+const CD_ATTRIBUTION_THRESHOLD_MS = 16;
+
+/** Startup period duration — records stored but not emitted */
+const STARTUP_DURATION_MS = 5_000;
+
+/** Top N sources to emit per batch */
+const TOP_SOURCES_LIMIT = 10;
 
 export class ZonePollutionDetector {
-  private enabled = false;
-  private sources = new Map<string, ZonePollutionSource>();
-  private events: ZonePollutionEvent[] = [];
+  private static instance: ZonePollutionDetector | null = null;
 
-  private changeDetectionHookCount = 0;
+  private isRunning = false;
+  private startTime = 0;
+
+  // Circular buffer of task records
+  private buffer: TaskRecord[] = [];
+
+  // Zone.js hook state
+  private originalScheduleTask: any = null;
+  private zoneDelegate: any = null;
+
+  // ApplicationRef.tick interception
+  private originalTick: ((...args: any[]) => any) | null = null;
+  private tickTarget: any = null;
+
+  // CD cycle tracking
   private lastCdTime = 0;
-  private cdCyclesPerSource = new Map<string, number>();
 
-  private originalSetTimeout: any;
-  private originalSetInterval: any;
-  private originalAddEventListener: any;
-  private originalFetch: any;
-  private originalXhr: any;
+  // Batch interval
+  private batchInterval: ReturnType<typeof setInterval> | null = null;
+  private currentBatchIntervalMs = DEFAULT_BATCH_INTERVAL_MS;
 
-  constructor() {
-    // Initialize tracking
+  private constructor() {}
+
+  static getInstance(): ZonePollutionDetector {
+    if (!ZonePollutionDetector.instance) {
+      ZonePollutionDetector.instance = new ZonePollutionDetector();
+    }
+    return ZonePollutionDetector.instance;
   }
 
+  /** Start instrumentation. Called by Orchestrator on START_TRACKING. */
   start(): void {
-    if (this.enabled) return;
-    this.enabled = true;
+    if (this.isRunning) return;
 
-    // Hook into Zone.js scheduleTask to track CD cycles
-    this.hookZoneJs();
+    // Zoneless detection: if Zone.js is not present, emit informational event and bail
+    if (!this.isZoneJsPresent()) {
+      this.emitZonelessEvent();
+      return;
+    }
 
-    // Intercept async sources
-    this.interceptAsync();
+    this.startTime = performance.now();
+    this.isRunning = true;
+
+    this.hookZoneScheduleTask();
+    this.interceptTick();
+    this.startBatching(DEFAULT_BATCH_INTERVAL_MS);
   }
 
+  /** Stop instrumentation. Called by Orchestrator on STOP_TRACKING. */
   stop(): void {
-    if (!this.enabled) return;
-    this.enabled = false;
+    if (!this.isRunning) return;
 
-    this.restoreAsync();
+    this.stopBatching();
+    this.unhookZoneScheduleTask();
+    this.restoreTick();
+
+    this.isRunning = false;
   }
 
-  /**
-   * Hook Zone.js to track change detection cycles
-   */
-  private hookZoneJs(): void {
+  /** Clear all buffered data without stopping. Called on CLEAR_DATA. */
+  clear(): void {
+    this.buffer = [];
+    this.lastCdTime = 0;
+  }
+
+  // ─── Zone.js Hook ──────────────────────────────────────────────────────────
+
+  private isZoneJsPresent(): boolean {
+    return !!(globalThis as any).Zone?.current;
+  }
+
+  private hookZoneScheduleTask(): void {
     const zone = (globalThis as any).Zone?.current;
     if (!zone) return;
 
     const zoneDelegate = zone._zoneDelegate;
-    if (!zoneDelegate) return;
+    if (!zoneDelegate || typeof zoneDelegate.scheduleTask !== 'function') return;
 
-    const originalScheduleTask = zoneDelegate.scheduleTask.bind(zoneDelegate);
-    const detector = this;
+    this.zoneDelegate = zoneDelegate;
+    this.originalScheduleTask = zoneDelegate.scheduleTask.bind(zoneDelegate);
+
+    const self = this;
+    const origFn = this.originalScheduleTask;
 
     zoneDelegate.scheduleTask = (targetZone: any, task: any): any => {
-      // Track if this is a change detection task
-      if (task.type === 'macroTask' || task.type === 'microTask') {
-        const source = detector.detectAsyncSource(task);
-        detector.recordSourceActivity(source, task);
-      }
-
-      return originalScheduleTask(targetZone, task);
+      self.recordTask(task);
+      return origFn(targetZone, task);
     };
   }
 
-  /**
-   * Intercept async operations to track sources
-   */
-  private interceptAsync(): void {
-    this.interceptSetTimeout();
-    this.interceptSetInterval();
-    this.interceptEventListener();
-    this.interceptFetch();
-    this.interceptXhr();
-  }
-
-  private interceptSetTimeout(): void {
-    this.originalSetTimeout = globalThis.setTimeout;
-    const detector = this;
-
-    globalThis.setTimeout = function (callback: any, delay: number, ...args: any[]) {
-      if (detector.enabled) {
-        const stack = new Error().stack || '';
-        const source = detector.parseLibraryFromStack(stack);
-        detector.recordSource(
-          `setTimeout(${delay}ms)`,
-          'timeout',
-          source,
-          stack
-        );
-      }
-      return detector.originalSetTimeout.call(globalThis, callback, delay, ...args);
-    };
-  }
-
-  private interceptSetInterval(): void {
-    this.originalSetInterval = globalThis.setInterval;
-    const detector = this;
-
-    globalThis.setInterval = function (callback: any, delay: number, ...args: any[]) {
-      if (detector.enabled) {
-        const stack = new Error().stack || '';
-        const source = detector.parseLibraryFromStack(stack);
-        detector.recordSource(
-          `setInterval(${delay}ms)`,
-          'interval',
-          source,
-          stack
-        );
-      }
-      return detector.originalSetInterval.call(globalThis, callback, delay, ...args);
-    };
-  }
-
-  private interceptEventListener(): void {
-    this.originalAddEventListener = globalThis.addEventListener;
-    const detector = this;
-
-    globalThis.addEventListener = function (type: string, listener: any, options?: any) {
-      if (detector.enabled) {
-        const stack = new Error().stack || '';
-        const source = detector.parseLibraryFromStack(stack);
-        detector.recordSource(`addEventListener(${type})`, 'listener', source, stack);
-      }
-      return detector.originalAddEventListener.call(this, type, listener, options);
-    };
-
-    // Also intercept Element.addEventListener
-    if (Element.prototype.addEventListener) {
-      const originalEAL = Element.prototype.addEventListener;
-      Element.prototype.addEventListener = function (type: string, listener: any, options?: any) {
-        if (detector.enabled) {
-          const stack = new Error().stack || '';
-          const source = detector.parseLibraryFromStack(stack);
-          detector.recordSource(`addEventListener(${type})`, 'listener', source, stack);
-        }
-        return originalEAL.call(this, type, listener, options);
-      };
+  private unhookZoneScheduleTask(): void {
+    if (this.originalScheduleTask && this.zoneDelegate) {
+      this.zoneDelegate.scheduleTask = this.originalScheduleTask;
+      this.originalScheduleTask = null;
+      this.zoneDelegate = null;
     }
   }
 
-  private interceptFetch(): void {
-    if (!globalThis.fetch) return;
+  private recordTask(task: any): void {
+    if (!task) return;
 
-    this.originalFetch = globalThis.fetch;
-    const detector = this;
+    const source = this.extractSource(task);
+    const type = this.mapTaskType(task.type);
+    const stack = (typeof task.creationLocation === 'string' ? task.creationLocation : '') ||
+                  (new Error().stack ?? '');
+    const library = extractLibraryFromStack(stack);
 
-    globalThis.fetch = function (...args: any[]) {
-      if (detector.enabled) {
-        const stack = new Error().stack || '';
-        const source = detector.parseLibraryFromStack(stack);
-        const url = typeof args[0] === 'string' ? args[0].substring(0, 50) : 'unknown';
-        detector.recordSource(`fetch(${url})`, 'fetch', source, stack);
-      }
-      return detector.originalFetch.apply(this, args);
-    };
-  }
-
-  private interceptXhr(): void {
-    if (!globalThis.XMLHttpRequest) return;
-
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const detector = this;
-
-    XMLHttpRequest.prototype.open = function (method: string, url: string, ...args: any[]) {
-      if (detector.enabled) {
-        const stack = new Error().stack || '';
-        const source = detector.parseLibraryFromStack(stack);
-        const urlStr = url.substring(0, 50);
-        detector.recordSource(`XMLHttpRequest(${method} ${urlStr})`, 'fetch', source, stack);
-      }
-      return originalOpen.call(this, method, url, ...args);
-    };
-  }
-
-  private restoreAsync(): void {
-    if (this.originalSetTimeout) globalThis.setTimeout = this.originalSetTimeout;
-    if (this.originalSetInterval) globalThis.setInterval = this.originalSetInterval;
-    if (this.originalAddEventListener) globalThis.addEventListener = this.originalAddEventListener;
-    if (this.originalFetch) globalThis.fetch = this.originalFetch;
-  }
-
-  /**
-   * Detect which async source triggered this Zone.js task
-   */
-  private detectAsyncSource(task: any): string {
-    const source = task.source || task.type || 'unknown';
-    return source;
-  }
-
-  /**
-   * Record activity for a source
-   */
-  private recordSourceActivity(source: string, task: any): void {
-    // Check if this triggered a change detection
-    const now = performance.now();
-    const timeSinceLastCd = now - this.lastCdTime;
-
-    // If this task resulted in CD, attribute it
-    if (timeSinceLastCd < 50) {
-      // Likely same CD cycle
-      const key = `zone:${source}`;
-      const current = this.cdCyclesPerSource.get(key) || 0;
-      this.cdCyclesPerSource.set(key, current + 1);
-      this.lastCdTime = now;
-    }
-  }
-
-  /**
-   * Record an async source
-   */
-  private recordSource(
-    description: string,
-    type: string,
-    library: string | undefined,
-    stack: string
-  ): void {
-    const key = `${type}:${library || 'unknown'}`;
-    const existing = this.sources.get(key);
-
-    if (existing) {
-      existing.callCount++;
-      existing.lastOccurrence = Date.now();
-    } else {
-      this.sources.set(key, {
-        type: type as any,
-        library,
-        callCount: 1,
-        cdCycles: 0,
-        severity: 'low',
-        lastOccurrence: Date.now(),
-        stack,
-      });
-    }
-
-    this.events.push({
-      source: key,
+    const record: TaskRecord = {
+      source,
       type,
-      cdCycles: 0,
-      timestamp: Date.now(),
+      timestamp: performance.now(),
+      triggeredCd: false,
       library,
-      stack,
-    });
+    };
 
-    // Dispatch event for real-time monitoring
-    window.dispatchEvent(
-      new CustomEvent('ngLens:zonePollution', {
-        detail: {
-          source: key,
-          type,
-          library,
-          callCount: (this.sources.get(key)?.callCount || 0),
-        },
-      })
+    this.insertIntoBuffer(record);
+  }
+
+  private extractSource(task: any): string {
+    const taskSource: string = task.source ?? '';
+
+    if (taskSource.includes('setTimeout')) return 'setTimeout';
+    if (taskSource.includes('setInterval')) return 'setInterval';
+    if (taskSource.includes('XMLHttpRequest')) return 'XMLHttpRequest';
+    if (taskSource.includes('fetch')) return 'fetch';
+    if (taskSource.includes('WebSocket')) return 'WebSocket';
+    if (taskSource.includes('requestAnimationFrame')) return 'requestAnimationFrame';
+    if (taskSource.includes('addEventListener')) {
+      const match = /addEventListener:(\w+)/.exec(taskSource);
+      return match ? `addEventListener:${match[1]}` : 'addEventListener';
+    }
+    if (task.type === 'microTask' || taskSource.includes('Promise')) return 'Promise.then';
+
+    return taskSource || 'unknown';
+  }
+
+  private mapTaskType(type: string | undefined): TaskRecord['type'] {
+    if (type === 'macroTask') return 'macroTask';
+    if (type === 'microTask') return 'microTask';
+    if (type === 'eventTask') return 'eventTask';
+    return 'macroTask';
+  }
+
+  // ─── ApplicationRef.tick() Interception ────────────────────────────────────
+
+  private interceptTick(): void {
+    // Strategy 1: patch ApplicationRef prototype via ng debug API
+    const ng = (globalThis as any).ng;
+
+    // Try to get ApplicationRef from the root element's injector
+    const appRoot = document.querySelector('[ng-version]') ?? document.querySelector('app-root');
+    if (appRoot && ng?.getComponent) {
+      try {
+        const rootComponent = ng.getComponent(appRoot);
+        if (rootComponent) {
+          // Access injector via ɵinj or __ngContext__
+          const injector = (rootComponent as any).__ngContext__?.injector
+            ?? (appRoot as any).__ngContext__?.injector;
+          if (injector) {
+            const appRef = injector.get?.((globalThis as any).ng?.ɵApplicationRef);
+            if (appRef && typeof appRef.tick === 'function') {
+              this.tickTarget = appRef;
+              this.originalTick = appRef.tick.bind(appRef);
+              const self = this;
+              appRef.tick = function (...args: any[]) {
+                self.onTick();
+                return self.originalTick!(...args);
+              };
+              return;
+            }
+          }
+        }
+      } catch {
+        // Fall through to strategy 2
+      }
+    }
+
+    // Strategy 2: Use ng.profiler if available
+    if (ng?.profiler?.timeChangeDetection) {
+      // Wrap the profiler's timeChangeDetection
+      const originalTimeCD = ng.profiler.timeChangeDetection.bind(ng.profiler);
+      const self = this;
+      ng.profiler.timeChangeDetection = function (...args: any[]) {
+        self.onTick();
+        return originalTimeCD(...args);
+      };
+      this.tickTarget = ng.profiler;
+      this.originalTick = originalTimeCD;
+      return;
+    }
+
+    // Strategy 3: Patch ApplicationRef.prototype.tick if accessible
+    try {
+      const appRefProto = (globalThis as any).ng?.coreTokens?.ApplicationRef?.prototype;
+      if (appRefProto && typeof appRefProto.tick === 'function') {
+        this.tickTarget = appRefProto;
+        this.originalTick = appRefProto.tick;
+        const self = this;
+        appRefProto.tick = function (this: any, ...args: any[]) {
+          self.onTick();
+          return self.originalTick!.apply(this, args);
+        };
+        return;
+      }
+    } catch {
+      // No tick interception available — CD attribution will be heuristic-based
+    }
+  }
+
+  private restoreTick(): void {
+    if (this.originalTick && this.tickTarget) {
+      if (this.tickTarget === (globalThis as any).ng?.profiler) {
+        (globalThis as any).ng.profiler.timeChangeDetection = this.originalTick;
+      } else if ('tick' in this.tickTarget) {
+        this.tickTarget.tick = this.originalTick;
+      }
+      this.originalTick = null;
+      this.tickTarget = null;
+    }
+  }
+
+  private onTick(): void {
+    const now = performance.now();
+    this.lastCdTime = now;
+
+    // Attribute recent tasks (within 16ms) as having triggered CD
+    for (let i = this.buffer.length - 1; i >= 0; i--) {
+      const record = this.buffer[i];
+      if (record.triggeredCd) continue;
+      if (shouldAttributeCd(record.timestamp, now, CD_ATTRIBUTION_THRESHOLD_MS)) {
+        record.triggeredCd = true;
+      } else if (now - record.timestamp > CD_ATTRIBUTION_THRESHOLD_MS) {
+        // Records are ordered by time; once we pass the threshold, stop
+        break;
+      }
+    }
+  }
+
+  // ─── Circular Buffer ───────────────────────────────────────────────────────
+
+  private insertIntoBuffer(record: TaskRecord): void {
+    if (this.buffer.length >= MAX_BUFFER_SIZE) {
+      this.buffer.shift();
+    }
+    this.buffer.push(record);
+  }
+
+  // ─── Batch Emission ────────────────────────────────────────────────────────
+
+  private startBatching(intervalMs: number): void {
+    this.currentBatchIntervalMs = intervalMs;
+    this.batchInterval = globalThis.setInterval(() => this.processBatch(), intervalMs);
+  }
+
+  private stopBatching(): void {
+    if (this.batchInterval !== null) {
+      clearInterval(this.batchInterval);
+      this.batchInterval = null;
+    }
+  }
+
+  private processBatch(): void {
+    const now = performance.now();
+
+    // PerformanceGuard integration: if overhead > 3%, reduce batch frequency
+    this.adjustBatchFrequency();
+
+    // Startup period: store records but don't emit
+    if (isInStartupPeriod(now, this.startTime, STARTUP_DURATION_MS)) {
+      return;
+    }
+
+    // Evict expired records
+    this.buffer = evictExpiredRecords(this.buffer, now, WINDOW_MS);
+
+    if (this.buffer.length === 0) return;
+
+    // Group records by source
+    const sourceGroups = new Map<string, TaskRecord[]>();
+    for (const record of this.buffer) {
+      const existing = sourceGroups.get(record.source);
+      if (existing) {
+        existing.push(record);
+      } else {
+        sourceGroups.set(record.source, [record]);
+      }
+    }
+
+    // Compute metrics per source
+    const windowStart = Math.max(this.startTime + STARTUP_DURATION_MS, now - WINDOW_MS);
+    const effectiveWindowMs = now - windowStart;
+
+    const metrics: PollutionSourceMetrics[] = [];
+    let totalCdCycles = 0;
+
+    for (const [source, records] of sourceGroups) {
+      const cdCount = records.filter(r => r.triggeredCd).length;
+      totalCdCycles += cdCount;
+
+      const cdCyclesPerMinute = computeCdPerMinute(cdCount, effectiveWindowMs);
+      const severity = classifySeverity(cdCyclesPerMinute);
+
+      const lastRecord = records[records.length - 1];
+      const library = records.find(r => r.library)?.library;
+
+      const entry: PollutionSourceMetrics = {
+        source,
+        type: lastRecord.type,
+        library,
+        cdCyclesPerMinute,
+        severity,
+        taskCount: records.length,
+        lastSeen: lastRecord.timestamp,
+      };
+
+      // Generate fix suggestions for medium+ severity
+      if (severity !== 'low') {
+        entry.fixSuggestion = getFixSuggestion(source, library);
+      }
+
+      metrics.push(entry);
+    }
+
+    // Rank sources and take top 10
+    const ranked = rankSources(metrics);
+    const topSources = ranked.slice(0, TOP_SOURCES_LIMIT);
+
+    // Emit event
+    this.emitPollutionEvent({
+      sources: topSources,
+      totalCdCycles,
+      windowDurationMs: effectiveWindowMs,
+      timestamp: now,
+    });
+  }
+
+  private adjustBatchFrequency(): void {
+    const guard = PerformanceGuard.getInstance();
+    if (guard.isDegraded() && this.currentBatchIntervalMs !== DEGRADED_BATCH_INTERVAL_MS) {
+      this.stopBatching();
+      this.startBatching(DEGRADED_BATCH_INTERVAL_MS);
+    }
+  }
+
+  // ─── Event Emission ────────────────────────────────────────────────────────
+
+  private emitPollutionEvent(payload: ZonePollutionEvent): void {
+    const message = {
+      eventId: `zpd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'ZONE_POLLUTION_EVENT',
+      payload,
+    };
+
+    globalThis.dispatchEvent(
+      new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message })
     );
   }
 
-  /**
-   * Parse library name from stack trace
-   */
-  private parseLibraryFromStack(stack: string): string | undefined {
-    // Common third-party libraries
-    const libraries = [
-      'chart.js',
-      'moment.js',
-      'lodash',
-      'rxjs',
-      'jquery',
-      'gsap',
-      'three.js',
-      'bootstrap',
-      'popper.js',
-      'plotly',
-      'echarts',
-      'highcharts',
-    ];
-
-    for (const lib of libraries) {
-      if (stack.includes(lib)) return lib;
-    }
-
-    // Check for node_modules patterns
-    const match = stack.match(/node_modules\/([^\/]+)/);
-    if (match) return match[1];
-
-    // Check for common URLs
-    if (stack.includes('cdn.')) {
-      const urlMatch = stack.match(/https?:\/\/[^\/]+\/([^\/]+)/);
-      if (urlMatch) return urlMatch[1];
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Get all detected pollution sources
-   */
-  getSources(): ZonePollutionSource[] {
-    return Array.from(this.sources.values());
-  }
-
-  /**
-   * Get sources sorted by severity (most critical first)
-   */
-  getTopSources(limit = 10): ZonePollutionSource[] {
-    return Array.from(this.sources.values())
-      .sort((a, b) => {
-        const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-        const severityDiff =
-          severityOrder[a.severity as keyof typeof severityOrder] -
-          severityOrder[b.severity as keyof typeof severityOrder];
-        if (severityDiff !== 0) return severityDiff;
-        return b.callCount - a.callCount;
-      })
-      .slice(0, limit);
-  }
-
-  /**
-   * Get pollution sources for a specific library
-   */
-  getLibrarySources(library: string): ZonePollutionSource[] {
-    return Array.from(this.sources.values()).filter(s => s.library === library);
-  }
-
-  /**
-   * Calculate severity for a source based on frequency
-   */
-  private calculateSeverity(callCount: number): 'low' | 'medium' | 'high' | 'critical' {
-    if (callCount > 500) return 'critical';
-    if (callCount > 200) return 'high';
-    if (callCount > 50) return 'medium';
-    return 'low';
-  }
-
-  /**
-   * Get statistics
-   */
-  getStatistics(): {
-    totalSources: number;
-    totalCalls: number;
-    criticalSources: number;
-    topLibrary?: string;
-  } {
-    const sources = Array.from(this.sources.values());
-    const totalCalls = sources.reduce((sum, s) => sum + s.callCount, 0);
-    const critical = sources.filter(s => s.severity === 'critical').length;
-
-    const topLibrary = sources
-      .filter(s => s.library)
-      .sort((a, b) => b.callCount - a.callCount)[0]?.library;
-
-    return {
-      totalSources: sources.length,
-      totalCalls,
-      criticalSources: critical,
-      topLibrary,
+  private emitZonelessEvent(): void {
+    const message = {
+      eventId: `zpd-zoneless-${Date.now()}`,
+      type: 'ZONE_POLLUTION_EVENT',
+      payload: {
+        sources: [],
+        totalCdCycles: 0,
+        windowDurationMs: 0,
+        timestamp: performance.now(),
+        zonelessMode: true,
+      },
     };
-  }
 
-  /**
-   * Clear tracked data
-   */
-  clear(): void {
-    this.sources.clear();
-    this.events = [];
-    this.cdCyclesPerSource.clear();
+    globalThis.dispatchEvent(
+      new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message })
+    );
   }
 }

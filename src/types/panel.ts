@@ -6,7 +6,7 @@ export type SeverityLevel = 'CRITICAL' | 'WARNING' | 'INFO';
 
 export interface Issue {
   id: string;
-  type: 'render-hot' | 'leak' | 'trackby' | 'onpush' | 'hotspot';
+  type: 'render-hot' | 'leak' | 'trackby' | 'onpush' | 'hotspot' | 'zone-pollution';
   componentName: string;
   severity: SeverityLevel;
   title: string;

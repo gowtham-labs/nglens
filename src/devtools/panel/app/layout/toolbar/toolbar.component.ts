@@ -70,6 +70,9 @@ import { CommandService } from '../../services/command.service';
       @if (degradedMode()) {
         <span class="text-xs text-amber-400 font-medium">Degraded</span>
       }
+      @if (criticalPollutionCount() > 0) {
+        <span class="text-xs text-red-400 font-medium animate-pulse">⚡ {{ criticalPollutionCount() }} Zone</span>
+      }
       @if (trackingError()) {
         <span class="text-xs text-red-400 font-medium truncate max-w-64" [title]="trackingError()!">
           {{ trackingError() }}
@@ -87,6 +90,7 @@ export class ToolbarComponent {
   readonly connectionState = this.state.connectionState;
   readonly clearOnRouteChange = this.state.clearOnRouteChange;
   readonly trackingError = this.state.trackingError;
+  readonly criticalPollutionCount = this.state.criticalPollutionCount;
 
   readonly connectionDotClass = computed(() => {
     switch (this.state.connectionState()) {

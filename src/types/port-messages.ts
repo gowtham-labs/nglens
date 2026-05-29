@@ -19,6 +19,7 @@ export type PortMessageType =
   | 'OVERLAY_SHOW'
   | 'OVERLAY_HIDE'
   | 'ROUTE_CHANGED'
+  | 'ZONE_POLLUTION_EVENT'
   | 'ERROR';
 
 export interface PortMessage<T = unknown> {
