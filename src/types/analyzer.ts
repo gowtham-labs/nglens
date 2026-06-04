@@ -28,6 +28,7 @@ export type AnalyzerType =
   | 'dom-inspector'
   | 'signals-analyzer'
   | 'rxjs-leak-detector'
+  | 'ast-subscription-analyzer'
   | 'enterprise-optimizer'
   | 'best-practices-detector';
 

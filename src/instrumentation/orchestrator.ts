@@ -40,6 +40,9 @@ const templateExpressionTracker = new TemplateExpressionTracker(null);
 const freezeDetector = new FreezeDetector();
 const zonePollutionDetector = ZonePollutionDetector.getInstance();
 
+// Expose LeakDetector globally so analyzers can access it
+(globalThis as any).__leakDetector = leakDetector;
+
 /**
  * Handles START_TRACKING command from the panel.
  * Checks Angular version support, then starts all continuous detectors.

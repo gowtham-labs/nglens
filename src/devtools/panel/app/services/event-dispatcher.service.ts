@@ -56,7 +56,7 @@ export class EventDispatcherService {
         this.handleError(message.payload as { message?: string; error?: string });
         break;
       case 'ROUTE_CHANGED':
-        if (this.state.clearOnRouteChange()) {
+        if (!this.state.clearOnRouteChange()) {
           this.state.renderEvents.set([]);
         }
         break;
@@ -72,6 +72,22 @@ export class EventDispatcherService {
   private handleTabNavigated(): void {
     const shouldResumeTracking = this.state.isTracking();
 
+    // When Route toggle is ON (clearOnRouteChange is true), preserve all data across navigation
+    if (this.state.clearOnRouteChange()) {
+      // Keep all accumulated data, just ensure connection stays alive
+      this.state.connectionState.set('connected');
+
+      if (shouldResumeTracking) {
+        this.portService?.send({
+          type: 'START_TRACKING',
+          payload: null,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+
+    // Route toggle is OFF (clearOnRouteChange is false) — clear everything as before
     this.state.clearAll();
     // clearAll() resets connectionState to 'disconnected', restore it
     this.state.connectionState.set('connected');

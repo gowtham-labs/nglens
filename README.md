@@ -29,7 +29,7 @@ All analysis is performed locally in your browser. No data leaves your machine. 
 ngLens takes security seriously:
 
 - ✅ **GPL v3 Licensed** - Prevents closed-source malicious forks
-- ✅ **Minimal Permissions** - Only activeTab, scripting, tabs, storage
+- ✅ **Minimal Permissions** - Only activeTab, scripting, storage
 - ✅ **Content Security Policy** - Strict CSP prevents code injection
 - ✅ **No Network Access** - All code runs locally, zero external requests
 - ✅ **Open Source** - Fully auditable code

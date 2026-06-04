@@ -44,7 +44,7 @@ import { CommandService } from '../../services/command.service';
         (click)="toggleClearOnRoute()"
         class="px-2 py-1 text-xs rounded border transition-colors"
         [class]="clearOnRouteChange() ? 'border-blue-500 text-blue-400' : 'border-gray-600 text-gray-500'"
-        title="Clear activity on route change">
+        title="Persist activity across route changes">
         🔄 Route
       </button>
       <button

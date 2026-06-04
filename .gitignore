@@ -54,3 +54,10 @@ Desktop.ini
 # Kiro
 .kiro/
 docs
+
+# Markdown files
+*.md
+*.txt
+
+# JavaScript files
+*.js

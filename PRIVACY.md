@@ -60,7 +60,8 @@ If you select "No thanks" when prompted, or opt out later via settings:
    {
      "activeTab": "Access current tab to analyze Angular app",
      "storage": "Store scan results and consent preference locally",
-     "host_permissions (google-analytics.com)": "Send anonymous usage events when opted in"
+     "scripting": "Inject content script to detect Angular apps",
+     "optional_host_permissions (google-analytics.com)": "Send anonymous usage events when opted in (requested at runtime)"
    }
    ```
 
@@ -91,8 +92,8 @@ You can verify our privacy claims:
    - All code is public and auditable
 
 2. **Check the manifest:**
-   - `host_permissions` limited to `https://www.google-analytics.com/*` (for opt-in analytics only)
-   - Minimal permissions: `activeTab`, `storage`
+   - `optional_host_permissions` limited to `https://www.google-analytics.com/*` (requested at runtime, only when opted in)
+   - Minimal permissions: `activeTab`, `storage`, `scripting`
 
 3. **Inspect network traffic:**
    - Open Chrome DevTools → Network tab

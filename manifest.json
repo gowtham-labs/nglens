@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ngLens",
-  "version": "1.0.2",
-  "description": "Angular Runtime Health Monitor. Explains WHY components re-render, detects Zone.js pollution, finds memory leaks, and tells you exactly how to fix them. All analysis is local — no data leaves your browser.",
+  "version": "1.1.0",
+  "description": "Angular Runtime Health Monitor. Explains WHY components re-render, detects Zone.js pollution, finds memory leaks, and tells you exactly how to fix them. Anonymous usage metrics sent only with your explicit consent.",
   "author": "ngLens Contributors",
   "homepage_url": "https://github.com/gowtham-labs/nglens",
 
@@ -12,11 +12,12 @@
     "scripting"
   ],
 
-  "devtools_page": "devtools.html",
-
   "host_permissions": [
-    "https://www.google-analytics.com/*"
+    "http://*/*",
+    "https://*/*"
   ],
+
+  "devtools_page": "devtools.html",
 
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'"

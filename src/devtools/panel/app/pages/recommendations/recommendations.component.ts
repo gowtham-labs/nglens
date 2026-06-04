@@ -1,167 +1,123 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
-import { displayName } from '../../utils/display-name';
-import type { OnPushScore, TrackByIssue } from '../../../../../types/recommendation-events';
+import { RecommendationsState } from '../../state/recommendations.state';
+import { CodeSnippetService } from '../../services/code-snippet.service';
+import { ClipboardService } from '../../services/clipboard.service';
+import { ToastService } from '../../services/toast.service';
+import { ProgressBarComponent } from './components/progress-bar.component';
+import { FilterBarComponent } from './components/filter-bar.component';
+import { RecommendationItemComponent } from './components/recommendation-item.component';
+import { ToastComponent } from './components/toast.component';
+import type { EnrichedRecommendation } from './types';
 
+/**
+ * Enhanced Recommendations Component
+ *
+ * Displays actionable performance optimization recommendations with:
+ * - Progress tracking (ProgressBarComponent)
+ * - Filtering by priority, type, and search (FilterBarComponent)
+ * - Individual recommendation cards with copy-to-clipboard and mark-as-fixed (RecommendationItemComponent)
+ * - Toast notifications for user feedback (ToastComponent)
+ *
+ * Wires together all services and state to provide a complete recommendations workflow.
+ *
+ * Validates: Requirements 1.1, 1.6, 1.7, 2.8, 2.9, 5.5, 5.6, 5.7, 5.8, 5.9, 6.4, 7.1, 7.8
+ */
 @Component({
   selector: 'app-recommendations',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    CommonModule,
+    ProgressBarComponent,
+    FilterBarComponent,
+    RecommendationItemComponent,
+    ToastComponent,
+  ],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
-      <!-- Summary -->
-      <section class="border border-gray-700 rounded-lg p-4 bg-gray-800/40 backdrop-blur-sm">
-        <h2 class="text-sm font-semibold text-gray-100 mb-4">Performance Recommendations</h2>
+      <!-- Toast notifications -->
+      <app-toast></app-toast>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="p-4 rounded-lg border border-purple-800/50 bg-purple-900/30">
-            <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">OnPush Candidates</div>
-            <div class="text-3xl font-bold text-purple-300">{{ getOnPushCandidates().length }}</div>
-            <div class="text-xs text-purple-400/80 mt-1">components can optimize</div>
+      <!-- Progress bar -->
+      <app-progress-bar
+        [percentage]="recommendationsState.progressPercentage()"
+        [fixedCount]="recommendationsState.fixedCount()"
+        [totalCount]="recommendationsState.totalCount()"
+      ></app-progress-bar>
+
+      <!-- Filter bar -->
+      <app-filter-bar
+        [visibleCount]="visibleCount"
+      ></app-filter-bar>
+
+      <!-- Recommendations list or empty state -->
+      @if (recommendationsState.filteredRecommendations().length === 0) {
+        @if (recommendationsState.enrichedRecommendations().length === 0) {
+          <!-- No recommendations at all -->
+          <div class="border border-green-800/50 rounded-lg p-8 bg-green-900/20 text-center">
+            <div class="text-2xl mb-2">✓</div>
+            <div class="text-green-300 font-semibold mb-1">No Recommendations</div>
+            <div class="text-xs text-gray-400">Your Angular app is well-optimized!</div>
           </div>
-
-          <div class="p-4 rounded-lg border border-orange-800/50 bg-orange-900/30">
-            <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">Missing trackBy</div>
-            <div class="text-3xl font-bold text-orange-300">{{ getTrackByIssues().length }}</div>
-            <div class="text-xs text-orange-400/80 mt-1">*ngFor directives</div>
+        } @else {
+          <!-- Recommendations exist but filtered out -->
+          <div class="border border-yellow-800/50 rounded-lg p-8 bg-yellow-900/20 text-center">
+            <div class="text-2xl mb-2">🔍</div>
+            <div class="text-yellow-300 font-semibold mb-1">No Matching Recommendations</div>
+            <div class="text-xs text-gray-400">Try adjusting your filters to see more recommendations.</div>
           </div>
-        </div>
-      </section>
-
-      @if (getOnPushCandidates().length === 0 && getTrackByIssues().length === 0) {
-        <div class="border border-green-800/50 rounded-lg p-8 bg-green-900/20 text-center">
-          <div class="text-2xl mb-2">✓</div>
-          <div class="text-green-300 font-semibold mb-1">No Recommendations</div>
-          <div class="text-xs text-gray-400">Your Angular app is well-optimized!</div>
+        }
+      } @else {
+        <!-- Recommendations list -->
+        <div class="space-y-3">
+          @for (recommendation of recommendationsState.filteredRecommendations(); track recommendation.id) {
+            <app-recommendation-item
+              [recommendation]="recommendation"
+              (copyCode)="onCopyCode($event)"
+              (markFixed)="onMarkAsFixed($event)"
+            ></app-recommendation-item>
+          }
         </div>
       }
-
-      <!-- OnPush Recommendations -->
-      @if (getOnPushCandidates().length > 0) {
-        <section class="border border-purple-700/50 rounded-lg overflow-hidden bg-purple-900/20 backdrop-blur-sm">
-          <div class="px-4 py-3 border-b border-purple-700/50 bg-purple-900/40">
-            <h3 class="text-sm font-semibold text-purple-200 uppercase">
-              OnPush Strategy Candidates ({{ getOnPushCandidates().length }})
-            </h3>
-            <p class="text-xs text-gray-400 mt-1">
-              These components are candidates for ChangeDetectionStrategy.OnPush optimization
-            </p>
-          </div>
-
-          <div class="divide-y divide-purple-700/30 max-h-64 overflow-auto">
-            @for (item of getOnPushCandidates(); track item.component) {
-              <div class="px-4 py-3 hover:bg-purple-900/30 cursor-pointer transition-colors group" (click)="selectRecommendation(item)">
-                <div class="flex items-start gap-3">
-                  <div class="text-2xl font-bold text-purple-400 group-hover:scale-110 transition-transform">{{ item.score }}<span class="text-xs">/100</span></div>
-                  <div class="flex-1">
-                    <div class="font-semibold text-gray-100 group-hover:text-purple-200 transition-colors">{{ displayName(item.component) }}</div>
-                    <div class="text-xs text-gray-400 mt-1">
-                      <span class="inline-block mr-2">✓ Input-driven:</span>
-                      {{ getInputDescription(item) }}
-                    </div>
-                    <div class="mt-2 p-2 rounded bg-purple-900/40 border border-purple-800/30 text-xs text-gray-300">
-                      <strong class="text-purple-200">Recommendation:</strong> {{ item.recommendation }}
-                    </div>
-                  </div>
-                  <span class="text-[10px] text-purple-400 font-bold whitespace-nowrap">{{ item.currentStrategy }}</span>
-                </div>
-              </div>
-            }
-          </div>
-        </section>
-      }
-
-      <!-- TrackBy Issues -->
-      @if (getTrackByIssues().length > 0) {
-        <section class="border border-orange-700/50 rounded-lg overflow-hidden bg-orange-900/20 backdrop-blur-sm">
-          <div class="px-4 py-3 border-b border-orange-700/50 bg-orange-900/40">
-            <h3 class="text-sm font-semibold text-orange-200 uppercase">
-              Missing trackBy Functions ({{ getTrackByIssues().length }})
-            </h3>
-            <p class="text-xs text-gray-400 mt-1">
-              Add trackBy functions to improve list rendering performance
-            </p>
-          </div>
-
-          <div class="divide-y divide-orange-700/30 max-h-64 overflow-auto">
-            @for (item of getTrackByIssues(); track item.componentName) {
-              <div class="px-4 py-3 hover:bg-orange-900/30 cursor-pointer transition-colors group" (click)="selectRecommendation(item)">
-                <div class="flex items-start gap-3">
-                  <div class="w-12 h-12 rounded-lg bg-orange-900/40 flex items-center justify-center border border-orange-700/50 group-hover:border-orange-600 transition-colors">
-                    <span class="text-sm font-bold text-orange-400">{{ item.collectionSize }}</span>
-                  </div>
-                  <div class="flex-1">
-                    <div class="font-semibold text-gray-100 group-hover:text-orange-200 transition-colors">{{ displayName(item.componentName) }}</div>
-                    <div class="text-xs text-gray-400 mt-1">
-                      Collection <strong class="text-orange-300">{{ item.collectionProperty }}</strong> has {{ item.collectionSize }} items
-                    </div>
-                    <div class="mt-2 p-2 rounded bg-orange-900/40 border border-orange-700/30 text-xs text-gray-300 font-mono">
-                      <div class="mb-1">Add to your component:</div>
-                      <div class="bg-black/50 p-1.5 rounded text-orange-300 text-[10px] leading-relaxed">
-                        trackBy = (i: number, item: any) => item.id;
-                      </div>
-                    </div>
-                    <div class="mt-2 text-xs text-gray-300">
-                      <strong class="text-orange-200">In template:</strong> *ngFor="let item of items; trackBy: trackBy"
-                    </div>
-                  </div>
-                </div>
-              </div>
-            }
-          </div>
-        </section>
-      }
-
-      <!-- Best Practices Guide -->
-      <section class="border border-blue-700/50 rounded-lg p-4 bg-blue-900/20 backdrop-blur-sm">
-        <h3 class="text-xs font-semibold text-blue-300 mb-3 uppercase">Best Practices</h3>
-        <div class="space-y-3 text-xs text-gray-300">
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">1. Use ChangeDetectionStrategy.OnPush</strong>
-            <p class="text-gray-400 text-xs">For components that only depend on inputs, this dramatically reduces change detection cycles.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">2. Always Use trackBy in *ngFor</strong>
-            <p class="text-gray-400 text-xs">Without trackBy, Angular recreates DOM elements for every change, wasting performance.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">3. Memoize Expensive Computations</strong>
-            <p class="text-gray-400 text-xs">Use Angular Signals computed() to cache expensive operations until dependencies change.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">4. Lazy Load Modules</strong>
-            <p class="text-gray-400 text-xs">Use feature modules and lazy loading to reduce initial bundle size and improve startup time.</p>
-          </div>
-        </div>
-      </section>
     </div>
   `,
 })
 export class RecommendationsComponent {
-  readonly state = inject(PanelState);
-  readonly displayName = displayName;
+  readonly panelState = inject(PanelState);
+  readonly recommendationsState = inject(RecommendationsState);
+  private readonly codeSnippetService = inject(CodeSnippetService);
+  private readonly clipboardService = inject(ClipboardService);
+  private readonly toastService = inject(ToastService);
 
-  getOnPushCandidates(): OnPushScore[] {
-    return this.state.onPushRecommendations().filter(r => r.score > 50);
+  // Computed signal for visible count to pass to filter bar
+  readonly visibleCount = computed(() => this.recommendationsState.filteredRecommendations().length);
+
+  constructor() {
+    // Hook into PanelState.clearActivity() to reset progress
+    effect(() => {
+      // This effect runs whenever panelState changes
+      // We check if activity was cleared by monitoring renderEvents
+      const renderEvents = this.panelState.renderEvents();
+      if (renderEvents.length === 0) {
+        // Activity was cleared, reset progress
+        this.recommendationsState.resetProgress();
+      }
+    });
   }
 
-  getTrackByIssues(): TrackByIssue[] {
-    return this.state.trackByIssues();
+  /**
+   * Handle copy code action from recommendation item
+   */
+  onCopyCode(recommendation: EnrichedRecommendation): void {
+    // The actual copy is handled in RecommendationItemComponent
+    // This is here for potential future tracking or analytics
   }
 
-  selectRecommendation(item: OnPushScore | TrackByIssue): void {
-    if ('component' in item) {
-      // OnPush score
-      this.state.selectedComponent.set((item as OnPushScore).component);
-    } else {
-      // TrackBy issue
-      this.state.selectedComponent.set((item as TrackByIssue).componentName);
-    }
-  }
-
-  getInputDescription(item: OnPushScore): string {
-    const factor = item.factors?.find(f => f.name === 'Has inputs');
-    return factor?.description ?? '';
+  /**
+   * Handle mark as fixed action from recommendation item
+   */
+  onMarkAsFixed(recommendation: EnrichedRecommendation): void {
+    this.recommendationsState.toggleFixed(recommendation.id);
   }
 }

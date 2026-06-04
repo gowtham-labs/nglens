@@ -7,7 +7,7 @@ import { displayName } from '../../utils/display-name';
   standalone: true,
   template: `
     <div class="h-full flex flex-col bg-gray-900">
-      <div class="px-3 py-1.5 border-b border-gray-700 flex items-center justify-between">
+      <div class="px-3 py-1.5 border-b border-gray-700 flex items-center justify-between flex-shrink-0">
         <span class="text-xs font-medium text-gray-400 uppercase">Activity</span>
         <span class="text-[10px] text-gray-500">{{ recentEvents().length }} renders</span>
       </div>
@@ -16,7 +16,7 @@ import { displayName } from '../../utils/display-name';
           Interact with the page to see render activity
         </div>
       } @else {
-        <div class="flex-1 overflow-auto">
+        <div class="flex-1 overflow-y-scroll">
           @for (event of recentEvents(); track $index) {
             <div class="px-3 py-1.5 border-b border-gray-800">
               <div class="flex items-center gap-2">

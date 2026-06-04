@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject, effect } from '@angular/core';
 import type { RenderEvent, RenderCause } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
@@ -11,9 +11,12 @@ import type {
   PerformanceSnapshot,
   SnapshotComparison,
 } from '../../../../types/panel';
+import { StorageService } from '../services/storage.service';
 
 @Injectable({ providedIn: 'root' })
 export class PanelState {
+  private readonly storageService = inject(StorageService);
+
   // Connection
   readonly connectionState = signal<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
 
@@ -21,7 +24,17 @@ export class PanelState {
   readonly isTracking = signal(false);
   readonly trackingError = signal<string | null>(null);
   readonly degradedMode = signal(false);
-  readonly clearOnRouteChange = signal(false);
+  readonly clearOnRouteChange = signal(
+    this.storageService.getValue('nglens:clearOnRouteChange', false)
+  );
+
+  constructor() {
+    // Persist changes to storage whenever clearOnRouteChange changes
+    effect(() => {
+      const value = this.clearOnRouteChange();
+      this.storageService.setValue('nglens:clearOnRouteChange', value);
+    });
+  }
 
   // Navigation
   readonly activeTab = signal<'overview' | 'rendering' | 'memory' | 'recommendations'>('overview');
