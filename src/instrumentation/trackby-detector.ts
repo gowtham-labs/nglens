@@ -78,33 +78,99 @@ export class TrackByDetector {
    */
   private inspectElement(element: Element, issues: TrackByIssue[]): void {
     const ngContext = (element as any).__ngContext__;
-    if (!ngContext) return;
+    if (ngContext == null) return;
 
     // Angular stores LView or component context in __ngContext__
-    // LView is an array; component index is a number
-    const lView = Array.isArray(ngContext) ? ngContext : this.getLViewFromContext(element);
-    if (!lView) return;
+    // Angular 17+: LView is an array stored directly
+    // Angular 15-16: __ngContext__ is often a number (index into parent LView)
+    let lView: any[] | null = null;
 
+    if (Array.isArray(ngContext)) {
+      lView = ngContext;
+    } else if (typeof ngContext === 'number') {
+      // Angular 15-16: numeric index — try to resolve LView from parent or debug APIs
+      lView = this.getLViewFromNumericContext(element, ngContext);
+    } else {
+      lView = this.getLViewFromContext(element);
+    }
+
+    if (!lView) return;
     this.inspectLView(lView, element, issues);
   }
 
   /**
-   * Attempts to retrieve the LView from an element's Angular debug context.
+   * Resolves an LView when __ngContext__ is a numeric index (Angular 15-16).
+   * The number is an index into the component's LView. We need to find the
+   * parent component's LView to use it.
    */
-  private getLViewFromContext(element: Element): any[] | null {
-    // Angular may store a numeric index in __ngContext__ pointing to the LView
-    // Try to access via ng debug utilities
+  private getLViewFromNumericContext(element: Element, _index: number): any[] | null {
     try {
-      const getComponent = (globalThis as any).ng?.getComponent;
-      const getContext = (globalThis as any).ng?.getContext;
-      if (getContext) {
-        const ctx = getContext(element);
-        if (ctx && Array.isArray((element as any).__ngContext__)) {
-          return (element as any).__ngContext__;
+      // Strategy 1: Use ng.getContext to get the embedded view context
+      const ng = (globalThis as any).ng;
+      if (ng?.getContext) {
+        const ctx = ng.getContext(element);
+        // getContext returns the LView's context object (the component instance or the embedded context)
+        // We need the actual LView array — walk up the DOM to find it
+        if (ctx) {
+          return this.findLViewFromAncestors(element);
         }
       }
-      // If __ngContext__ is a number, it's an index into a parent LView
-      // We can't easily resolve this without more context, so skip
+
+      // Strategy 2: Walk up the DOM tree to find an ancestor with an array __ngContext__
+      return this.findLViewFromAncestors(element);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Walks up the DOM tree to find an ancestor element with an LView (array __ngContext__).
+   */
+  private findLViewFromAncestors(element: Element): any[] | null {
+    let current: Element | null = element.parentElement;
+    let depth = 0;
+    const maxDepth = 20;
+
+    while (current && depth < maxDepth) {
+      const ctx = (current as any).__ngContext__;
+      if (Array.isArray(ctx)) {
+        return ctx;
+      }
+      current = current.parentElement;
+      depth++;
+    }
+    return null;
+  }
+
+  /**
+   * Attempts to retrieve the LView from an element's Angular debug context.
+   * Fallback for when __ngContext__ is neither an array nor a number.
+   */
+  private getLViewFromContext(element: Element): any[] | null {
+    try {
+      const ng = (globalThis as any).ng;
+
+      // Try ng.getContext (available in Angular 15-16 dev mode)
+      if (ng?.getContext) {
+        const ctx = ng.getContext(element);
+        if (ctx) {
+          // If getContext returns something, try to find the LView from ancestors
+          return this.findLViewFromAncestors(element);
+        }
+      }
+
+      // Try ng.getComponent — if element hosts a component, its LView might be accessible
+      if (ng?.getComponent) {
+        const component = ng.getComponent(element as HTMLElement);
+        if (component) {
+          // The component's host element may have LView on a child or itself after re-check
+          const recheckCtx = (element as any).__ngContext__;
+          if (Array.isArray(recheckCtx)) {
+            return recheckCtx;
+          }
+        }
+      }
+
       return null;
     } catch {
       return null;

@@ -618,7 +618,7 @@ describe('SubscriptionLeakDetector', () => {
 
     it('should detect inline subscriptions in method bodies', async () => {
       // Create a component with ngOnInit that contains .subscribe(
-      function TestComponent() {
+      function TestComponent(this: any) {
         // Initialize the subscription property
         this.data$ = {
           subscribe: function() {},
@@ -627,7 +627,7 @@ describe('SubscriptionLeakDetector', () => {
           add: function() {},
         };
       }
-      TestComponent.prototype.ngOnInit = function() {
+      TestComponent.prototype.ngOnInit = function(this: any) {
         // This method contains .subscribe( pattern
         // In real code, this would create the subscription
       };

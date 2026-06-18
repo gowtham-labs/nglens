@@ -9,7 +9,7 @@
  * - TrackByDetector: identifies missing trackBy in ngFor
  * - OnPushEngine: evaluates OnPush suitability
  * - SelectiveAnalyzer: gates deep analysis to selected component
- * - checkAngularVersion: verifies Angular 17+ support
+ * - checkAngularVersion: verifies Angular 15+ support
  */
 
 import { RenderTracker } from './render-tracker';
@@ -55,10 +55,15 @@ function handleStartTracking(): void {
     // Emit an error back to the content script
     dispatchToContent('ERROR', {
       message: versionResult.version
-        ? `Angular ${versionResult.version} is not supported. Requires Angular 17+.`
+        ? `Angular ${versionResult.version} is not supported.`
         : 'Angular not detected on this page.',
     });
     return;
+  }
+
+  // Optional: Log when proceeding with fallback/unknown version detection
+  if (versionResult.confidence !== 'exact') {
+    // console.warn('[ngLens] Proceeding with', versionResult.confidence, 'version detection:', versionResult.version);
   }
 
   try {
@@ -130,7 +135,7 @@ function handleStartTracking(): void {
     // console.error('[ngLens] TrackBy analysis failed:', err);
   }
 
-  // Run OnPush analysis using ng.getComponent (works on Angular 20)
+  // Run OnPush analysis using ng.getComponent (works on Angular 15-21)
   try {
     const ng = (globalThis as any).ng;
     if (ng?.getComponent) {
@@ -147,11 +152,22 @@ function handleStartTracking(): void {
           if (!cmp) continue;
           
           // Check if already using OnPush
+          // Angular 15-16: changeDetection field (0 = Default, 1 = OnPush)
+          // Angular 17+: onPush boolean or changeDetection field
           const isOnPush = cmp.onPush === true || cmp.changeDetection === 1;
           if (isOnPush) continue;
           
-          // Simple heuristic: count inputs
-          const inputCount = cmp.inputs ? Object.keys(cmp.inputs).length : 0;
+          // Count inputs — format varies by Angular version:
+          // Angular 15-16: { propName: 'bindingName' } or array of names
+          // Angular 17+: { propName: { alias: 'bindingName', required: false } }
+          let inputCount = 0;
+          if (cmp.inputs) {
+            if (Array.isArray(cmp.inputs)) {
+              inputCount = cmp.inputs.length;
+            } else if (typeof cmp.inputs === 'object') {
+              inputCount = Object.keys(cmp.inputs).length;
+            }
+          }
           
           analyzed.push({
             component: name,

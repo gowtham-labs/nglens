@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, inject, DestroyRef } from '@angular/core';
 import { interval, Subject } from 'rxjs';
-import { takeUntil, takeUntilDestroyed } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 
 /**
@@ -16,10 +17,10 @@ export class TestSafeComponent implements OnInit, OnDestroy {
   private destroyRef = inject(DestroyRef);
 
   // ✅ SAFE: Using destroy$ Subject pattern
-  subscription1: Subscription;
+  subscription1!: Subscription;
 
   // ✅ SAFE: Using takeUntilDestroyed (Angular 16+)
-  subscription2: Subscription;
+  subscription2!: Subscription;
 
   // ✅ SAFE: Using SubSink pattern
   subscriptions: Subscription[] = [];

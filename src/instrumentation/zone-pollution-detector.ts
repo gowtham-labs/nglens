@@ -192,40 +192,39 @@ export class ZonePollutionDetector {
   // ─── ApplicationRef.tick() Interception ────────────────────────────────────
 
   private interceptTick(): void {
-    // Strategy 1: patch ApplicationRef prototype via ng debug API
     const ng = (globalThis as any).ng;
 
-    // Try to get ApplicationRef from the root element's injector
-    const appRoot = document.querySelector('[ng-version]') ?? document.querySelector('app-root');
-    if (appRoot && ng?.getComponent) {
+    // Strategy 1: Angular 17+ — use getOwningInjector to get ApplicationRef
+    if (ng?.getOwningInjector) {
       try {
-        const rootComponent = ng.getComponent(appRoot);
-        if (rootComponent) {
-          // Access injector via ɵinj or __ngContext__
-          const injector = (rootComponent as any).__ngContext__?.injector
-            ?? (appRoot as any).__ngContext__?.injector;
+        const appRoot = document.querySelector('[ng-version]') ?? document.querySelector('app-root');
+        if (appRoot) {
+          const injector = ng.getOwningInjector(appRoot);
           if (injector) {
-            const appRef = injector.get?.((globalThis as any).ng?.ɵApplicationRef);
-            if (appRef && typeof appRef.tick === 'function') {
-              this.tickTarget = appRef;
-              this.originalTick = appRef.tick.bind(appRef);
-              const self = this;
-              appRef.tick = function (...args: any[]) {
-                self.onTick();
-                return self.originalTick!(...args);
-              };
-              return;
+            // Try to get ApplicationRef token
+            const appRefToken = ng.ɵApplicationRef ?? (globalThis as any)['@angular/core']?.ApplicationRef;
+            if (appRefToken) {
+              const appRef = injector.get?.(appRefToken);
+              if (appRef && typeof appRef.tick === 'function') {
+                this.tickTarget = appRef;
+                this.originalTick = appRef.tick.bind(appRef);
+                const self = this;
+                appRef.tick = function (...args: any[]) {
+                  self.onTick();
+                  return self.originalTick!(...args);
+                };
+                return;
+              }
             }
           }
         }
       } catch {
-        // Fall through to strategy 2
+        // Fall through to next strategy
       }
     }
 
-    // Strategy 2: Use ng.profiler if available
+    // Strategy 2: Angular 15-16 — use ng.profiler if available (dev mode)
     if (ng?.profiler?.timeChangeDetection) {
-      // Wrap the profiler's timeChangeDetection
       const originalTimeCD = ng.profiler.timeChangeDetection.bind(ng.profiler);
       const self = this;
       ng.profiler.timeChangeDetection = function (...args: any[]) {
@@ -237,9 +236,9 @@ export class ZonePollutionDetector {
       return;
     }
 
-    // Strategy 3: Patch ApplicationRef.prototype.tick if accessible
+    // Strategy 3: Angular 17+ — patch ApplicationRef.prototype.tick via coreTokens
     try {
-      const appRefProto = (globalThis as any).ng?.coreTokens?.ApplicationRef?.prototype;
+      const appRefProto = ng?.coreTokens?.ApplicationRef?.prototype;
       if (appRefProto && typeof appRefProto.tick === 'function') {
         this.tickTarget = appRefProto;
         this.originalTick = appRefProto.tick;
@@ -251,8 +250,54 @@ export class ZonePollutionDetector {
         return;
       }
     } catch {
-      // No tick interception available — CD attribution will be heuristic-based
+      // Fall through
     }
+
+    // Strategy 4: Angular 15-16 — find ApplicationRef via LView injector on root element
+    try {
+      const appRoot = document.querySelector('[ng-version]') ?? document.querySelector('app-root');
+      if (appRoot && ng?.getComponent) {
+        const rootComponent = ng.getComponent(appRoot);
+        if (rootComponent) {
+          const ngContext = (appRoot as any).__ngContext__;
+          // In Angular 15-16, __ngContext__ is either an LView array or a number
+          if (Array.isArray(ngContext)) {
+            // Search the LView for an injector-like object
+            for (let i = 0; i < Math.min(ngContext.length, 30); i++) {
+              const item = ngContext[i];
+              if (item && typeof item === 'object' && typeof item.get === 'function') {
+                try {
+                  // Try to get ApplicationRef from any available injector
+                  const appRefToken = ng.ɵApplicationRef
+                    ?? (globalThis as any)['@angular/core']?.ApplicationRef;
+                  if (appRefToken) {
+                    const appRef = item.get(appRefToken);
+                    if (appRef && typeof appRef.tick === 'function') {
+                      this.tickTarget = appRef;
+                      this.originalTick = appRef.tick.bind(appRef);
+                      const self = this;
+                      appRef.tick = function (...args: any[]) {
+                        self.onTick();
+                        return self.originalTick!(...args);
+                      };
+                      return;
+                    }
+                  }
+                } catch {
+                  continue;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Fall through
+    }
+
+    // Strategy 5: No tick interception available
+    // CD attribution will use timing heuristics only (tasks within 16ms of each other)
+    // This is acceptable — the detector still records tasks and emits metrics
   }
 
   private restoreTick(): void {

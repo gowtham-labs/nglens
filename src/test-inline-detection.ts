@@ -62,7 +62,7 @@ async function testInlineDetection() {
     subscriptionIssues.forEach(issue => {
       console.log(`- ${issue.title}`);
       console.log(`  Severity: ${issue.severity}`);
-      console.log(`  Properties: ${issue.metadata?.properties?.join(', ')}`);
+      console.log(`  Properties: ${(issue.metadata?.properties as string[] | undefined)?.join(', ') ?? 'N/A'}`);
     });
 
     if (subscriptionIssues.length > 0) {

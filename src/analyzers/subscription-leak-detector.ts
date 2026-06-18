@@ -302,14 +302,16 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
     const activeSubscriptions = leak.subscriptions.filter((s: any) => !s.cleaned);
     if (activeSubscriptions.length > 0) {
       const issue: AnalysisIssue = {
-        type: 'memory-leak',
-        severity: 'CRITICAL',
+        id: `sub-leak-${Date.now()}`,
+        analyzer: this.type,
+        component: leak.componentName,
+        severity: 'critical',
+        category: 'memory-leaks',
         title: `${leak.componentName}: ${activeSubscriptions.length} unmanaged subscription(s) without cleanup`,
         description: `Subscriptions created in this component are not cleaned up on component destruction. Each unclean subscription prevents the component from being garbage collected.`,
         recommendation: 'Use takeUntilDestroyed(), async pipe, or manual cleanup',
-        learningResource: SUBSCRIPTION_LEAK_CONTENT,
-        source: `${leak.componentName}.subscriptions`,
         metadata: {
+          ...SUBSCRIPTION_LEAK_CONTENT,
           component: leak.componentName,
           leaks: activeSubscriptions.length,
           subscriptionSources: activeSubscriptions.map((s: any) => s.source),
@@ -323,14 +325,16 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
     const activeTimers = leak.timers.filter((t: any) => !t.cleared);
     if (activeTimers.length > 0) {
       const issue: AnalysisIssue = {
-        type: 'memory-leak',
-        severity: 'WARNING',
+        id: `timer-leak-${Date.now()}`,
+        analyzer: this.type,
+        component: leak.componentName,
+        severity: 'high',
+        category: 'memory-leaks',
         title: `${leak.componentName}: ${activeTimers.length} timer(s) not cleared`,
         description: `Timers (setInterval/setTimeout) created in this component were not cleared on component destruction.`,
         recommendation: 'Clear timers in ngOnDestroy',
-        learningResource: TIMER_LEAK_CONTENT,
-        source: `${leak.componentName}.timers`,
         metadata: {
+          ...TIMER_LEAK_CONTENT,
           component: leak.componentName,
           leaks: activeTimers.length,
           timerTypes: activeTimers.map((t: any) => t.type),

@@ -141,13 +141,8 @@ export class LeakDetector {
    * Called when a new component instance is created.
    * Records the component in the activeComponents map with its
    * creation timestamp and empty subscription/timer arrays.
-   * 
-   * CRITICAL FIX: We do NOT set currentComponentId here because
-   * subscriptions created during initialization should be tracked
-   * via the patched lifecycle hooks, not via global context.
-   * The context is managed per-method via patchLifecycleHooks.
    */
-  onComponentCreated(componentId: string, componentName: string): void {
+  onComponentCreated(componentId: string, componentName: string, hostElement?: HTMLElement): void {
     this.activeComponents.set(componentId, {
       componentId,
       componentName,
@@ -155,9 +150,8 @@ export class LeakDetector {
       destroyedAt: null,
       subscriptions: [],
       timers: [],
+      hostElement,
     });
-    // NOTE: Do NOT set currentComponentId here
-    // It will be set by patchLifecycleHooks when methods execute
   }
 
   /**
@@ -166,9 +160,8 @@ export class LeakDetector {
    * subscriptions (CRITICAL) and timers (WARNING), emitting
    * LeakEvents for any detected leaks.
    * 
-   * IMPROVED: Also scans component properties for subscriptions that
-   * may not have been tracked during creation (e.g., subscriptions
-   * created in methods or stored as properties).
+   * The scan happens BEFORE deletion from activeComponents map,
+   * using the stored hostElement reference (works even if element is detached from DOM).
    */
   onComponentDestroyed(componentId: string): void {
     const lifecycle = this.activeComponents.get(componentId);
@@ -181,8 +174,8 @@ export class LeakDetector {
 
     lifecycle.destroyedAt = performance.now();
 
-    // IMPROVED: Scan component properties for untracked subscriptions
-    // This catches subscriptions that were created outside of tracked contexts
+    // CRITICAL: Scan component properties for subscriptions BEFORE element is fully gone.
+    // ng.getComponent works on the element via __ngContext__ even if detached from DOM.
     this.scanComponentForUncleanedSubscriptions(componentId);
 
     // Check for surviving subscriptions (CRITICAL severity)
@@ -220,110 +213,135 @@ export class LeakDetector {
       });
     }
 
+    // Clean up: remove element reference to avoid memory retention
+    lifecycle.hostElement = undefined;
+    
     // Remove from active components
     this.activeComponents.delete(componentId);
   }
 
   /**
-   * Scans a component instance for untracked subscriptions stored as properties.
-   * This catches subscriptions that were created outside of the tracked context
-   * (e.g., in methods, event handlers, or stored in arrays).
-   * 
-   * IMPROVED: Detects subscriptions that have unsubscribe() but weren't cleaned up.
+   * Scans a component instance for subscription properties that haven't been cleaned up.
+   * Uses the stored hostElement reference (avoids DOM query which fails after removal).
+   * Detects RxJS Subscription objects stored as component properties.
    */
   private scanComponentForUncleanedSubscriptions(componentId: string): void {
     const lifecycle = this.activeComponents.get(componentId);
     if (!lifecycle) return;
 
-    // Try to get the component instance from the DOM
-    const trackedElements = document.querySelectorAll(`[data-nglens-tracked="${componentId}"]`);
-    if (trackedElements.length === 0) return;
-
-    const element = trackedElements[0] as HTMLElement;
     const ng = (globalThis as unknown as { ng?: NgGlobals }).ng;
     if (!ng?.getComponent) return;
+
+    // Use stored element reference — critical because element may already be detached from DOM
+    const element = lifecycle.hostElement;
+    if (!element) return;
 
     try {
       const component = ng.getComponent(element);
       if (!component || typeof component !== 'object') return;
 
-      // Scan component properties for Subscription objects
-      const MAX_PROPS_TO_CHECK = 100;
-      let propsChecked = 0;
-
-      for (const key in component) {
-        if (propsChecked++ > MAX_PROPS_TO_CHECK) break;
-
-        try {
-          if (!component.hasOwnProperty(key)) continue;
-
-          const value = component[key] as any;
-
-          // Check if it's a real RxJS Subscription (has unsubscribe, closed, add)
-          if (
-            value &&
-            typeof value === 'object' &&
-            typeof value.unsubscribe === 'function' &&
-            'closed' in value &&
-            typeof value.add === 'function'
-          ) {
-            // Check if this subscription is already tracked
-            const isTracked = lifecycle.subscriptions.some(
-              s => s.source.includes(key) || s.source.includes(value.constructor?.name ?? '')
-            );
-
-            // IMPROVED: Track ANY untracked subscription, regardless of closed state
-            // If it's a property on the component and wasn't explicitly unsubscribed by our tracking,
-            // it's a potential leak
-            if (!isTracked) {
-              const record: SubscriptionRecord = {
-                id: generateSubscriptionId(),
-                source: `${key} (property)`,
-                createdAt: performance.now(), // Approximate
-                cleaned: value.closed, // Mark as cleaned if already closed
-                cleanedAt: value.closed ? performance.now() : null,
-              };
-              lifecycle.subscriptions.push(record);
-            }
-          }
-
-          // Check for subscription arrays
-          if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-              const item = value[i] as any;
-              if (
-                item &&
-                typeof item === 'object' &&
-                typeof item.unsubscribe === 'function' &&
-                'closed' in item &&
-                typeof item.add === 'function'
-              ) {
-                const isTracked = lifecycle.subscriptions.some(
-                  s => s.source.includes(`${key}[${i}]`)
-                );
-
-                // IMPROVED: Track ANY untracked subscription in arrays
-                if (!isTracked) {
-                  const record: SubscriptionRecord = {
-                    id: generateSubscriptionId(),
-                    source: `${key}[${i}] (array)`,
-                    createdAt: performance.now(),
-                    cleaned: item.closed,
-                    cleanedAt: item.closed ? performance.now() : null,
-                  };
-                  lifecycle.subscriptions.push(record);
-                }
-              }
-            }
-          }
-        } catch {
-          // Property access might throw (getters, proxies); skip
-          continue;
-        }
-      }
+      this.scanObjectForSubscriptions(component, lifecycle);
     } catch {
       // Component introspection failed; skip
     }
+  }
+
+  /**
+   * Scans an object (component instance) for RxJS Subscription properties.
+   * Adds any untracked, unclosed subscriptions to the lifecycle record.
+   */
+  private scanObjectForSubscriptions(component: Record<string, unknown>, lifecycle: ComponentLifecycle): void {
+    const MAX_PROPS_TO_CHECK = 100;
+    let propsChecked = 0;
+
+    // Check own properties
+    const keys = Object.keys(component);
+    for (const key of keys) {
+      if (propsChecked++ > MAX_PROPS_TO_CHECK) break;
+      // Skip private/internal and Angular metadata
+      if (key.startsWith('__') || key.startsWith('ɵ')) continue;
+
+      try {
+        const value = component[key] as any;
+        if (!value || typeof value !== 'object') continue;
+
+        // Check if it's a real RxJS Subscription (has unsubscribe, closed, add)
+        if (this.isSubscriptionLike(value)) {
+          this.trackSubscriptionProperty(key, value, lifecycle);
+        }
+
+        // Check for subscription arrays (e.g., subscriptions: Subscription[])
+        if (Array.isArray(value)) {
+          for (let i = 0; i < Math.min(value.length, 50); i++) {
+            const item = value[i];
+            if (item && typeof item === 'object' && this.isSubscriptionLike(item)) {
+              this.trackSubscriptionProperty(`${key}[${i}]`, item, lifecycle);
+            }
+          }
+        }
+      } catch {
+        // Property access might throw (getters, proxies); skip
+        continue;
+      }
+    }
+
+    // Also check prototype methods that return subscription-like values stored as instance fields
+    // Sometimes subscriptions are stored in inherited properties
+    try {
+      const proto = Object.getPrototypeOf(component);
+      if (proto && proto !== Object.prototype) {
+        const descriptors = Object.getOwnPropertyDescriptors(proto);
+        for (const [key, desc] of Object.entries(descriptors)) {
+          if (propsChecked++ > MAX_PROPS_TO_CHECK) break;
+          if (key.startsWith('_') || key === 'constructor') continue;
+          // Only check getters that might return subscription-like objects
+          if (desc.get && !desc.set) {
+            try {
+              const value = (component as any)[key];
+              if (value && typeof value === 'object' && this.isSubscriptionLike(value)) {
+                this.trackSubscriptionProperty(key, value, lifecycle);
+              }
+            } catch { continue; }
+          }
+        }
+      }
+    } catch { /* skip prototype scanning errors */ }
+  }
+
+  /**
+   * Checks if an object looks like an RxJS Subscription.
+   */
+  private isSubscriptionLike(obj: any): boolean {
+    return (
+      typeof obj.unsubscribe === 'function' &&
+      'closed' in obj &&
+      (typeof obj.add === 'function' || typeof obj._teardowns !== 'undefined')
+    );
+  }
+
+  /**
+   * Tracks a subscription found as a component property.
+   * Only adds it if not already tracked and if it's not closed (leaked).
+   */
+  private trackSubscriptionProperty(
+    propertyName: string,
+    subscription: any,
+    lifecycle: ComponentLifecycle
+  ): void {
+    // Check if this subscription is already tracked
+    const isTracked = lifecycle.subscriptions.some(
+      s => s.source === `${propertyName} (property)` || s.source === propertyName
+    );
+    if (isTracked) return;
+
+    const record: SubscriptionRecord = {
+      id: generateSubscriptionId(),
+      source: `${propertyName} (property)`,
+      createdAt: lifecycle.createdAt, // Approximate: use component creation time
+      cleaned: !!subscription.closed,
+      cleanedAt: subscription.closed ? performance.now() : null,
+    };
+    lifecycle.subscriptions.push(record);
   }
 
   /**
@@ -697,11 +715,14 @@ export class LeakDetector {
   /**
    * Attempts to find the Observable prototype from rxjs loaded in the page.
    * Tries multiple strategies to locate RxJS in different module systems.
+   * 
+   * In modern bundled Angular apps, RxJS is not on window globals.
+   * Strategy: find a component with an Observable property and extract its prototype.
    */
   private findObservablePrototype(): ObservablePrototype | null {
     const win = globalThis as unknown as Record<string, unknown>;
 
-    // Strategy 1: Check common global patterns
+    // Strategy 1: Check common global patterns (works for non-bundled / UMD)
     const candidates = [
       (win['rxjs'] as { Observable?: { prototype?: ObservablePrototype } })?.Observable?.prototype,
       (win['Rx'] as { Observable?: { prototype?: ObservablePrototype } })?.Observable?.prototype,
@@ -714,8 +735,7 @@ export class LeakDetector {
       }
     }
 
-    // Strategy 2: Search all window properties for RxJS
-    console.log('[ngLens] Searching window properties for RxJS...');
+    // Strategy 2: Search window properties
     for (const key in win) {
       try {
         const value = win[key];
@@ -728,31 +748,72 @@ export class LeakDetector {
           return (value as any).Observable.prototype;
         }
       } catch {
-        // Skip properties that throw on access
         continue;
       }
     }
 
-    // Strategy 3: Check for Subscriber directly (fallback)
-    console.log('[ngLens] Searching for RxJS Subscriber...');
-    for (const key in win) {
+    // Strategy 3: Find Observable prototype from Angular component properties
+    // In bundled apps, components often have Observable properties (e.g., from services)
+    // We can extract the prototype from any Observable instance found on a component.
+    console.log('[ngLens] Searching Angular components for Observable instances...');
+    const ng = (globalThis as any).ng;
+    if (ng?.getComponent) {
       try {
-        const value = win[key];
-        if (
-          value &&
-          typeof value === 'object' &&
-          (value as any)?.Subscriber?.prototype?.unsubscribe
-        ) {
-          console.log(`[ngLens] Found RxJS Subscriber at window.${key}`);
-          // Return Observable if available, otherwise null (will use Subscriber fallback)
-          return (value as any).Observable?.prototype ?? null;
+        const allElements = document.querySelectorAll('*');
+        const limit = Math.min(allElements.length, 200);
+        
+        for (let i = 0; i < limit; i++) {
+          try {
+            const comp = ng.getComponent(allElements[i]);
+            if (!comp) continue;
+            
+            // Search component properties for Observable-like objects
+            const keys = Object.keys(comp);
+            for (const key of keys) {
+              try {
+                const value = (comp as any)[key];
+                if (
+                  value &&
+                  typeof value === 'object' &&
+                  typeof value.subscribe === 'function' &&
+                  typeof value.pipe === 'function' &&
+                  value.constructor?.prototype?.subscribe
+                ) {
+                  const proto = value.constructor.prototype;
+                  if (typeof proto.subscribe === 'function') {
+                    console.log(`[ngLens] Found Observable prototype via component property '${key}'`);
+                    return proto as ObservablePrototype;
+                  }
+                }
+              } catch { continue; }
+            }
+          } catch { continue; }
         }
       } catch {
-        continue;
+        // Component scanning failed
       }
     }
 
-    console.warn('[ngLens] RxJS not found in window properties');
+    // Strategy 4: Create a minimal Observable to extract the prototype
+    // If Zone.js patched Promise, we can find RxJS through its internal async scheduling
+    try {
+      const zone = (globalThis as any).Zone;
+      if (zone?.__symbol__) {
+        // Zone.js is present — look for RxJS schedulers in Zone patches
+        const asyncScheduler = (win as any).__zone_symbol__rxjs_async_scheduler;
+        if (asyncScheduler?.constructor?.prototype) {
+          const rxjsModule = asyncScheduler.constructor.prototype;
+          if (rxjsModule.Observable?.prototype?.subscribe) {
+            console.log('[ngLens] Found Observable via Zone.js RxJS scheduler');
+            return rxjsModule.Observable.prototype;
+          }
+        }
+      }
+    } catch {
+      // No Zone.js RxJS integration found
+    }
+
+    console.warn('[ngLens] RxJS Observable.prototype not found - will rely on property scanning for leak detection');
     return null;
   }
 
@@ -937,7 +998,11 @@ export class LeakDetector {
       if (!this.running) return;
 
       for (const mutation of mutations) {
+        // Track new components
         this.processAddedNodes(mutation.addedNodes, ng);
+        
+        // Detect component removal (fallback for when ngOnDestroy isn't called)
+        this.processRemovedNodes(mutation.removedNodes);
       }
     });
 
@@ -947,6 +1012,43 @@ export class LeakDetector {
     });
     
     console.log('[ngLens] MutationObserver started');
+  }
+
+  /**
+   * Processes removed DOM nodes to detect component destruction.
+   * This is a fallback for cases where ngOnDestroy/DestroyRef wasn't hooked
+   * or didn't fire (e.g., router outlet replacement).
+   */
+  private processRemovedNodes(nodes: NodeList): void {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node instanceof HTMLElement) {
+        this.checkRemovedElement(node);
+        // Also check child elements
+        const children = node.querySelectorAll('[data-nglens-tracked]');
+        for (let j = 0; j < children.length; j++) {
+          const child = children[j];
+          if (child instanceof HTMLElement) {
+            this.checkRemovedElement(child);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks if a removed element was a tracked component and triggers destruction.
+   */
+  private checkRemovedElement(element: HTMLElement): void {
+    const componentId = element.dataset['nglensTracked'];
+    if (!componentId) return;
+    
+    // Only process if the component is still in our active map
+    // (it may have already been handled by ngOnDestroy/DestroyRef)
+    if (this.activeComponents.has(componentId)) {
+      console.log(`[ngLens] Component removed from DOM (fallback): ${componentId}`);
+      this.onComponentDestroyed(componentId);
+    }
   }
 
   /**
@@ -972,9 +1074,7 @@ export class LeakDetector {
 
   /**
    * Checks if an element hosts an Angular component and tracks it if so.
-   * 
-   * IMPROVED: Sets the component as the current context immediately after creation,
-   * so that subscriptions created during component initialization are tracked.
+   * Immediately scans for existing subscriptions (catching ngOnInit subs).
    */
   private checkAndTrackElement(element: HTMLElement, ng: NgGlobals): void {
     try {
@@ -992,20 +1092,49 @@ export class LeakDetector {
       // Mark element as tracked
       this.markAsTracked(element, componentId);
 
-      // Record creation
-      this.onComponentCreated(componentId, componentName);
+      // Record creation with element reference stored
+      this.onComponentCreated(componentId, componentName, element);
 
-      // CRITICAL: Set component context immediately so subscriptions created
-      // during initialization (before lifecycle hooks) are tracked
+      // Set component context so future subscriptions are attributed
       this.setCurrentComponentContext(componentId);
 
       // Patch lifecycle hooks to maintain context during hook execution
       this.patchLifecycleHooks(component, componentId);
 
+      // CRITICAL: Immediately scan component properties for existing subscriptions.
+      // MutationObserver fires AFTER ngOnInit has already run, so subscriptions
+      // created there are already stored as component properties.
+      this.scanComponentForExistingSubscriptions(componentId);
+
       // Hook destruction via DestroyRef if available (Angular 17+)
       this.hookDestroyRef(element, componentId, ng);
     } catch (error) {
       console.error('[ngLens] Error tracking component:', error);
+    }
+  }
+
+  /**
+   * Scans a component immediately after tracking to find subscriptions
+   * that already exist (created during ngOnInit or constructor).
+   */
+  private scanComponentForExistingSubscriptions(componentId: string): void {
+    const lifecycle = this.activeComponents.get(componentId);
+    if (!lifecycle?.hostElement) return;
+
+    const ng = (globalThis as unknown as { ng?: NgGlobals }).ng;
+    if (!ng?.getComponent) return;
+
+    try {
+      const component = ng.getComponent(lifecycle.hostElement);
+      if (!component || typeof component !== 'object') return;
+
+      this.scanObjectForSubscriptions(component as Record<string, unknown>, lifecycle);
+      
+      if (lifecycle.subscriptions.length > 0) {
+        console.log(`[ngLens] Found ${lifecycle.subscriptions.length} existing subscription(s) in ${lifecycle.componentName}`);
+      }
+    } catch {
+      // Component not yet fully initialized; skip
     }
   }
 
@@ -1027,7 +1156,11 @@ export class LeakDetector {
       const componentId = generateComponentId(componentName);
 
       this.markAsTracked(element, componentId);
-      this.onComponentCreated(componentId, componentName);
+      this.onComponentCreated(componentId, componentName, element);
+      
+      // Scan for existing subscriptions
+      this.scanComponentForExistingSubscriptions(componentId);
+      
       this.hookDestroyRef(element, componentId, ng);
     } catch {
       // Skip components that can't be tracked
@@ -1035,9 +1168,13 @@ export class LeakDetector {
   }
 
   /**
-   * Hooks into Angular's DestroyRef for a component to detect when
-   * it is destroyed. For Angular 17+, DestroyRef is the standard
-   * mechanism for cleanup callbacks.
+   * Hooks into Angular's destruction mechanism for a component.
+   *
+   * Strategy order:
+   * 1. Angular 17+: Use DestroyRef via ng.getOwningInjector()
+   * 2. Angular 16: Use DestroyRef via component injector from __ngContext__
+   * 3. Angular 15-16 fallback: Patch ngOnDestroy on the component instance
+   * 4. Angular 15-16 fallback: Add a synthetic ngOnDestroy if none exists
    */
   private hookDestroyRef(
     element: HTMLElement,
@@ -1045,37 +1182,112 @@ export class LeakDetector {
     ng: NgGlobals
   ): void {
     try {
-      // Angular 17+ provides DestroyRef via the injector
-      const injector = ng.getOwningInjector?.(element);
-      if (injector) {
-        const destroyRef = injector.get?.(this.getDestroyRefToken(ng)) as any;
+      // Strategy 1: Angular 17+ — DestroyRef via getOwningInjector
+      if (typeof ng.getOwningInjector === 'function') {
+        try {
+          const injector = ng.getOwningInjector(element);
+          if (injector) {
+            const token = this.getDestroyRefToken(ng);
+            if (token) {
+              const destroyRef = injector.get?.(token) as any;
+              if (destroyRef && typeof destroyRef.onDestroy === 'function') {
+                console.log(`[ngLens] Registered DestroyRef for ${componentId}`);
+                destroyRef.onDestroy(() => {
+                  console.log(`[ngLens] DestroyRef callback fired for ${componentId}`);
+                  this.onComponentDestroyed(componentId);
+                });
+                return;
+              }
+            }
+          }
+        } catch {
+          // getOwningInjector may throw on some elements; fall through
+        }
+      }
+
+      // Strategy 2: Angular 16 — DestroyRef via component's injector from LView
+      try {
+        const destroyRef = this.getDestroyRefFromLView(element, ng);
         if (destroyRef && typeof destroyRef.onDestroy === 'function') {
-          console.log(`[ngLens] Registered DestroyRef for ${componentId}`);
+          console.log(`[ngLens] Registered DestroyRef (LView) for ${componentId}`);
           destroyRef.onDestroy(() => {
             console.log(`[ngLens] DestroyRef callback fired for ${componentId}`);
             this.onComponentDestroyed(componentId);
           });
           return;
         }
+      } catch {
+        // LView-based DestroyRef not available; fall through
       }
 
-      // Fallback: use ngOnDestroy hook if the component implements it
+      // Strategy 3: Angular 15-16 fallback — patch ngOnDestroy
       const component = ng.getComponent(element);
       if (component && typeof component.ngOnDestroy === 'function') {
         console.log(`[ngLens] Patching ngOnDestroy for ${componentId}`);
         const originalOnDestroy = component.ngOnDestroy.bind(component);
+        const self = this;
         component.ngOnDestroy = () => {
           console.log(`[ngLens] ngOnDestroy called for ${componentId}`);
-          this.onComponentDestroyed(componentId);
+          // CRITICAL: Scan and emit BEFORE calling original ngOnDestroy,
+          // because the original may trigger further cleanup that affects property state
+          self.onComponentDestroyed(componentId);
           originalOnDestroy();
         };
-      } else if (component) {
-        console.log(`[ngLens] Component ${componentId} has no ngOnDestroy hook`);
+        return;
+      }
+
+      // Strategy 4: Component has no ngOnDestroy — add a synthetic one
+      // This is needed for Angular 15-16 components without ngOnDestroy
+      if (component) {
+        console.log(`[ngLens] Adding synthetic ngOnDestroy for ${componentId}`);
+        const self = this;
+        component.ngOnDestroy = () => {
+          console.log(`[ngLens] Synthetic ngOnDestroy called for ${componentId}`);
+          self.onComponentDestroyed(componentId);
+        };
+
+        // Also register on the ɵcmp definition so Angular calls it
+        const cmp = component.constructor?.ɵcmp as any;
+        if (cmp && cmp.onDestroy === null) {
+          cmp.onDestroy = component.ngOnDestroy;
+        }
       }
     } catch (error) {
       console.warn(`[ngLens] Failed to hook destruction for ${componentId}:`, error);
-      // DestroyRef not available; destruction won't be tracked for this component
     }
+  }
+
+  /**
+   * Attempts to get DestroyRef from the component's LView/injector for Angular 16.
+   * In Angular 16, DestroyRef exists but getOwningInjector may not be exposed globally.
+   */
+  private getDestroyRefFromLView(element: HTMLElement, ng: NgGlobals): DestroyRefInstance | null {
+    const ngContext = (element as any).__ngContext__;
+    if (ngContext == null) return null;
+
+    // In Angular 15-16, __ngContext__ is often a number (LView index) or an LView array
+    // In Angular 16+, the LView may have an injector at a known offset
+    if (Array.isArray(ngContext)) {
+      // Walk the LView looking for an injector-like object
+      for (let i = 0; i < Math.min(ngContext.length, 30); i++) {
+        const item = ngContext[i];
+        if (item && typeof item === 'object' && typeof item.get === 'function') {
+          try {
+            const token = this.getDestroyRefToken(ng);
+            if (token) {
+              const destroyRef = item.get(token);
+              if (destroyRef && typeof destroyRef.onDestroy === 'function') {
+                return destroyRef as DestroyRefInstance;
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -1099,20 +1311,64 @@ export class LeakDetector {
 
   /**
    * Gets the ApplicationRef instance from Angular's global utilities.
+   * Supports Angular 15-21 with multiple fallback strategies.
    */
   private getApplicationRef(ng: NgGlobals): ApplicationRef | null {
     try {
-      // Angular dev mode exposes getComponent and other utilities
-      // We can get ApplicationRef from the root element's injector
       const rootElement = document.querySelector('[ng-version]');
       if (!rootElement) return null;
 
-      const injector = ng.getOwningInjector?.(rootElement as HTMLElement);
-      if (!injector) return null;
+      // Strategy 1: Angular 17+ — use getOwningInjector
+      if (typeof ng.getOwningInjector === 'function') {
+        try {
+          const injector = ng.getOwningInjector(rootElement as HTMLElement);
+          if (injector) {
+            const token = this.getApplicationRefToken();
+            if (token) {
+              const appRef = injector.get?.(token) as any;
+              if (appRef?.components) return appRef;
+            }
+          }
+        } catch {
+          // Fall through to next strategy
+        }
+      }
 
-      // Try to get ApplicationRef from the injector
-      const appRef = injector.get?.(this.getApplicationRefToken()) as any;
-      return appRef ?? null;
+      // Strategy 2: Angular 15-16 — access via getAllAngularRootElements + component injector
+      try {
+        const getAllRootElements = (globalThis as any).getAllAngularRootElements;
+        if (typeof getAllRootElements === 'function') {
+          const roots = getAllRootElements();
+          if (roots?.length > 0) {
+            const rootComp = ng.getComponent(roots[0]);
+            if (rootComp) {
+              // In Angular 15-16, the root component's injector may have ApplicationRef
+              const ngContext = (roots[0] as any).__ngContext__;
+              if (Array.isArray(ngContext)) {
+                // Look for injector in the LView
+                for (let i = 0; i < Math.min(ngContext.length, 20); i++) {
+                  const item = ngContext[i];
+                  if (item && typeof item === 'object' && typeof item.get === 'function') {
+                    try {
+                      const token = this.getApplicationRefToken();
+                      if (token) {
+                        const appRef = item.get(token);
+                        if (appRef?.components) return appRef as ApplicationRef;
+                      }
+                    } catch {
+                      continue;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Fall through
+      }
+
+      return null;
     } catch {
       return null;
     }
@@ -1177,7 +1433,7 @@ interface NgGlobals {
 }
 
 interface ComponentInstance {
-  constructor?: { name?: string };
+  constructor?: { name?: string; ɵcmp?: unknown };
   ngOnDestroy?: () => void;
   [key: string]: unknown;
 }

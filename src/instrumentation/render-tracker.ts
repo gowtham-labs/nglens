@@ -12,7 +12,7 @@ export class RenderTracker {
   private readonly eventBuffer: RenderEvent[] = [];
   private isRunning = false;
   private batchSequence = 0;
-  private flushInterval: number | null = null;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
   private mutationObserver: MutationObserver | null = null;
 
   // Zone.js tracking
@@ -27,7 +27,7 @@ export class RenderTracker {
   private frameRequestId: number | null = null;
 
   // Component discovery interval
-  private discoveryInterval: number | null = null;
+  private discoveryInterval: ReturnType<typeof setInterval> | null = null;
 
   private constructor() {}
 
@@ -113,7 +113,6 @@ export class RenderTracker {
 
   private discoverComponents(): void {
     const ng = (globalThis as any).ng;
-    if (!ng?.getComponent) return;
 
     // Walk all elements looking for Angular components
     const allElements = document.querySelectorAll('*');
@@ -124,15 +123,45 @@ export class RenderTracker {
       if (this.componentElements.has(el)) continue; // Already tracked
 
       try {
-        const component = ng.getComponent(el);
-        if (component) {
-          const name = component.constructor?.name ?? 'UnknownComponent';
-          this.componentElements.set(el, name);
+        // Strategy 1: Use ng.getComponent (dev mode, Angular 15+)
+        if (ng?.getComponent) {
+          const component = ng.getComponent(el);
+          if (component) {
+            const name = component.constructor?.name ?? 'UnknownComponent';
+            this.componentElements.set(el, name);
+            continue;
+          }
+        }
+
+        // Strategy 2: Detect components via _nghost-* attributes (production mode, Angular 15-16)
+        // Angular adds _nghost-<hash> attributes to component host elements
+        if (!ng?.getComponent) {
+          for (let j = 0; j < el.attributes.length; j++) {
+            const attrName = el.attributes[j].name;
+            if (attrName.startsWith('_nghost-')) {
+              // Use the tag name as component name in production mode
+              const tagName = el.tagName.toLowerCase();
+              const name = this.tagToComponentName(tagName);
+              this.componentElements.set(el, name);
+              break;
+            }
+          }
         }
       } catch {
         // Not a component element
       }
     }
+  }
+
+  /**
+   * Converts a kebab-case tag name to PascalCase component name.
+   * e.g., 'app-header' → 'AppHeader', 'my-widget' → 'MyWidget'
+   */
+  private tagToComponentName(tagName: string): string {
+    return tagName
+      .split('-')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join('');
   }
 
   // --- MutationObserver ---

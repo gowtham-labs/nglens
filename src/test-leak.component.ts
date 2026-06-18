@@ -12,11 +12,11 @@ import { Subscription } from 'rxjs';
 })
 export class TestLeakComponent implements OnInit, OnDestroy {
   // ✅ LEAK 1: Single subscription without cleanup
-  subscription1: Subscription;
+  subscription1!: Subscription;
 
   // ✅ LEAK 2: Multiple subscriptions without cleanup
-  subscription2: Subscription;
-  subscription3: Subscription;
+  subscription2!: Subscription;
+  subscription3!: Subscription;
 
   // ✅ LEAK 3: Subscription array without cleanup
   subscriptions: Subscription[] = [];
