@@ -1,63 +1,50 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { interval, Subject } from 'rxjs';
-import { Subscription } from 'rxjs';
+import { Observable, Subject, interval } from 'rxjs';
 
 /**
- * Test component with intentional subscription leaks
- * This component is designed to be detected by SubscriptionLeakDetector
+ * Test component with intentional memory leaks for testing ngLens
  */
 @Component({
   selector: 'app-test-leak',
-  template: `<div>Test Leak Component</div>`,
+  standalone: true,
+  template: `
+    <div style="padding: 20px; background: #fee; border: 1px solid red;">
+      <h3>🔴 Test Leak Component</h3>
+      <p>This component has intentional memory leaks for testing ngLens</p>
+      <button (click)="startLeaking()">Start Memory Leak</button>
+      <p>Leaking subscriptions: {{ leakCount }}</p>
+    </div>
+  `,
 })
 export class TestLeakComponent implements OnInit, OnDestroy {
-  // ✅ LEAK 1: Single subscription without cleanup
-  subscription1!: Subscription;
-
-  // ✅ LEAK 2: Multiple subscriptions without cleanup
-  subscription2!: Subscription;
-  subscription3!: Subscription;
-
-  // ✅ LEAK 3: Subscription array without cleanup
-  subscriptions: Subscription[] = [];
-
-  constructor() {}
+  private subscriptions: any[] = [];
+  leakCount = 0;
 
   ngOnInit() {
-    // LEAK 1: Subscription stored but never unsubscribed
-    this.subscription1 = interval(1000).subscribe(() => {
-      console.log('Tick 1');
+    // Create multiple subscriptions that never unsubscribe
+    for (let i = 0; i < 5; i++) {
+      const sub = interval(1000).subscribe(() => {
+        console.log(`Leak ${i}: Still running (will never cleanup)`);
+      });
+      this.subscriptions.push(sub);
+      this.leakCount++;
+    }
+  }
+
+  startLeaking() {
+    // Add more leaky subscriptions
+    const sub = interval(500).subscribe(() => {
+      // This subscription has no cleanup
+      console.log('New leak created!');
     });
-
-    // LEAK 2: Multiple subscriptions without cleanup
-    this.subscription2 = interval(2000).subscribe(() => {
-      console.log('Tick 2');
-    });
-
-    this.subscription3 = interval(3000).subscribe(() => {
-      console.log('Tick 3');
-    });
-
-    // LEAK 3: Array of subscriptions without cleanup
-    this.subscriptions.push(
-      interval(4000).subscribe(() => {
-        console.log('Tick 4');
-      })
-    );
-
-    this.subscriptions.push(
-      interval(5000).subscribe(() => {
-        console.log('Tick 5');
-      })
-    );
+    this.subscriptions.push(sub);
+    this.leakCount++;
   }
 
   ngOnDestroy() {
-    // ❌ NO CLEANUP - This is intentional to demonstrate leaks
-    // In a real app, you would do:
-    // this.subscription1?.unsubscribe();
-    // this.subscription2?.unsubscribe();
-    // this.subscription3?.unsubscribe();
-    // this.subscriptions.forEach(sub => sub.unsubscribe());
+    // BUG: Intentionally NOT cleaning up subscriptions
+    // This will show as memory leaks in ngLens Memory tab
+    console.log('Component destroyed but subscriptions still active!');
+    // Missing: this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 }
