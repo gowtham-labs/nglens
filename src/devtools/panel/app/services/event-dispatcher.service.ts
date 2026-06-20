@@ -56,8 +56,11 @@ export class EventDispatcherService {
         this.handleError(message.payload as { message?: string; error?: string });
         break;
       case 'ROUTE_CHANGED':
+        // When clearOnRouteChange is OFF, clear accumulated data on route change
         if (!this.state.clearOnRouteChange()) {
           this.state.renderEvents.set([]);
+          this.state.leakEvents.set([]); // Also clear stale leaks
+          this.state.trackByIssues.set([]);
         }
         break;
       case 'TAB_NAVIGATED':

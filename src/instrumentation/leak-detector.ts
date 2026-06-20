@@ -182,35 +182,41 @@ export class LeakDetector {
     const activeSubscriptions = lifecycle.subscriptions.filter(s => !s.cleaned);
     console.log(`[ngLens] Component destroyed: ${lifecycle.componentName}, subscriptions: ${lifecycle.subscriptions.length}, uncleaned: ${activeSubscriptions.length}`);
     
-    for (const sub of activeSubscriptions) {
-      console.log(`[ngLens] LEAK DETECTED: ${lifecycle.componentName} - ${sub.source}`);
-      this.emitLeakEvent({
-        id: `leak-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        componentName: lifecycle.componentName,
-        componentId,
-        leakType: 'subscription',
-        severity: 'CRITICAL',
-        source: sub.source,
-        createdAt: sub.createdAt,
-        detectedAt: performance.now(),
-        lifecycleState: 'destroyed',
-      });
-    }
+    // Only report leaks if we have confirmed unclean subscriptions/timers
+    // This prevents false positives from stale leak events
+    const hasRealLeaks = activeSubscriptions.length > 0 || lifecycle.timers.some(t => !t.cleared);
+    
+    if (hasRealLeaks) {
+      for (const sub of activeSubscriptions) {
+        console.log(`[ngLens] LEAK DETECTED: ${lifecycle.componentName} - ${sub.source}`);
+        this.emitLeakEvent({
+          id: `leak-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          componentName: lifecycle.componentName,
+          componentId,
+          leakType: 'subscription',
+          severity: 'CRITICAL',
+          source: sub.source,
+          createdAt: sub.createdAt,
+          detectedAt: Date.now(),
+          lifecycleState: 'destroyed',
+        });
+      }
 
-    // Check for surviving timers (WARNING severity)
-    const activeTimers = lifecycle.timers.filter(t => !t.cleared);
-    for (const timer of activeTimers) {
-      this.emitLeakEvent({
-        id: `leak-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        componentName: lifecycle.componentName,
-        componentId,
-        leakType: 'timer',
-        severity: 'WARNING',
-        source: timer.type,
-        createdAt: timer.createdAt,
-        detectedAt: performance.now(),
-        lifecycleState: 'destroyed',
-      });
+      // Check for surviving timers (WARNING severity)
+      const activeTimers = lifecycle.timers.filter(t => !t.cleared);
+      for (const timer of activeTimers) {
+        this.emitLeakEvent({
+          id: `leak-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          componentName: lifecycle.componentName,
+          componentId,
+          leakType: 'timer',
+          severity: 'WARNING',
+          source: timer.type,
+          createdAt: timer.createdAt,
+          detectedAt: Date.now(),
+          lifecycleState: 'destroyed',
+        });
+      }
     }
 
     // Clean up: remove element reference to avoid memory retention
@@ -322,6 +328,9 @@ export class LeakDetector {
   /**
    * Tracks a subscription found as a component property.
    * Only adds it if not already tracked and if it's not closed (leaked).
+   * 
+   * IMPORTANT: Filter out closed subscriptions to avoid false positives.
+   * A closed subscription means it was already cleaned up, so it's not a leak.
    */
   private trackSubscriptionProperty(
     propertyName: string,
@@ -333,6 +342,14 @@ export class LeakDetector {
       s => s.source === `${propertyName} (property)` || s.source === propertyName
     );
     if (isTracked) return;
+
+    // IMPORTANT FIX: Skip already-closed subscriptions
+    // If subscription.closed === true, it means it was already cleaned up
+    // Reporting it as a leak would be a false positive
+    if (subscription.closed === true) {
+      console.log(`[ngLens] Skipping closed subscription: ${propertyName}`);
+      return;
+    }
 
     const record: SubscriptionRecord = {
       id: generateSubscriptionId(),

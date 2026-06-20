@@ -2,13 +2,17 @@ import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import type { LeakEvent } from '../../../../../types/leak-events';
+import { LeakRetentionChainsComponent } from './leak-retention-chains.component';
 
 @Component({
   selector: 'app-memory',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, LeakRetentionChainsComponent],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
+      <!-- Leak Retention Chains -->
+      <app-leak-retention-chains></app-leak-retention-chains>
+
       <!-- Summary -->
       <section class="border border-gray-700 rounded-lg p-4 bg-gray-800/40 backdrop-blur-sm">
         <h2 class="text-sm font-semibold text-gray-100 mb-4">Memory Leak Detection</h2>
@@ -159,8 +163,9 @@ export class MemoryComponent {
   }
 
   formatTime(timestamp: number): string {
+    // timestamp is Date.now() - milliseconds since epoch
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return date.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   selectLeak(event: LeakEvent): void {

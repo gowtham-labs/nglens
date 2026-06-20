@@ -1,13 +1,17 @@
 import { Component, inject, computed } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
+import { MetricsDashboardComponent } from './metrics-dashboard.component';
 
 @Component({
   selector: 'app-overview',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, MetricsDashboardComponent],
   template: `
     <div class="p-4 space-y-4">
+      <!-- Live Metrics Dashboard -->
+      <app-metrics-dashboard></app-metrics-dashboard>
+
       <!-- Connection status -->
       <div class="flex items-center gap-2">
         <span

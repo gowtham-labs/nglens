@@ -1,8 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { NgClass } from '@angular/common';
+import { NgClass, CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { getSeverityLabels, type SeverityLabel } from '../../utils/severity-labels';
+import { RenderFlameGraphComponent } from './render-flame-graph.component';
+import { RenderCausationTreeComponent } from './render-causation-tree.component';
+import { ComponentTreeBrowserComponent } from './component-tree-browser.component';
+import { ZonePollutionHeatmapComponent } from './zone-pollution-heatmap.component';
 import type {
   ComponentHotspot,
   ComponentStats,
@@ -15,9 +20,21 @@ import type { RenderCause } from '../../../../../types/render-events';
 @Component({
   selector: 'app-rendering',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, CommonModule, FormsModule, RenderFlameGraphComponent, RenderCausationTreeComponent, ComponentTreeBrowserComponent, ZonePollutionHeatmapComponent],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
+      <!-- Flame Graph -->
+      <app-render-flame-graph></app-render-flame-graph>
+
+      <!-- Causation Tree -->
+      <app-render-causation-tree></app-render-causation-tree>
+
+      <!-- Component Tree Browser -->
+      <app-component-tree-browser></app-component-tree-browser>
+
+      <!-- Zone Pollution Heatmap -->
+      <app-zone-pollution-heatmap></app-zone-pollution-heatmap>
+
       <section class="border border-gray-800 rounded p-3 bg-gray-900">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
