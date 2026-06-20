@@ -80,7 +80,7 @@ All source files must include copyright header:
 /**
  * ngLens - Angular Performance Analyzer
  * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Licensed under MIT
  * 
  * https://github.com/gowtham-labs/nglens
  */
@@ -239,9 +239,9 @@ Update these files when relevant:
 ## License
 
 By contributing, you agree:
-- Your code is licensed under GPL v3
+- Your code is licensed under the MIT License
 - You have rights to contribute the code
-- You waive any patent claims
+- You grant any patent rights necessary to use your contribution under the MIT License
 
 ## Questions?
 

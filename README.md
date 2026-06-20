@@ -28,7 +28,7 @@ All analysis is performed locally in your browser. No data leaves your machine. 
 
 ngLens takes security seriously:
 
-- ✅ **GPL v3 Licensed** - Prevents closed-source malicious forks
+- ✅ **MIT Licensed** - Permissive open-source license
 - ✅ **Minimal Permissions** - Only activeTab, scripting, tabs, storage
 - ✅ **Content Security Policy** - Strict CSP prevents code injection
 - ✅ **No Network Access** - All code runs locally, zero external requests
@@ -42,9 +42,8 @@ Found a security issue? See [SECURITY.md](./SECURITY.md) for reporting.
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 **Important:**
-- This project uses GPL v3 (copyleft license)
-- Forks must remain open source
-- "ngLens" trademark is protected (see [TRADEMARK.md](./TRADEMARK.md))
+- This project uses the MIT License
+- The "ngLens" name and logo are trademark protected (see [TRADEMARK.md](./TRADEMARK.md))
 - Follow secure coding practices
 - Sign your commits
 

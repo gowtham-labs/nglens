@@ -4,11 +4,11 @@
 
 ### **1. Legal Protection**
 
-**GPL v3 License:**
+**MIT License:**
 - ✅ LICENSE file added
-- ✅ Forces derivatives to stay open source
-- ✅ Prevents proprietary closed-source forks
-- ✅ Includes trademark restrictions
+- ✅ Permissive open-source licensing
+- ✅ Allows commercial use, modification, distribution, and sublicensing
+- ✅ Requires preservation of copyright and license notices
 
 **Trademark Protection:**
 - ✅ TRADEMARK.md created
@@ -19,7 +19,7 @@
 
 **Copyright:**
 - ✅ Copyright headers added to source files
-- ✅ All files include GPL v3 reference
+- ✅ All files include MIT license reference
 - ✅ GitHub repository link included
 
 ---
@@ -99,7 +99,7 @@
 /**
  * ngLens - Angular Performance Analyzer
  * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Licensed under MIT
  * 
  * https://github.com/gowtham-labs/nglens
  */
@@ -177,7 +177,7 @@ npm audit
 - ✅ Links to SECURITY.md
 - ✅ Links to PRIVACY.md
 - ✅ Links to TRADEMARK.md
-- ✅ GPL v3 notice
+- ✅ MIT license notice
 - ✅ Contributing guidelines
 
 **CHANGELOG.md:**
@@ -198,7 +198,7 @@ npm audit
 - [ ] No private keys committed
 - [ ] All secrets in .gitignore
 - [ ] Copyright headers present
-- [ ] GPL v3 license file exists
+- [ ] MIT license file exists
 
 **Manifest Security:**
 - [ ] CSP enabled and strict
@@ -216,7 +216,7 @@ npm audit
 - [ ] Local storage only
 
 **Legal Protection:**
-- [ ] LICENSE file (GPL v3)
+- [ ] LICENSE file (MIT)
 - [ ] TRADEMARK.md
 - [ ] SECURITY.md
 - [ ] CONTRIBUTING.md
@@ -265,7 +265,7 @@ Find Angular performance problems and learn how to fix them.
 ✓ 100% local analysis - no data leaves your browser
 
 PRIVACY: All analysis happens locally. Zero network requests.
-Open source, GPL v3 licensed, fully auditable.
+Open source, MIT licensed, fully auditable.
 
 GitHub: https://github.com/gowtham-labs/nglens
 ```
@@ -322,7 +322,7 @@ storage: Store scan results locally in your browser
 
 **Step 1: Verify**
 - Check if they copied code
-- Check if GPL v3 violated (didn't release source)
+- Check if MIT license terms were violated (missing copyright/license notice)
 - Check if trademark violated ("ngLens" name used)
 
 **Step 2: Report**
@@ -343,7 +343,7 @@ storage: Store scan results locally in your browser
 
 | Metric | Status |
 |--------|--------|
-| GPL v3 License | ✅ Implemented |
+| MIT License | ✅ Implemented |
 | CSP Enabled | ✅ Strict Mode |
 | Minimal Permissions | ✅ 4 only |
 | Privacy Policy | ✅ Documented |
@@ -399,7 +399,7 @@ storage: Store scan results locally in your browser
 ## ✅ Security Implementation Complete!
 
 **ngLens is now:**
-- ✅ Legally protected (GPL v3 + Trademark)
+- ✅ Legally clear (MIT + Trademark)
 - ✅ Technically secured (CSP + minimal permissions)
 - ✅ Privacy-focused (zero data collection)
 - ✅ Transparently auditable (open source)
@@ -408,7 +408,7 @@ storage: Store scan results locally in your browser
 
 **You can confidently promote ngLens as:**
 > "The most secure Angular performance analyzer - 
-> fully open source, GPL v3 licensed, zero data collection, 
+> fully open source, MIT licensed, zero data collection, 
 > strict CSP, minimal permissions, and 100% local analysis."
 
 🎉 **Ready to launch!**

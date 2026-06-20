@@ -181,14 +181,14 @@ However, we offer:
 Thank you to these security researchers:
 - [Names of researchers who reported issues]
 
-## License Security Note
+## License and Brand Note
 
-This project uses **GPL v3** license:
-- Derivatives must be open source
-- Source code must be disclosed
-- Prevents closed-source malicious forks
+This project uses the **MIT License**:
+- Permissive use, modification, distribution, and sublicensing
+- Copyright and license notices must be retained
+- Source is public and auditable
 
-Trademark "ngLens" prevents name impersonation.
+Trademark "ngLens" prevents name and logo impersonation.
 
 ## Contact
 
@@ -200,4 +200,4 @@ Trademark "ngLens" prevents name impersonation.
 
 - [OWASP Extension Security Guide](https://owasp.org/www-community/vulnerabilities/)
 - [Chrome Extension Security Best Practices](https://developer.chrome.com/docs/extensions/mv3/security/)
-- [GPL v3 License](https://www.gnu.org/licenses/gpl-3.0.html)
+- [MIT License](https://opensource.org/license/mit/)

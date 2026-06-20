@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Works in production mode
 
 **Security Hardening:**
-- GPL v3 License (prevents closed-source forks)
+- MIT License (permissive open-source license)
 - Content Security Policy (strict CSP)
 - PRIVACY.md (transparency document)
 - SECURITY.md (vulnerability reporting)

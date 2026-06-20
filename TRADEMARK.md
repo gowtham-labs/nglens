@@ -12,11 +12,11 @@ The following are trademarks of the ngLens project:
 
 ### ✅ You MAY:
 
-1. **Use the code under GPL v3:**
+1. **Use the code under the MIT License:**
    - Fork the repository
    - Modify the source code
    - Distribute modified versions
-   - Use commercially (with GPL v3 requirements)
+   - Use commercially, including in proprietary products, subject to the MIT License
 
 2. **Reference ngLens:**
    - "Built with ngLens technology"
@@ -102,16 +102,16 @@ Trademarks protect users from:
 - ❌ Low-quality clones damaging reputation
 - ❌ Confusion about official versions
 
-## GPL v3 Compatibility
+## MIT License Compatibility
 
-This trademark policy is compatible with GPL v3:
-- ✅ You can use and modify the CODE
-- ❌ You cannot use the NAME/LOGO
+This trademark policy is compatible with the MIT License:
+- ✅ You can use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the CODE under the MIT License
+- ❌ You cannot use the NAME/LOGO in ways that create confusion or imply endorsement
 
 This is standard practice (examples):
-- Linux (GPL + trademark)
+- React (MIT + trademark)
+- Node.js (MIT + trademark)
 - Mozilla Firefox (MPL + trademark)
-- WordPress (GPL + trademark)
 
 ## Questions?
 

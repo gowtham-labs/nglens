@@ -144,7 +144,7 @@ ngLens complies with:
 ## Transparency
 
 **You can verify everything:**
-1. Source code is fully open (GPL v3)
+1. Source code is fully open (MIT License)
 2. No obfuscation or minification of logic
 3. All dependencies are listed in package.json
 4. Build process is reproducible (check vite.config.ts)

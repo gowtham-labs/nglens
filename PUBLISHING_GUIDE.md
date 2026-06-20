@@ -183,7 +183,7 @@ Find Angular performance problems and learn how to fix them — whether you're a
 - 100% local analysis
 - Zero data collection
 - No network requests
-- Fully open source (GPL v3)
+- Fully open source (MIT License)
 
 ## Perfect For
 
@@ -204,7 +204,7 @@ ngLens is the FIRST and ONLY tool that analyzes Angular Signals performance:
 
 ## Privacy & Security
 
-- ✅ GPL v3 licensed, fully open source
+- ✅ MIT licensed, fully open source
 - ✅ Zero data collection documented
 - ✅ No analytics, no tracking
 - ✅ Strict Content Security Policy
