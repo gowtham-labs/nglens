@@ -3,13 +3,13 @@
  *
  * This module provides:
  * - Documentation of all privacy guarantees (PRIVACY_POLICY constant)
- * - Development-time validation that no external network requests are made
+ * - Development-time validation that unexpected external network requests are not made
  * - URL allowlist for the only permitted external navigation (angular.dev docs)
  * - Data sanitization helper that delegates to the serializer
  *
- * The extension makes ZERO external network requests. All analysis is performed
- * locally in the browser. The only external interaction is opening angular.dev
- * documentation links in new browser tabs via chrome.tabs.create.
+ * All analysis is performed locally in the browser. Anonymous usage analytics
+ * may be sent to Google Analytics only after explicit user opt-in. The other
+ * external interaction is opening angular.dev documentation links in new tabs.
  */
 
 import { safeClone, CIRCULAR_REFERENCE_MARKER, DOM_NODE_MARKER, FUNCTION_MARKER } from './serializer';
@@ -22,14 +22,14 @@ import { safeClone, CIRCULAR_REFERENCE_MARKER, DOM_NODE_MARKER, FUNCTION_MARKER 
  * Chrome Web Store reviewers.
  */
 export const PRIVACY_POLICY = {
-  /** No data is transmitted outside the browser */
-  noDataExfiltration: true,
+  /** Analysis data, source code, page URLs, and DOM content are not transmitted */
+  noAnalysisDataExfiltration: true,
 
-  /** No analytics or telemetry of any kind */
-  noAnalytics: true,
+  /** Anonymous usage analytics require explicit opt-in consent */
+  analyticsOptInOnly: true,
 
-  /** No external API calls for any functionality */
-  noExternalAPIs: true,
+  /** No external API calls are used for analysis functionality */
+  noExternalAnalysisAPIs: true,
 
   /** No source code is collected or transmitted */
   noSourceCodeCollection: true,
@@ -46,15 +46,19 @@ export const PRIVACY_POLICY = {
   /** The only external navigation: opening angular.dev docs in new tabs */
   allowedExternalNavigation: 'angular.dev documentation links only',
 
-  /** Storage is limited to chrome.storage.session (per-session, local only) */
-  storageModel: 'chrome.storage.session (ephemeral, local)',
+  /** Storage is local to the browser profile */
+  storageModel: 'chrome.storage.local/session (local browser profile)',
 
   /** Permissions used and their justification */
   permissions: {
     activeTab: 'Access current tab for Angular detection and analysis',
     scripting: 'Inject page-script.js into main world for Angular API access',
-    tabs: 'Open documentation links in new tabs',
-    storage: 'Persist scan results within the session (no sync/cloud)',
+    storage: 'Persist scan results and consent state locally (no sync/cloud)',
+  },
+
+  /** Host permissions used and their justification */
+  hostPermissions: {
+    'https://www.google-analytics.com/*': 'Send anonymous usage analytics after opt-in consent',
   },
 } as const;
 
@@ -99,9 +103,11 @@ export function isAllowedNavigation(url: string): boolean {
 // --- Network Request Validation ---
 
 /**
- * Development-time validation that no external network requests are being made.
+ * Development-time validation that no unexpected external network requests are being made.
  * This function checks for the presence of fetch/XHR calls to external URLs
- * by wrapping the global fetch and XMLHttpRequest to detect violations.
+ * by wrapping the global fetch and XMLHttpRequest to detect violations. The
+ * opt-in Google Analytics endpoint is allowed because it is declared in the
+ * manifest and guarded by consent.
  *
  * This is intended for development/testing use only — it does NOT intercept
  * requests at runtime in production (that would be too invasive).
@@ -116,6 +122,15 @@ export function validateNoExternalRequests(): {
   const violations: string[] = [];
   let originalFetch: typeof globalThis.fetch | null = null;
   let originalXHROpen: typeof XMLHttpRequest.prototype.open | null = null;
+
+  function isAllowedRequest(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname === 'www.google-analytics.com' && parsed.pathname === '/mp/collect';
+    } catch {
+      return false;
+    }
+  }
 
   function startMonitoring(): void {
     // Wrap fetch
@@ -132,7 +147,9 @@ export function validateNoExternalRequests(): {
       } else {
         url = (input as Request).url;
       }
-      violations.push(`fetch() called with URL: ${url}`);
+      if (!isAllowedRequest(url)) {
+        violations.push(`fetch() called with URL: ${url}`);
+      }
       // Still call original to not break functionality during testing
       return originalFetch!.call(globalThis, input, init);
     } as typeof globalThis.fetch;
@@ -146,7 +163,9 @@ export function validateNoExternalRequests(): {
       ...args: unknown[]
     ): void {
       const urlStr = typeof url === 'string' ? url : url.href;
-      violations.push(`XMLHttpRequest.open() called with URL: ${urlStr}`);
+      if (!isAllowedRequest(urlStr)) {
+        violations.push(`XMLHttpRequest.open() called with URL: ${urlStr}`);
+      }
       originalXHROpen!.apply(this, [method, url, ...args] as unknown as Parameters<typeof XMLHttpRequest.prototype.open>);
     } as typeof XMLHttpRequest.prototype.open;
   }

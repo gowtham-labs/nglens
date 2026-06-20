@@ -70,7 +70,7 @@ You need:
 - [ ] Overlays appear on page
 - [ ] Signals analyzer detects issues
 - [ ] No console errors
-- [ ] No network requests (check DevTools → Network)
+- [ ] No unexpected network requests (Google Analytics requests only after explicit opt-in)
 
 #### **1.5 Create ZIP Package**
 
@@ -137,7 +137,7 @@ ngLens
 
 **Summary (132 characters max):**
 ```
-Find Angular performance problems and learn how to fix them. Analyzes Signals, detects leaks, shows visual overlays. 100% local.
+Find Angular performance problems and learn how to fix them. Explains renders, ranks fixes, and keeps analysis data local.
 ```
 
 **Description (detailed):**
@@ -148,7 +148,7 @@ Find Angular performance problems and learn how to fix them — whether you're a
 
 ## Features
 
-⚡ **Signals Analyzer (FIRST TOOL!)**
+⚡ **Signals Analyzer**
 - Detects expensive computed signals
 - Identifies O(n²) nested operations
 - Flags Signal/RxJS mixing without interop
@@ -167,7 +167,7 @@ Find Angular performance problems and learn how to fix them — whether you're a
 - Best practices detection
 
 🔍 **Advanced Detection**
-- Subscription leak detection (10+ patterns)
+- Memory cleanup risk detection
 - Missing trackBy in *ngFor
 - Template anti-patterns
 - Excessive DOM nodes
@@ -180,9 +180,9 @@ Find Angular performance problems and learn how to fix them — whether you're a
 - Helps juniors learn best practices
 
 🔒 **Privacy First**
-- 100% local analysis
-- Zero data collection
-- No network requests
+- Local analysis for source, URLs, and performance findings
+- Anonymous usage analytics only after explicit opt-in
+- No analysis results, page URLs, or source code are transmitted
 - Fully open source (MIT License)
 
 ## Perfect For
@@ -195,7 +195,7 @@ Find Angular performance problems and learn how to fix them — whether you're a
 
 ## Signals Performance Analysis
 
-ngLens is the FIRST and ONLY tool that analyzes Angular Signals performance:
+ngLens analyzes Angular Signals performance patterns:
 - Expensive computed() operations
 - Nested array operations (map inside map)
 - Large collections without equality checks
@@ -205,8 +205,8 @@ ngLens is the FIRST and ONLY tool that analyzes Angular Signals performance:
 ## Privacy & Security
 
 - ✅ MIT licensed, fully open source
-- ✅ Zero data collection documented
-- ✅ No analytics, no tracking
+- ✅ Analysis data stays local
+- ✅ Anonymous usage analytics are opt-in only
 - ✅ Strict Content Security Policy
 - ✅ Minimal permissions (only what's needed)
 - ✅ All code runs locally in your browser
@@ -238,7 +238,7 @@ English
 
 **Does this extension collect user data?**
 ```
-☐ No, this extension does not collect any user data
+☑ Yes, anonymous usage analytics are collected only after explicit opt-in
 ```
 
 **Single Purpose:**
@@ -426,7 +426,7 @@ Add Chrome Web Store links to:
 **✅ Fix:**
 - Already done: Minimal permissions in manifest.json
 - Justification provided for each permission
-- No network permissions
+- Host permissions are limited to Google Analytics for explicit opt-in usage analytics
 
 ### **2. Privacy Policy Missing**
 
@@ -600,7 +600,7 @@ cd dist && zip -r ../ngLens-v1.1.0.zip . && cd ..
 - [ ] Privacy policy accessible via URL
 - [ ] All features tested manually
 - [ ] No console errors
-- [ ] No network requests (verified)
+- [ ] No unexpected network requests (Google Analytics only after explicit opt-in)
 - [ ] README updated with features
 - [ ] CHANGELOG current
 - [ ] Screenshots taken (5 images)

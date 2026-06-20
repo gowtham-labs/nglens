@@ -69,16 +69,18 @@ Please include:
   "permissions": [
     "activeTab",   // Only current tab
     "scripting",   // Inject analyzers
-    "tabs",        // Tab metadata
     "storage"      // Local storage only
+  ],
+  "host_permissions": [
+    "https://www.google-analytics.com/*" // Opt-in anonymous usage analytics only
   ]
 }
 ```
 
-**No network permissions:**
-- Cannot send data externally
-- Cannot fetch remote resources
-- Cannot communicate with servers
+**Network access:**
+- Analysis data, page URLs, and source code are not transmitted
+- Google Analytics is contacted only after explicit opt-in
+- No remote scripts or analysis APIs are loaded
 
 ### 3. Input Validation
 

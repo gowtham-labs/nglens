@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated:** June 2025
+**Last Updated:** June 20, 2026
 
 ## Our Commitment
 
@@ -44,7 +44,7 @@ If you select "No thanks" when prompted, or opt out later via settings:
 1. **Local Analysis Only:**
    - All code analysis runs in your browser
    - Data is processed locally on your machine
-   - Results are displayed in the extension popup
+   - Results are displayed in the DevTools panel and extension UI
    - Analysis results are never transmitted to external servers
 
 2. **Storage:**
@@ -112,7 +112,7 @@ All scan results are stored locally in your browser and are under your control.
 
 ## Updates to This Policy
 
-If we ever change our privacy practices (we won't), we will:
+If we change our privacy practices, we will:
 1. Update this document
 2. Increment the version number
 3. Notify users via extension update notes
@@ -139,7 +139,7 @@ ngLens complies with:
 - ✅ GDPR (EU General Data Protection Regulation)
 - ✅ CCPA (California Consumer Privacy Act)
 - ✅ Chrome Web Store Developer Program Policies
-- ✅ No data collection = No compliance issues
+- ✅ Opt-in analytics disclosed and controlled by user consent
 
 ## Transparency
 

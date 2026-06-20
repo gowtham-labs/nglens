@@ -27,17 +27,17 @@
 ### **2. Privacy & Transparency**
 
 **PRIVACY.md:**
-- ✅ Zero data collection policy
+- ✅ Local-analysis privacy policy
 - ✅ Local-only analysis documented
-- ✅ No network requests
+- ✅ Opt-in analytics behavior documented
 - ✅ Chrome Web Store disclosure
 - ✅ GDPR/CCPA compliant
 - ✅ Open source verification instructions
 
 **Key Features:**
-- ❌ No analytics
+- ✅ Anonymous usage analytics only after explicit opt-in
 - ❌ No error tracking
-- ❌ No external services
+- ❌ No external analysis services
 - ❌ No cookies
 - ✅ Fully auditable code
 
@@ -210,9 +210,9 @@ npm audit
 
 **Privacy Compliance:**
 - [ ] PRIVACY.md exists and accurate
-- [ ] No network requests in code
+- [ ] Analysis data, URLs, and source code never leave the browser
 - [ ] No external script loading
-- [ ] No analytics/tracking
+- [ ] Analytics is opt-in only and documented
 - [ ] Local storage only
 
 **Legal Protection:**
@@ -257,14 +257,14 @@ ngLens - Angular Performance Analyzer
 
 Find Angular performance problems and learn how to fix them.
 
-✓ Analyzes Angular 16+ Signals performance (FIRST TOOL!)
-✓ Detects subscription leaks, missing trackBy, DOM complexity
+✓ Analyzes Angular 16+ Signals performance patterns
+✓ Flags memory cleanup risks, missing trackBy, DOM complexity
 ✓ Visual overlays show exactly where issues are
 ✓ Lighthouse-style performance score (0-100)
 ✓ Works in production mode (no window.ng needed)
-✓ 100% local analysis - no data leaves your browser
+✓ Local analysis - source, URLs, and findings stay in your browser
 
-PRIVACY: All analysis happens locally. Zero network requests.
+PRIVACY: Analysis happens locally. Anonymous usage analytics are opt-in only.
 Open source, MIT licensed, fully auditable.
 
 GitHub: https://github.com/gowtham-labs/nglens
@@ -401,14 +401,14 @@ storage: Store scan results locally in your browser
 **ngLens is now:**
 - ✅ Legally clear (MIT + Trademark)
 - ✅ Technically secured (CSP + minimal permissions)
-- ✅ Privacy-focused (zero data collection)
+- ✅ Privacy-focused (local analysis + opt-in anonymous analytics)
 - ✅ Transparently auditable (open source)
 - ✅ Community-ready (contributing guidelines)
 - ✅ Market-protected (brand + first-mover)
 
 **You can confidently promote ngLens as:**
 > "The most secure Angular performance analyzer - 
-> fully open source, MIT licensed, zero data collection, 
-> strict CSP, minimal permissions, and 100% local analysis."
+> fully open source, MIT licensed, local analysis by default,
+> strict CSP, minimal permissions, and opt-in anonymous analytics."
 
 🎉 **Ready to launch!**
