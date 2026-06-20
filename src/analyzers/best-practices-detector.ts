@@ -365,7 +365,7 @@ export class BestPracticesDetector extends BaseAnalyzer {
       return `#${element.id}`;
     }
 
-    for (const attr of element.attributes) {
+    for (const attr of Array.from(element.attributes)) {
       if (attr.name.startsWith('_nghost-')) {
         return `${tag}[${attr.name}]`;
       }

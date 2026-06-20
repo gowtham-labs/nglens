@@ -9,12 +9,13 @@
  * - TrackByDetector: identifies missing trackBy in ngFor
  * - OnPushEngine: evaluates OnPush suitability
  * - SelectiveAnalyzer: gates deep analysis to selected component
- * - checkAngularVersion: verifies Angular 17+ support
+ * - checkAngularVersion: verifies Angular 15+ support
  */
 
 import { RenderTracker } from './render-tracker';
 import { LeakDetector } from './leak-detector';
 import { TrackByDetector } from './trackby-detector';
+import { OnPushEngine } from './onpush-engine';
 import { PerformanceGuard } from './performance-guard';
 import { SelectiveAnalyzer } from './selective-analyzer';
 import { TemplateExpressionTracker } from './template-expression-tracker';
@@ -32,102 +33,15 @@ const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
 const renderTracker = RenderTracker.getInstance();
 const leakDetector = new LeakDetector();
 const trackByDetector = new TrackByDetector();
+const onPushEngine = new OnPushEngine();
 const performanceGuard = PerformanceGuard.getInstance();
 const selectiveAnalyzer = new SelectiveAnalyzer();
 const templateExpressionTracker = new TemplateExpressionTracker(null);
 const freezeDetector = new FreezeDetector();
 const zonePollutionDetector = ZonePollutionDetector.getInstance();
 
-type InstrumentationStartCandidate = {
-  component: string;
-  score: number;
-  currentStrategy: 'Default';
-  factors: Array<{ name: string; weight: number; met: boolean; description: string }>;
-  recommendation: string;
-};
-
-function safeInvoke(action: () => void): void {
-  try {
-    action();
-  } catch {
-    // Intentionally ignore instrumentation failures to avoid breaking page behavior.
-  }
-}
-
-function forEachAngularComponent(
-  limit: number,
-  visitor: (component: any, index: number) => void
-): void {
-  const ng = (globalThis as any).ng;
-  if (!ng?.getComponent) return;
-
-  const elements = document.querySelectorAll('*');
-  const effectiveLimit = Math.min(elements.length, limit);
-
-  for (let i = 0; i < effectiveLimit; i++) {
-    try {
-      const component = ng.getComponent(elements[i]);
-      if (!component) continue;
-      visitor(component, i);
-    } catch {
-      continue;
-    }
-  }
-}
-
-function findAngularComponentByName(name: string): any | null {
-  const ng = (globalThis as any).ng;
-  if (!ng?.getComponent) return null;
-
-  const elements = document.querySelectorAll('*');
-  for (let i = 0; i < elements.length; i++) {
-    try {
-      const component = ng.getComponent(elements[i]);
-      if (!component) continue;
-
-      const componentName = component.constructor?.name ?? '';
-      if (componentName === name) {
-        return component;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[] {
-  const candidates: InstrumentationStartCandidate[] = [];
-
-  forEachAngularComponent(limit, (component) => {
-    const name = component.constructor?.name ?? 'Unknown';
-    const cmp = component.constructor?.ɵcmp;
-    if (!cmp) return;
-
-    // Check if already using OnPush
-    const isOnPush = cmp.onPush === true || cmp.changeDetection === 1;
-    if (isOnPush) return;
-
-    // Simple heuristic: count inputs
-    const inputCount = cmp.inputs ? Object.keys(cmp.inputs).length : 0;
-
-    candidates.push({
-      component: name,
-      score: inputCount > 0 ? 75 : 40,
-      currentStrategy: 'Default',
-      factors: [
-        { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
-        { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
-      ],
-      recommendation: inputCount > 0
-        ? 'Recommended: ChangeDetectionStrategy.OnPush'
-        : 'Consider OnPush if data flows through inputs',
-    });
-  });
-
-  return candidates;
-}
+// Expose LeakDetector globally so analyzers can access it
+(globalThis as any).__leakDetector = leakDetector;
 
 /**
  * Handles START_TRACKING command from the panel.
@@ -141,25 +55,72 @@ function handleStartTracking(): void {
     // Emit an error back to the content script
     dispatchToContent('ERROR', {
       message: versionResult.version
-        ? `Angular ${versionResult.version} is not supported. Requires Angular 17+.`
+        ? `Angular ${versionResult.version} is not supported.`
         : 'Angular not detected on this page.',
     });
     return;
   }
 
-  safeInvoke(() => renderTracker.start());
-  safeInvoke(() => leakDetector.start());
-  safeInvoke(() => performanceGuard.start());
-  safeInvoke(() => freezeDetector.start());
-  safeInvoke(() => zonePollutionDetector.start());
+  // Optional: Log when proceeding with fallback/unknown version detection
+  if (versionResult.confidence !== 'exact') {
+    // console.warn('[ngLens] Proceeding with', versionResult.confidence, 'version detection:', versionResult.version);
+  }
+
+  try {
+    renderTracker.start();
+    // console.log('[ngLens] RenderTracker started');
+  } catch (err) {
+    // console.error('[ngLens] RenderTracker failed to start:', err);
+  }
+
+  try {
+    leakDetector.start();
+    // console.log('[ngLens] LeakDetector started');
+  } catch (err) {
+    // console.error('[ngLens] LeakDetector failed to start:', err);
+  }
+
+  try {
+    performanceGuard.start();
+    // console.log('[ngLens] PerformanceGuard started');
+  } catch (err) {
+    // console.error('[ngLens] PerformanceGuard failed to start:', err);
+  }
+
+  try {
+    freezeDetector.start();
+    // console.log('[ngLens] FreezeDetector started');
+  } catch (err) {
+    // console.error('[ngLens] FreezeDetector failed to start:', err);
+  }
+
+  try {
+    zonePollutionDetector.start();
+    // console.log('[ngLens] ZonePollutionDetector started');
+  } catch (err) {
+    // console.error('[ngLens] ZonePollutionDetector failed to start:', err);
+  }
 
   // Instrument components for template expression tracking
-  safeInvoke(() => {
-    forEachAngularComponent(200, (component, index) => {
-      const name = component.constructor?.name ?? `Component_${index}`;
-      templateExpressionTracker.instrumentComponent(component, name);
-    });
-  });
+  try {
+    const ng = (globalThis as any).ng;
+    if (ng?.getComponent) {
+      const components = document.querySelectorAll('*');
+      const limit = Math.min(components.length, 200);
+      
+      for (let i = 0; i < limit; i++) {
+        try {
+          const comp = ng.getComponent(components[i]);
+          if (!comp) continue;
+          const name = comp.constructor?.name ?? `Component_${i}`;
+          templateExpressionTracker.instrumentComponent(comp, name);
+        } catch { continue; }
+      }
+      // console.log('[ngLens] TemplateExpressionTracker initialized for', limit, 'components');
+    }
+  } catch (err) {
+    // console.error('[ngLens] TemplateExpressionTracker initialization failed:', err);
+  }
 
   // Run one-time analyzers
   try {
@@ -174,13 +135,63 @@ function handleStartTracking(): void {
     // console.error('[ngLens] TrackBy analysis failed:', err);
   }
 
-  // Run OnPush analysis using ng.getComponent (works on Angular 20)
-  safeInvoke(() => {
-    const analyzed = collectOnPushCandidates(500);
-    for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', result);
+  // Run OnPush analysis using ng.getComponent (works on Angular 15-21)
+  try {
+    const ng = (globalThis as any).ng;
+    if (ng?.getComponent) {
+      const components = document.querySelectorAll('*');
+      const limit = Math.min(components.length, 500);
+      const analyzed: any[] = [];
+      
+      for (let i = 0; i < limit; i++) {
+        try {
+          const comp = ng.getComponent(components[i]);
+          if (!comp) continue;
+          const name = comp.constructor?.name ?? 'Unknown';
+          const cmp = comp.constructor?.ɵcmp;
+          if (!cmp) continue;
+          
+          // Check if already using OnPush
+          // Angular 15-16: changeDetection field (0 = Default, 1 = OnPush)
+          // Angular 17+: onPush boolean or changeDetection field
+          const isOnPush = cmp.onPush === true || cmp.changeDetection === 1;
+          if (isOnPush) continue;
+          
+          // Count inputs — format varies by Angular version:
+          // Angular 15-16: { propName: 'bindingName' } or array of names
+          // Angular 17+: { propName: { alias: 'bindingName', required: false } }
+          let inputCount = 0;
+          if (cmp.inputs) {
+            if (Array.isArray(cmp.inputs)) {
+              inputCount = cmp.inputs.length;
+            } else if (typeof cmp.inputs === 'object') {
+              inputCount = Object.keys(cmp.inputs).length;
+            }
+          }
+          
+          analyzed.push({
+            component: name,
+            score: inputCount > 0 ? 75 : 40,
+            currentStrategy: 'Default',
+            factors: [
+              { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
+              { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
+            ],
+            recommendation: inputCount > 0 
+              ? 'Recommended: ChangeDetectionStrategy.OnPush' 
+              : 'Consider OnPush if data flows through inputs',
+          });
+        } catch { continue; }
+      }
+      
+      // console.log('[ngLens] OnPush analysis:', analyzed.length, 'candidates');
+      for (const result of analyzed) {
+        dispatchToContent('ONPUSH_RESULT', result);
+      }
     }
-  });
+  } catch (err) {
+    // console.error('[ngLens] OnPush analysis failed:', err);
+  }
 
   dispatchToContent('TRACKING_STARTED', {
     timestamp: performance.now(),
@@ -215,12 +226,25 @@ function handleSelectComponent(payload: { name: string } | null): void {
 
   // Also instrument the selected component for template expression tracking
   if (name) {
-    safeInvoke(() => {
-      const component = findAngularComponentByName(name);
-      if (component) {
-        templateExpressionTracker.instrumentComponent(component, name);
+    try {
+      const ng = (globalThis as any).ng;
+      if (ng?.getComponent) {
+        const components = document.querySelectorAll('*');
+        for (let i = 0; i < components.length; i++) {
+          try {
+            const comp = ng.getComponent(components[i]);
+            if (!comp) continue;
+            const compName = comp.constructor?.name ?? '';
+            if (compName === name) {
+              templateExpressionTracker.instrumentComponent(comp, name);
+              break;
+            }
+          } catch { continue; }
+        }
       }
-    });
+    } catch (err) {
+      // console.error('[ngLens] Failed to instrument selected component:', err);
+    }
   }
 }
 

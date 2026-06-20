@@ -107,7 +107,7 @@ export class TemplateExpressionTracker {
       const tracker = this;
       const trackedKey = `${componentName}#${methodName}`;
 
-      const instrumented = function (...args: any[]) {
+      const instrumented = function (this: any, ...args: any[]) {
         const start = performance.now();
         try {
           const result = original.apply(this, args);
@@ -127,7 +127,7 @@ export class TemplateExpressionTracker {
         }
       };
 
-      instrumented.__ngLensInstrumented = true;
+      (instrumented as any).__ngLensInstrumented = true;
 
       if (isProto) {
         Object.getPrototypeOf(component)[methodName] = instrumented;
@@ -150,11 +150,11 @@ export class TemplateExpressionTracker {
   ): void {
     try {
       const original = descriptor.get;
-      if (!original || original.__ngLensInstrumented) return;
+      if (!original || (original as any).__ngLensInstrumented) return;
 
       const tracker = this;
 
-      const instrumented = function () {
+      const instrumented = function (this: any) {
         const start = performance.now();
         try {
           const result = original.call(this);
@@ -173,7 +173,7 @@ export class TemplateExpressionTracker {
         }
       };
 
-      instrumented.__ngLensInstrumented = true;
+      (instrumented as any).__ngLensInstrumented = true;
 
       Object.defineProperty(component, propName, {
         ...descriptor,
@@ -303,12 +303,12 @@ export class TemplateExpressionTracker {
     const originalSetTimeout = globalThis.setTimeout;
     const tracker = this;
 
-    globalThis.setTimeout = function (callback: any, delay: number, ...args: any[]) {
+    (globalThis.setTimeout as any) = function (this: any, callback: any, delay: number, ...args: any[]) {
       if (tracker.enabled && delay > 0) {
         // Note: Tracking global timeouts would be noisy; only log if in template context
       }
       return originalSetTimeout.call(this, callback, delay, ...args);
-    };
+    } as typeof setTimeout;
   }
 
   /**

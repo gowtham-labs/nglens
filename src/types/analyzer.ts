@@ -28,8 +28,12 @@ export type AnalyzerType =
   | 'dom-inspector'
   | 'signals-analyzer'
   | 'rxjs-leak-detector'
+  | 'ast-subscription-analyzer'
   | 'enterprise-optimizer'
-  | 'best-practices-detector';
+  | 'best-practices-detector'
+  | 'freeze-event-analyzer'
+  | 'template-expression-analyzer'
+  | 'zone-pollution-analyzer';
 
 export type IssueCategory =
   | 'change-detection'

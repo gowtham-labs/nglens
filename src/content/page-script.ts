@@ -103,7 +103,7 @@ function hasAngularHostAttributes(): boolean {
 
   for (let i = 0; i < limit; i++) {
     const el = allElements[i];
-    for (const attr of el.attributes) {
+    for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith('_nghost-')) {
         return true;
       }

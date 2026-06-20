@@ -93,7 +93,7 @@ export function now(): number {
 export function scheduleIdle(
   callback: () => void,
   timeout: number = 100
-): number {
+): number | ReturnType<typeof requestIdleCallback> {
   if (typeof requestIdleCallback === 'function') {
     return requestIdleCallback(
       () => callback(),
@@ -101,18 +101,22 @@ export function scheduleIdle(
     );
   }
   // Fallback for environments without requestIdleCallback
-  return globalThis.setTimeout(callback, 0);
+  return globalThis.setTimeout(callback, 0) as unknown as number;
 }
 
 /**
  * Cancels a previously scheduled idle callback.
  */
-export function cancelIdle(handle: number): void {
-  if (typeof cancelIdleCallback === 'function') {
-    cancelIdleCallback(handle);
-  } else {
-    clearTimeout(handle);
+export function cancelIdle(handle: number | ReturnType<typeof requestIdleCallback>): void {
+  if (typeof cancelIdleCallback === 'function' && typeof handle === 'number') {
+    try {
+      cancelIdleCallback(handle);
+      return;
+    } catch {
+      // Not an idle callback handle
+    }
   }
+  clearTimeout(handle as unknown as number);
 }
 
 /**

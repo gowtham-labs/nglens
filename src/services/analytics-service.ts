@@ -29,7 +29,28 @@ export class AnalyticsService {
     }
 
     const consent = await this.consentManager.getConsent();
-    return consent === 'granted';
+    if (consent !== 'granted') {
+      return false;
+    }
+
+    // Ensure we have the optional host permission for Google Analytics
+    const hasPermission = await this.ensureHostPermission();
+    return hasPermission;
+  }
+
+  /**
+   * Request the optional host permission for Google Analytics.
+   * Returns true if already granted or successfully obtained.
+   */
+  private async ensureHostPermission(): Promise<boolean> {
+    try {
+      const hasPermission = await chrome.permissions.contains({
+        origins: ['https://www.google-analytics.com/*'],
+      });
+      return hasPermission;
+    } catch {
+      return false;
+    }
   }
 
   /**

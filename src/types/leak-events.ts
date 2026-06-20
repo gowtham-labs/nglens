@@ -21,6 +21,8 @@ export interface ComponentLifecycle {
   destroyedAt: number | null;
   subscriptions: SubscriptionRecord[];
   timers: TimerRecord[];
+  /** Reference to the host element, used for component instance retrieval on destroy */
+  hostElement?: HTMLElement;
 }
 
 export interface SubscriptionRecord {

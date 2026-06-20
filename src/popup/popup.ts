@@ -119,6 +119,7 @@ scanBtn.addEventListener('click', async () => {
         showStatus('✓ Scan initiated. Results will appear shortly.', 'success');
       }
       scanBtn.disabled = false;
+      scanBtn.disabled = false;
     }, 4000);
 
   } catch (error) {

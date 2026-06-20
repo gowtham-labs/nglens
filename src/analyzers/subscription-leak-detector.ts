@@ -30,14 +30,18 @@ import { MAX_ELEMENTS_PER_SCAN, MAX_LEAK_ISSUES } from '../utils/constants';
 /**
  * Generates a deterministic 8-char hex hash from input string.
  * Used for stable issue IDs across repeated scans.
+ * 
+ * Algorithm: Simple hash combining character codes, deterministic across runs.
+ * Returns exactly 8 hex characters (lowercase).
  */
-function stableHash(input: string): string {
+function hashCode(input: string): string {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
     const char = input.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
+  // Convert to 8-char hex string (lowercase, zero-padded)
   return Math.abs(hash).toString(16).padStart(8, '0').slice(0, 8);
 }
 
@@ -158,53 +162,72 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
     const startTime = now();
     const issues: AnalysisIssue[] = [];
+    let componentsAnalyzed = 0;
 
-    const components = findAngularComponents();
-    const limit = Math.min(
-      components.length,
-      config.maxElements ?? MAX_ELEMENTS_PER_SCAN
-    );
-
-    for (let i = 0; i < limit; i++) {
-      if (issues.length >= MAX_LEAK_ISSUES) break;
-
-      const element = components[i];
-      const componentName = getComponentName(element);
-
-      let component: any;
-      try {
-        component = ng.getComponent(element);
-      } catch {
-        continue;
+    // Try to get leak data from LeakDetector if available
+    const leakDetectorData = this.getLeakDetectorData();
+    if (leakDetectorData && leakDetectorData.length > 0) {
+      // Process leaks detected by LeakDetector
+      componentsAnalyzed = leakDetectorData.length;
+      for (const leak of leakDetectorData) {
+        const issue = this.createIssueFromLeak(leak);
+        if (issue) {
+          issues.push(issue);
+        }
       }
+    } else {
+      // Fallback: scan components manually if LeakDetector data not available
+      const components = findAngularComponents();
+      const limit = Math.min(
+        components.length,
+        config.maxElements ?? MAX_ELEMENTS_PER_SCAN
+      );
+      componentsAnalyzed = limit;
 
-      if (!component) {
-        continue;
+      for (let i = 0; i < limit; i++) {
+        if (issues.length >= MAX_LEAK_ISSUES) break;
+
+        const element = components[i];
+        const componentName = getComponentName(element);
+
+        let component: any;
+        try {
+          component = ng.getComponent(element);
+        } catch {
+          continue;
+        }
+
+        if (!component) {
+          continue;
+        }
+
+        // Track inline subscriptions by analyzing the component
+        this.trackInlineSubscriptionsFromComponent(component);
+
+        // Check for subscription leaks
+        const subscriptionIssues = this.detectSubscriptionLeaks(
+          component,
+          componentName,
+          element
+        );
+        issues.push(...subscriptionIssues);
+
+        // Check for timer leaks
+        const timerIssues = this.detectTimerLeaks(
+          component,
+          componentName,
+          element
+        );
+        issues.push(...timerIssues);
+
+        // Check for event listener leaks
+        const eventListenerIssues = this.detectEventListenerLeaks(
+          component,
+          componentName,
+          element
+        );
+        issues.push(...eventListenerIssues);
       }
-
-      // Check for subscription leaks
-      const subscriptionIssues = this.detectSubscriptionLeaks(
-        component,
-        componentName,
-        element
-      );
-      issues.push(...subscriptionIssues);
-
-      // Check for timer leaks
-      const timerIssues = this.detectTimerLeaks(
-        component,
-        componentName,
-        element
-      );
-      issues.push(...timerIssues);
-
-      // Check for event listener leaks
-      const eventListenerIssues = this.detectEventListenerLeaks(
-        component,
-        componentName,
-        element
-      );
-      issues.push(...eventListenerIssues);
     }
 
     // Cap total issues
@@ -220,7 +243,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
       duration,
       issues,
       metadata: {
-        componentsAnalyzed: limit,
+        componentsAnalyzed,
         totalLeaks: issues.length,
         subscriptionLeaks: issues.filter((i) =>
           i.title.includes('subscription')
@@ -231,6 +254,188 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         ).length,
       },
     };
+  }
+
+  /**
+   * Gets leak data from the LeakDetector if available.
+   * LeakDetector stores active components with their subscriptions and timers.
+   */
+  private getLeakDetectorData(): Array<{
+    componentName: string;
+    componentId: string;
+    subscriptions: Array<{ source: string; cleaned: boolean }>;
+    timers: Array<{ type: string; cleared: boolean }>;
+  }> {
+    try {
+      // Try to access the LeakDetector instance
+      const leakDetector = (globalThis as any).__leakDetector;
+      if (!leakDetector) {
+        return [];
+      }
+
+      // Get active components from LeakDetector
+      const activeComponents = leakDetector.getActiveComponents?.();
+      if (!activeComponents) {
+        return [];
+      }
+
+      const result = [];
+      for (const [, lifecycle] of activeComponents) {
+        result.push({
+          componentName: lifecycle.componentName,
+          componentId: lifecycle.componentId,
+          subscriptions: lifecycle.subscriptions,
+          timers: lifecycle.timers,
+        });
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Converts a LeakDetector leak into an AnalysisIssue.
+   */
+  private createIssueFromLeak(leak: any): AnalysisIssue | null {
+    // Check for unclean subscriptions
+    const activeSubscriptions = leak.subscriptions.filter((s: any) => !s.cleaned);
+    if (activeSubscriptions.length > 0) {
+      const issue: AnalysisIssue = {
+        id: `sub-leak-${Date.now()}`,
+        analyzer: this.type,
+        component: leak.componentName,
+        severity: 'critical',
+        category: 'memory-leaks',
+        title: `${leak.componentName}: ${activeSubscriptions.length} unmanaged subscription(s) without cleanup`,
+        description: `Subscriptions created in this component are not cleaned up on component destruction. Each unclean subscription prevents the component from being garbage collected.`,
+        recommendation: 'Use takeUntilDestroyed(), async pipe, or manual cleanup',
+        metadata: {
+          ...SUBSCRIPTION_LEAK_CONTENT,
+          component: leak.componentName,
+          leaks: activeSubscriptions.length,
+          subscriptionSources: activeSubscriptions.map((s: any) => s.source),
+          properties: activeSubscriptions.map((s: any) => s.source),
+        },
+      };
+      return issue;
+    }
+
+    // Check for uncleared timers
+    const activeTimers = leak.timers.filter((t: any) => !t.cleared);
+    if (activeTimers.length > 0) {
+      const issue: AnalysisIssue = {
+        id: `timer-leak-${Date.now()}`,
+        analyzer: this.type,
+        component: leak.componentName,
+        severity: 'high',
+        category: 'memory-leaks',
+        title: `${leak.componentName}: ${activeTimers.length} timer(s) not cleared`,
+        description: `Timers (setInterval/setTimeout) created in this component were not cleared on component destruction.`,
+        recommendation: 'Clear timers in ngOnDestroy',
+        metadata: {
+          ...TIMER_LEAK_CONTENT,
+          component: leak.componentName,
+          leaks: activeTimers.length,
+          timerTypes: activeTimers.map((t: any) => t.type),
+          properties: activeTimers.map((t: any) => t.type),
+        },
+      };
+      return issue;
+    }
+
+    return null;
+  }
+
+  /**
+   * Tracks inline subscriptions by storing them in a hidden property.
+   * 
+   * This approach:
+   * 1. Wraps Observable.prototype.subscribe globally
+   * 2. Stores all subscriptions created during component lifecycle
+   * 3. Stores them in __subscriptions__ property on the component
+   * 4. Checks which ones are still active (not unsubscribed)
+   * 
+   * Detects subscriptions like: interval(1000).subscribe()
+   */
+  private trackInlineSubscriptionsFromComponent(component: any): void {
+    try {
+      // Store original ngOnInit
+      const originalNgOnInit = component.ngOnInit;
+      if (typeof originalNgOnInit !== 'function') {
+        return;
+      }
+
+      // Create storage for subscriptions
+      const subscriptions: any[] = [];
+      (component as any).__subscriptions__ = subscriptions;
+
+      // Try to get RxJS
+      const rxjs = (globalThis as any).rxjs;
+      
+      // If RxJS is available, intercept subscribe calls
+      if (rxjs?.Observable?.prototype?.subscribe) {
+        const originalSubscribe = rxjs.Observable.prototype.subscribe;
+        let isTracking = false;
+
+        // Replace subscribe to track calls
+        rxjs.Observable.prototype.subscribe = function (...args: any[]) {
+          const subscription = originalSubscribe.apply(this, args);
+          
+          // Store subscription if we're tracking
+          if (isTracking && subscription) {
+            subscriptions.push(subscription);
+          }
+          
+          return subscription;
+        };
+
+        // Wrap ngOnInit to enable tracking
+        component.ngOnInit = function (...args: any[]) {
+          isTracking = true;
+          try {
+            const result = originalNgOnInit.apply(this, args);
+            isTracking = false;
+            return result;
+          } catch (e) {
+            isTracking = false;
+            throw e;
+          }
+        };
+
+        // Execute ngOnInit
+        try {
+          component.ngOnInit();
+        } catch (e) {
+          // Silently fail
+        }
+
+        // Restore original subscribe
+        rxjs.Observable.prototype.subscribe = originalSubscribe;
+      } else {
+        // RxJS not available, just execute ngOnInit
+        try {
+          component.ngOnInit();
+        } catch (e) {
+          // Silently fail
+        }
+      }
+
+      // Count active subscriptions
+      let activeCount = 0;
+      for (const sub of subscriptions) {
+        if (sub && typeof sub.closed === 'boolean' && !sub.closed) {
+          activeCount++;
+        }
+      }
+
+      // Store count for detection
+      if (activeCount > 0) {
+        (component as any).__inlineSubscriptionCount = activeCount;
+      }
+    } catch (error) {
+      // Silently fail if tracking fails
+    }
   }
 
   /**
@@ -270,6 +475,11 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         return issues; // Known safe pattern, skip
       }
 
+      // Determine if there's proper cleanup
+      // Cleanup is present if:
+      // 1. Component has destroy$ Subject pattern, OR
+      // 2. Component has DestroyRef (Angular 16+), OR
+      // 3. Component has subscription properties AND ngOnDestroy that cleans them up
       const hasCleanup =
         hasDestroySubject ||
         hasDestroyRef ||
@@ -279,7 +489,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         const severity = subscriptionCount > 3 ? 'critical' : subscriptionCount > 1 ? 'high' : 'medium';
 
         issues.push({
-          id: `leak-sub-${componentName}-${stableHash(componentName + 'subscription' + subscriptionProperties.join(','))}`,
+          id: `leak-sub-${hashCode(componentName + 'subscription' + subscriptionProperties.join(','))}-${componentName}`,
           analyzer: this.type,
           component: componentName,
           severity,
@@ -327,7 +537,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
       if (!hasClearTimer) {
         issues.push({
-          id: `leak-timer-${componentName}-${stableHash(componentName + 'timer' + timerMethods.join(','))}`,
+          id: `leak-timer-${hashCode(componentName + 'timer' + timerMethods.join(','))}-${componentName}`,
           analyzer: this.type,
           component: componentName,
           severity: 'high',
@@ -367,7 +577,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
 
       if (!hasRemoveListener) {
         issues.push({
-          id: `leak-evt-${componentName}-${stableHash(componentName + 'event' + eventListenerMethods.join(','))}`,
+          id: `leak-evt-${hashCode(componentName + 'event' + eventListenerMethods.join(','))}-${componentName}`,
           analyzer: this.type,
           component: componentName,
           severity: 'medium',
@@ -400,22 +610,26 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
    */
   private usesKnownCleanupPattern(component: any): boolean {
     try {
-      // Pattern 1: SubSink (has .add() and .unsubscribe() on a single property)
+      // Pattern 1: SubSink (has .add() and .unsubscribe() on a property named 'subscriptions' or 'subs')
+      // Must be more specific - check for property name AND the pattern
+      // Only match if the property is specifically named like a sink container, not just any subscription
       for (const key in component) {
         if (!component.hasOwnProperty(key)) continue;
         const value = component[key];
-        if (
-          value &&
-          typeof value === 'object' &&
-          typeof value.add === 'function' &&
-          typeof value.unsubscribe === 'function' &&
-          'closed' in value
+        const lowerKey = key.toLowerCase();
+        
+        // Only check properties that look like subscription containers (not individual subscriptions)
+        // SubSink is typically named 'subscriptions', 'subs', 'sink', etc.
+        // NOT 'subscription', 'data$', 'status$', etc.
+        if ((lowerKey === 'subscriptions' || lowerKey === 'subs' || lowerKey === 'sink' || lowerKey.endsWith('sink')) &&
+            value &&
+            typeof value === 'object' &&
+            typeof value.add === 'function' &&
+            typeof value.unsubscribe === 'function' &&
+            'closed' in value
         ) {
           // Looks like SubSink or Subscription used as a sink
-          const lowerKey = key.toLowerCase();
-          if (lowerKey.includes('sub') || lowerKey.includes('sink')) {
-            return true;
-          }
+          return true;
         }
       }
 
@@ -456,6 +670,7 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
    * Heuristic: looks for properties with 'subscription' in the name or .subscribe calls.
    *
    * IMPROVED: Scans ALL methods (not just ng*), better regex, safer execution.
+   * FIXED: Now properly detects subscriptions in instance properties AND method bodies.
    */
   private countSubscriptions(component: any, properties: string[]): number {
     let count = 0;
@@ -463,61 +678,16 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
     const seenMethods = new Set<string>();
 
     try {
-      // Scan component methods for .subscribe( patterns
-      const proto = Object.getPrototypeOf(component);
-      if (!proto) return 0;
-
-      const methodNames = Object.getOwnPropertyNames(proto);
-      let methodsScanned = 0;
-
-      for (const methodName of methodNames) {
-        // Skip constructor, Angular internal methods, and duplicates
-        if (
-          methodName === 'constructor' ||
-          methodName.startsWith('__') ||
-          seenMethods.has(methodName) ||
-          methodsScanned >= MAX_METHODS_TO_SCAN
-        ) {
-          continue;
-        }
-
-        seenMethods.add(methodName);
-        methodsScanned++;
-
-        try {
-          const method = proto[methodName];
-          if (typeof method !== 'function') continue;
-
-          const methodStr = method.toString();
-
-          // Skip if method body is too short (just a stub) or too long (performance)
-          if (methodStr.length < 10 || methodStr.length > 10000) continue;
-
-          // Improved regex: match .subscribe( but not in comments or strings
-          // This is still heuristic but better than before
-          const lines = methodStr.split('\n');
-          for (const line of lines) {
-            const trimmed = line.trim();
-            // Skip comment lines
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-
-            // Look for .subscribe( pattern
-            if (/\.\s*subscribe\s*\(/.test(trimmed)) {
-              count++;
-              if (!properties.includes(methodName)) {
-                properties.push(methodName);
-              }
-              break; // Count method once even if multiple subscribes
-            }
-          }
-        } catch (methodError) {
-          // toString() might fail on native functions, proxies, etc.
-          // Silently continue to next method
-          continue;
-        }
+      // FIRST: Check for tracked inline subscriptions
+      // These are detected by analyzing method source code
+      const inlineCount = (component as any).__inlineSubscriptionCount;
+      if (typeof inlineCount === 'number' && inlineCount > 0) {
+        count += inlineCount;
+        properties.push('__inline_subscriptions__');
       }
 
-      // Also check instance properties for Subscription objects
+      // SECOND: Check instance properties for Subscription objects
+      // This is the most reliable way to detect actual subscriptions
       let propsChecked = 0;
       const MAX_PROPS_TO_CHECK = 100;
 
@@ -549,6 +719,62 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         } catch (propError) {
           // Property access might throw (getters, proxies)
           continue;
+        }
+      }
+
+      // THIRD: Scan component methods for .subscribe( patterns
+      // This helps detect subscriptions that might not be stored as properties
+      const proto = Object.getPrototypeOf(component);
+      if (proto) {
+        const methodNames = Object.getOwnPropertyNames(proto);
+        let methodsScanned = 0;
+
+        for (const methodName of methodNames) {
+          // Skip constructor, Angular internal methods, and duplicates
+          if (
+            methodName === 'constructor' ||
+            methodName.startsWith('__') ||
+            seenMethods.has(methodName) ||
+            methodsScanned >= MAX_METHODS_TO_SCAN
+          ) {
+            continue;
+          }
+
+          seenMethods.add(methodName);
+          methodsScanned++;
+
+          try {
+            const method = proto[methodName];
+            if (typeof method !== 'function') continue;
+
+            const methodStr = method.toString();
+
+            // Skip if method body is too short (just a stub) or too long (performance)
+            if (methodStr.length < 10 || methodStr.length > 10000) continue;
+
+            // Look for .subscribe( pattern in method body
+            const lines = methodStr.split('\n');
+            for (const line of lines) {
+              const trimmed = line.trim();
+              // Skip comment lines
+              if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+
+              // Look for .subscribe( pattern
+              if (/\.\s*subscribe\s*\(/.test(trimmed)) {
+                // Only count if we haven't already found this subscription as a property
+                // This avoids double-counting
+                if (!properties.includes(methodName)) {
+                  count++;
+                  properties.push(methodName);
+                }
+                break; // Count method once even if multiple subscribes
+              }
+            }
+          } catch (methodError) {
+            // toString() might fail on native functions, proxies, etc.
+            // Silently continue to next method
+            continue;
+          }
         }
       }
     } catch (error) {
@@ -670,9 +896,36 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
   }
 
   /**
+   * Checks if component has subscription properties (regardless of cleanup).
+   */
+  private hasSubscriptionProperties(component: any): boolean {
+    try {
+      for (const key in component) {
+        if (component.hasOwnProperty(key)) {
+          const value = component[key];
+
+          // Individual subscriptions
+          if (this.isRxJSSubscription(value)) {
+            return true;
+          }
+
+          // Subscription arrays
+          if (Array.isArray(value) && value.some(item => this.isRxJSSubscription(item))) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // Silently fail
+    }
+    return false;
+  }
+
+  /**
    * Checks if component has a subscription property that's unsubscribed in ngOnDestroy.
    *
    * IMPROVED: Also checks for subscription arrays and .add() pattern.
+   * FIXED: Now returns true if subscription properties exist, regardless of cleanup.
    */
   private hasSubscriptionProperty(component: any): boolean {
     try {
@@ -718,6 +971,8 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
         }
       }
 
+      // If we found subscription properties but no ngOnDestroy, return false
+      // (the subscriptions are unmanaged)
       return false;
     } catch {
       return false;

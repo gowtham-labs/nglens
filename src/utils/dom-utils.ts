@@ -17,7 +17,7 @@ import {
  * Detects: _nghost-*, _ngcontent-*, ng-reflect-*, ng-version
  */
 export function hasAngularAttribute(element: Element): boolean {
-  for (const attr of element.attributes) {
+  for (const attr of Array.from(element.attributes)) {
     const name = attr.name;
     if (
       name.startsWith(ANGULAR_HOST_ATTR_PREFIX) ||
@@ -36,7 +36,7 @@ export function hasAngularAttribute(element: Element): boolean {
  * A host element has an `_nghost-*` attribute.
  */
 export function isAngularHostElement(element: Element): boolean {
-  for (const attr of element.attributes) {
+  for (const attr of Array.from(element.attributes)) {
     if (attr.name.startsWith(ANGULAR_HOST_ATTR_PREFIX)) {
       return true;
     }
@@ -168,7 +168,7 @@ export function calculateComponentDepth(
       maxFound = depth;
     }
 
-    for (const child of element.children) {
+    for (const child of Array.from(element.children)) {
       if (isAngularHostElement(child)) {
         walk(child, depth + 1);
       } else {

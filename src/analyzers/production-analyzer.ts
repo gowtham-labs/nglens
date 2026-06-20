@@ -263,7 +263,7 @@ export class ProductionAnalyzer extends BaseAnalyzer {
     const tagName = element.tagName.toLowerCase();
 
     // Try to use a unique Angular host attribute
-    for (const attr of element.attributes) {
+    for (const attr of Array.from(element.attributes)) {
       if (attr.name.startsWith('_nghost-')) {
         return `${tagName}[${attr.name}]`;
       }

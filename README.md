@@ -9,8 +9,8 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 - **Angular Detection** — Automatically detects Angular apps in both development and production mode
 - **Change Detection Analysis** — Flags Default change detection, missing `OnPush`, and `*ngFor` without `trackBy`
 - **Unnecessary Re-render Detection** — Identifies excessive DOM mutation frequency, render bottlenecks, and template anti-patterns
-- **Memory Cleanup Risk Detection** — Flags possible surviving subscriptions, unmanaged timers, and DOM listeners
-- **RxJS Subscription Cleanup Detector** — Detects subscriptions without observed cleanup and recommends `takeUntil`, `takeUntilDestroyed`, or `async` pipe usage
+- **Memory Leak Detection** — Finds leaked subscriptions, unmanaged timers, and DOM listeners
+- **RxJS Subscription Leak Detector** — Detects subscriptions without cleanup and recommends `takeUntil`, `takeUntilDestroyed`, or `async` pipe usage
 - **Bundle/Lazy-loading Guidance** — Highlights initial load risk areas and lazy loading/bundle size improvement opportunities
 - **Zone.js Overhead Awareness** — Supports Zone-trigger and async-change-detection heuristics for Angular apps
 - **Slow Initial Load Insights** — Uses DOM and component tree heuristics to surface slow startup patterns
@@ -22,16 +22,16 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 
 ## Privacy
 
-All analysis is performed locally in your browser. Analysis results, page URLs, and source code stay on your machine. Optional anonymous usage analytics are sent only after explicit opt-in. See [PRIVACY.md](./PRIVACY.md) for details.
+All analysis is performed locally in your browser. No data leaves your machine. See [PRIVACY.md](./PRIVACY.md) for details.
 
 ## Security
 
 ngLens takes security seriously:
 
-- ✅ **MIT Licensed** - Permissive open-source license
-- ✅ **Minimal Permissions** - Only activeTab, scripting, tabs, storage
+- ✅ **GPL v3 Licensed** - Prevents closed-source malicious forks
+- ✅ **Minimal Permissions** - Only activeTab, scripting, storage
 - ✅ **Content Security Policy** - Strict CSP prevents code injection
-- ✅ **Local Analysis** - Analysis runs locally; optional anonymous analytics require explicit opt-in
+- ✅ **No Network Access** - All code runs locally, zero external requests
 - ✅ **Open Source** - Fully auditable code
 - ✅ **Signed Extension** - Verified publisher on Chrome Web Store
 
@@ -42,8 +42,9 @@ Found a security issue? See [SECURITY.md](./SECURITY.md) for reporting.
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 **Important:**
-- This project uses the MIT License
-- The "ngLens" name and logo are trademark protected (see [TRADEMARK.md](./TRADEMARK.md))
+- This project uses GPL v3 (copyleft license)
+- Forks must remain open source
+- "ngLens" trademark is protected (see [TRADEMARK.md](./TRADEMARK.md))
 - Follow secure coding practices
 - Sign your commits
 

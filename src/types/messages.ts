@@ -34,8 +34,8 @@ export type MessageType =
   | 'TRACKBY_ISSUE'
   | 'ONPUSH_RESULT'
   | 'DEGRADED_MODE'
-  | 'ZONE_POLLUTION_EVENT'
-  | 'ROUTE_CHANGED';
+  | 'ROUTE_CHANGED'
+  | 'ZONE_POLLUTION_EVENT';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

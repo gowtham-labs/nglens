@@ -154,6 +154,7 @@ class FreezeEventAnalyzer implements Analyzer {
         issues.push({
           id: `freeze-cause-${cause.replace(/\s+/g, '-')}`,
           analyzer: this.type,
+          component: 'Unknown',
           severity: 'high',
           category: 'render-performance',
           title: `${cause} is causing freezes`,
