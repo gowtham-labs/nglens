@@ -361,8 +361,8 @@ export class PanelState {
       type: 'leak',
       componentName: event.componentName,
       severity: event.severity,
-      title: `${event.leakType} leak in ${event.componentName}`,
-      description: `Unclean ${event.leakType} from "${event.source}" detected after component destruction.`,
+      title: `Possible leak risk in ${event.componentName}`,
+      description: `Cleanup not detected for ${event.leakType} from "${event.source}" after component destruction.`,
       timestamp: event.detectedAt,
     };
   }

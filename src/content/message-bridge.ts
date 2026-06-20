@@ -7,6 +7,7 @@
  */
 
 import type { ExtensionMessage, MessageType, PageMessage } from '../types/messages';
+import { normalizePageMessage } from '../utils/message-protocol';
 
 // Custom event names for page ↔ content communication
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
@@ -29,9 +30,10 @@ export function dispatchToPage<T>(type: MessageType, payload: T, eventId: string
 export function listenFromPage(
   handler: (message: PageMessage) => void
 ): () => void {
-  const listener = ((event: CustomEvent<PageMessage>) => {
-    if (event.detail && event.detail.type) {
-      handler(event.detail);
+  const listener = ((event: CustomEvent<unknown>) => {
+    const message = normalizePageMessage(event.detail);
+    if (message) {
+      handler(message);
     }
   }) as EventListener;
 

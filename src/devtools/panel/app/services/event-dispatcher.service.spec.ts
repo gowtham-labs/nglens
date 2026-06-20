@@ -202,6 +202,70 @@ describe('EventDispatcherService', () => {
       expect(state.renderEvents()).toHaveLength(1);
     });
 
+    it('should clear captured activity after ROUTE_CHANGED when enabled', () => {
+      state.clearOnRouteChange.set(true);
+      state.selectedComponent.set('DashboardComponent');
+      state.selectedIssue.set({
+        id: 'issue-1',
+        type: 'render-hot',
+        componentName: 'DashboardComponent',
+        severity: 'WARNING',
+        title: 'Hot component',
+        description: 'Rendering frequently',
+        timestamp: 100,
+      });
+      state.renderEvents.set([
+        {
+          componentName: 'DashboardComponent',
+          timestamp: 100,
+          duration: 1,
+          causes: [{ type: 'zone' }],
+        },
+      ]);
+      state.trackByIssues.set([
+        {
+          id: 'trackby-1',
+          componentName: 'ListComponent',
+          collectionProperty: 'items',
+          collectionSize: 120,
+          severity: 'WARNING',
+          recommendation: 'Add trackBy',
+        },
+      ]);
+      state.onPushRecommendations.set([
+        {
+          component: 'CardComponent',
+          score: 75,
+          currentStrategy: 'Default',
+          factors: [],
+          recommendation: 'Consider OnPush',
+        },
+      ]);
+      state.zonePollutionSources.set([
+        {
+          source: 'setInterval',
+          type: 'macroTask',
+          cdCyclesPerMinute: 120,
+          severity: 'high',
+          taskCount: 10,
+          lastSeen: 200,
+        },
+      ]);
+
+      service.dispatch({
+        type: 'ROUTE_CHANGED',
+        payload: { timestamp: 200 },
+        timestamp: Date.now(),
+      });
+
+      expect(state.renderEvents()).toEqual([]);
+      expect(state.trackByIssues()).toEqual([]);
+      expect(state.onPushRecommendations()).toEqual([]);
+      expect(state.zonePollutionSources()).toEqual([]);
+      expect(state.selectedComponent()).toBeNull();
+      expect(state.selectedIssue()).toBeNull();
+    });
+
     /**
      * Validates: Requirements 2.1, 2.2
      *

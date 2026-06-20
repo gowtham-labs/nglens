@@ -10,7 +10,7 @@
  * 6. Manage port-based panel connections for DevTools panel
  */
 
-import type { ExtensionMessage } from '../types/messages';
+import type { ExtensionMessage, MessageType } from '../types/messages';
 import type { PortMessage } from '../types/port-messages';
 import { analyticsService } from './analytics-instance';
 import { routeMessage } from './message-router';
@@ -23,6 +23,51 @@ import { clearTabState, removeTabState } from './tab-manager';
  * Used to forward messages between content scripts and the DevTools panel.
  */
 export const panelPorts = new Map<number, chrome.runtime.Port>();
+
+const MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  'SCAN_REQUEST',
+  'SCAN_RESULTS',
+  'START_PROFILING',
+  'STOP_PROFILING',
+  'PROFILE_DATA',
+  'PROFILE_COMPLETE',
+  'STATE_REQUEST',
+  'STATE_RESPONSE',
+  'OVERLAY_SHOW',
+  'OVERLAY_HIDE',
+  'OVERLAY_CLEAR_ALL',
+  'DETECTION_STATUS',
+  'TAB_NAVIGATED',
+  'ERROR',
+  'ANALYTICS_CONSENT_CHANGED',
+  'ANALYTICS_TRACK_EVENT',
+  'START_TRACKING',
+  'STOP_TRACKING',
+  'TRACKING_STARTED',
+  'TRACKING_STOPPED',
+  'SELECT_COMPONENT',
+  'CLEAR_DATA',
+  'EVENT_BATCH',
+  'LEAK_EVENT',
+  'TRACKBY_ISSUE',
+  'ONPUSH_RESULT',
+  'DEGRADED_MODE',
+  'ZONE_POLLUTION_EVENT',
+  'ROUTE_CHANGED',
+]);
+
+const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'EVENT_BATCH',
+  'LEAK_EVENT',
+  'TRACKBY_ISSUE',
+  'ONPUSH_RESULT',
+  'DEGRADED_MODE',
+  'ROUTE_CHANGED',
+  'TRACKING_STARTED',
+  'TRACKING_STOPPED',
+  'ERROR',
+  'ZONE_POLLUTION_EVENT',
+]);
 
 // --- Panel Port Connection Handling ---
 
@@ -115,32 +160,20 @@ export function forwardToPanel(tabId: number, message: unknown): void {
   }
 }
 
-// --- Async Event Types (forwarded from content script to panel) ---
-
-/**
- * Message types that represent async instrumentation events from the content script.
- * These are pushed directly to the DevTools panel without going through routeMessage().
- */
-const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
-  'EVENT_BATCH',
-  'LEAK_EVENT',
-  'TRACKBY_ISSUE',
-  'ONPUSH_RESULT',
-  'DEGRADED_MODE',
-  'ROUTE_CHANGED',
-  'TRACKING_STARTED',
-  'TRACKING_STOPPED',
-  'ERROR',
-]);
-
 // --- Message Handling ---
 
 chrome.runtime.onMessage.addListener(
   (
-    message: ExtensionMessage,
+    rawMessage: unknown,
     sender: chrome.runtime.MessageSender,
     sendResponse: (response?: unknown) => void
   ) => {
+    const message = normalizeExtensionMessage(rawMessage);
+    if (!message) {
+      sendResponse({ success: false, error: 'Invalid or unsupported message.' });
+      return false;
+    }
+
     // Check if this is an async event from the content script that should be forwarded to the panel
     const senderTabId = sender.tab?.id;
     if (senderTabId != null && ASYNC_EVENT_TYPES.has(message.type)) {
@@ -166,6 +199,26 @@ chrome.runtime.onMessage.addListener(
     return true;
   }
 );
+
+function normalizeExtensionMessage(value: unknown): ExtensionMessage | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.type !== 'string' || !MESSAGE_TYPES.has(value.type)) return null;
+
+  return {
+    type: value.type as MessageType,
+    payload: value.payload,
+    tabId: typeof value.tabId === 'number' && Number.isFinite(value.tabId)
+      ? value.tabId
+      : undefined,
+    timestamp: typeof value.timestamp === 'number' && Number.isFinite(value.timestamp)
+      ? value.timestamp
+      : Date.now(),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 // --- Tab Lifecycle ---
 

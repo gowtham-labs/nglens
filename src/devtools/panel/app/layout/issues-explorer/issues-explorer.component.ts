@@ -75,7 +75,7 @@ export class IssuesExplorerComponent {
     const groupConfig: Record<Issue['type'], { label: string; icon: string; order: number }> = {
       'render-hot': { label: 'Hot Components', icon: '🔥', order: 0 },
       'hotspot': { label: 'Performance Hotspots', icon: '📈', order: 1 },
-      'leak': { label: 'Memory Leaks', icon: '💧', order: 2 },
+      'leak': { label: 'Memory Risks', icon: '💧', order: 2 },
       'trackby': { label: 'Missing trackBy', icon: '🔄', order: 3 },
       'onpush': { label: 'OnPush Candidates', icon: '⚡', order: 4 },
       'zone-pollution': { label: 'Zone Pollution', icon: '⚡🔄', order: 5 },

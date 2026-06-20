@@ -6,11 +6,17 @@
  * 2. Relay messages between page script (CustomEvent) and background worker (chrome.runtime)
  * 3. Handle V1 MessageType protocol: SCAN_REQUEST, SCAN_RESULTS, OVERLAY_SHOW, OVERLAY_HIDE, DETECTION_STATUS, ERROR
  * 4. Handle V2 port-based panel commands: START_TRACKING, STOP_TRACKING, SELECT_COMPONENT, CLEAR_DATA
- * 5. Forward async page-script events to background: EVENT_BATCH, LEAK_EVENT, TRACKBY_ISSUE, ONPUSH_RESULT, DEGRADED_MODE
- * 6. Enforce PAGE_SCRIPT_TIMEOUT_MS for scan requests
+ * 5. Forward validated async page-script events to background for the DevTools panel
+ * 6. Enforce PAGE_SCRIPT_TIMEOUT_MS for request/response commands
  */
 
 import type { ExtensionMessage, MessageType, PageMessage } from '../types/messages';
+import {
+  isPageScriptAsyncEventType,
+  isPageScriptResponseType,
+  isPanelCommandType,
+  normalizePageMessage,
+} from '../utils/message-protocol';
 import {
   dispatchToPage,
   generateEventId,
@@ -21,34 +27,6 @@ import {
 
 /** Page script response timeout in ms (inlined to avoid shared chunk with page-script) */
 const PAGE_SCRIPT_TIMEOUT_MS = 3000;
-
-/**
- * Panel commands forwarded from background (originated from DevTools panel).
- * These are dispatched to the page-script via CustomEvent.
- */
-const PANEL_COMMANDS: ReadonlySet<MessageType> = new Set([
-  'START_TRACKING',
-  'STOP_TRACKING',
-  'SELECT_COMPONENT',
-  'CLEAR_DATA',
-]);
-
-/**
- * Async events from the page-script that should be forwarded to the background.
- * The background will relay these to the DevTools panel via port.
- */
-const PAGE_SCRIPT_ASYNC_EVENTS: ReadonlySet<MessageType> = new Set([
-  'EVENT_BATCH',
-  'LEAK_EVENT',
-  'TRACKBY_ISSUE',
-  'ONPUSH_RESULT',
-  'DEGRADED_MODE',
-  'ROUTE_CHANGED',
-  'TRACKING_STARTED',
-  'TRACKING_STOPPED',
-  'ERROR',
-  'ZONE_POLLUTION_EVENT',
-]);
 
 // --- Page Script Injection ---
 
@@ -92,9 +70,15 @@ const pendingScans = new Map<string, PendingScan>();
 
 function handlePageMessage(message: PageMessage): void {
   const { type, payload, eventId } = message;
-
-  // If this is a response to a pending scan, clear the timeout
   const pending = pendingScans.get(eventId);
+  const isPendingResponse = Boolean(pending && isPageScriptResponseType(type));
+  const isAsyncEvent = isPageScriptAsyncEventType(type);
+
+  if (!isPendingResponse && !isAsyncEvent) {
+    return;
+  }
+
+  // If this is a response to a pending scan, clear the timeout.
   if (pending) {
     clearTimeout(pending.timeoutId);
     pendingScans.delete(eventId);
@@ -122,7 +106,7 @@ function handleExtensionMessage(
   const { type, payload } = message;
 
   // --- V2: Panel commands forwarded from background ---
-  if (PANEL_COMMANDS.has(type)) {
+  if (isPanelCommandType(type)) {
     ensurePageScriptInjected();
     const eventId = generateEventId();
     dispatchToPageWithRetry(type, payload, eventId);
@@ -205,17 +189,21 @@ function handleNglensEvent(event: Event): void {
   const detail = customEvent.detail;
   if (!detail?.type) return;
 
-  // Only forward known async event types
-  if (PAGE_SCRIPT_ASYNC_EVENTS.has(detail.type as MessageType)) {
-    const extensionMessage: ExtensionMessage = {
-      type: detail.type as MessageType,
-      payload: detail.payload,
-      timestamp: Date.now(),
-    };
-    sendToBackground(extensionMessage).catch(() => {
-      // Background not available; silently ignore
-    });
-  }
+  const message = normalizePageMessage({
+    eventId: `legacy-${Date.now()}`,
+    type: detail.type,
+    payload: detail.payload,
+  });
+  if (!message || !isPageScriptAsyncEventType(message.type)) return;
+
+  const extensionMessage: ExtensionMessage = {
+    type: message.type,
+    payload: message.payload,
+    timestamp: Date.now(),
+  };
+  sendToBackground(extensionMessage).catch(() => {
+    // Background not available; silently ignore
+  });
 }
 
 // --- Initialization ---

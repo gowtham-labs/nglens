@@ -4,7 +4,7 @@
 
 ## Our Commitment
 
-ngLens is built with privacy as a core principle. All analysis happens locally in your browser. **No data ever leaves your machine.**
+ngLens is built with privacy as a core principle. All analysis happens locally in your browser. **Analysis data, page URLs, and source code never leave your machine.** Anonymous usage analytics are sent only if you explicitly opt in.
 
 ## What We Collect
 
@@ -67,7 +67,7 @@ If you select "No thanks" when prompted, or opt out later via settings:
 4. **Network Access:**
    - The only outbound network request is to Google Analytics (when opted in)
    - No analysis data, page URLs, or personal information is transmitted
-   - If analytics is declined, the extension makes zero network requests
+   - If analytics is declined, no analytics requests are made
 
 ## Third-Party Services
 
@@ -98,11 +98,11 @@ You can verify our privacy claims:
    - Open Chrome DevTools → Network tab
    - Use the extension
    - If opted in: only requests to `google-analytics.com/mp/collect`
-   - If opted out: zero network requests
+   - If opted out: no Google Analytics requests
 
 ## Your Data Rights
 
-Since we don't collect any data, there's nothing to:
+Since ngLens does not collect analysis data or personal data, there's nothing to:
 - Request access to
 - Request deletion of
 - Request modification of
