@@ -149,8 +149,7 @@ export class ZonePollutionDetector {
 
     const source = this.extractSource(task);
     const type = this.mapTaskType(task.type);
-    const stack = (typeof task.creationLocation === 'string' ? task.creationLocation : '') ||
-                  (new Error().stack ?? '');
+    const stack = this.getTaskStack(task);
     const library = extractLibraryFromStack(stack);
 
     const record: TaskRecord = {
@@ -162,6 +161,11 @@ export class ZonePollutionDetector {
     };
 
     this.insertIntoBuffer(record);
+  }
+
+  private getTaskStack(task: any): string {
+    const creationLocation = typeof task.creationLocation === 'string' ? task.creationLocation : '';
+    return creationLocation || (new Error().stack ?? '');
   }
 
   private extractSource(task: any): string {
@@ -324,15 +328,7 @@ export class ZonePollutionDetector {
     if (this.buffer.length === 0) return;
 
     // Group records by source
-    const sourceGroups = new Map<string, TaskRecord[]>();
-    for (const record of this.buffer) {
-      const existing = sourceGroups.get(record.source);
-      if (existing) {
-        existing.push(record);
-      } else {
-        sourceGroups.set(record.source, [record]);
-      }
-    }
+    const sourceGroups = this.groupRecordsBySource(this.buffer);
 
     // Compute metrics per source
     const windowStart = Math.max(this.startTime + STARTUP_DURATION_MS, now - WINDOW_MS);
@@ -344,29 +340,7 @@ export class ZonePollutionDetector {
     for (const [source, records] of sourceGroups) {
       const cdCount = records.filter(r => r.triggeredCd).length;
       totalCdCycles += cdCount;
-
-      const cdCyclesPerMinute = computeCdPerMinute(cdCount, effectiveWindowMs);
-      const severity = classifySeverity(cdCyclesPerMinute);
-
-      const lastRecord = records[records.length - 1];
-      const library = records.find(r => r.library)?.library;
-
-      const entry: PollutionSourceMetrics = {
-        source,
-        type: lastRecord.type,
-        library,
-        cdCyclesPerMinute,
-        severity,
-        taskCount: records.length,
-        lastSeen: lastRecord.timestamp,
-      };
-
-      // Generate fix suggestions for medium+ severity
-      if (severity !== 'low') {
-        entry.fixSuggestion = getFixSuggestion(source, library);
-      }
-
-      metrics.push(entry);
+      metrics.push(this.createSourceMetric(source, records, cdCount, effectiveWindowMs));
     }
 
     // Rank sources and take top 10
@@ -382,6 +356,47 @@ export class ZonePollutionDetector {
     });
   }
 
+  private groupRecordsBySource(records: TaskRecord[]): Map<string, TaskRecord[]> {
+    const groups = new Map<string, TaskRecord[]>();
+    for (const record of records) {
+      const existing = groups.get(record.source);
+      if (existing) {
+        existing.push(record);
+      } else {
+        groups.set(record.source, [record]);
+      }
+    }
+    return groups;
+  }
+
+  private createSourceMetric(
+    source: string,
+    records: TaskRecord[],
+    cdCount: number,
+    effectiveWindowMs: number
+  ): PollutionSourceMetrics {
+    const cdCyclesPerMinute = computeCdPerMinute(cdCount, effectiveWindowMs);
+    const severity = classifySeverity(cdCyclesPerMinute);
+    const lastRecord = records[records.length - 1];
+    const library = records.find(r => r.library)?.library;
+
+    const metric: PollutionSourceMetrics = {
+      source,
+      type: lastRecord.type,
+      library,
+      cdCyclesPerMinute,
+      severity,
+      taskCount: records.length,
+      lastSeen: lastRecord.timestamp,
+    };
+
+    if (severity !== 'low') {
+      metric.fixSuggestion = getFixSuggestion(source, library);
+    }
+
+    return metric;
+  }
+
   private adjustBatchFrequency(): void {
     const guard = PerformanceGuard.getInstance();
     if (guard.isDegraded() && this.currentBatchIntervalMs !== DEGRADED_BATCH_INTERVAL_MS) {
@@ -393,28 +408,27 @@ export class ZonePollutionDetector {
   // ─── Event Emission ────────────────────────────────────────────────────────
 
   private emitPollutionEvent(payload: ZonePollutionEvent): void {
-    const message = {
-      eventId: `zpd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: 'ZONE_POLLUTION_EVENT',
-      payload,
-    };
-
-    globalThis.dispatchEvent(
-      new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message })
-    );
+    this.dispatchZoneEvent(payload, `zpd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   }
 
   private emitZonelessEvent(): void {
-    const message = {
-      eventId: `zpd-zoneless-${Date.now()}`,
-      type: 'ZONE_POLLUTION_EVENT',
-      payload: {
+    this.dispatchZoneEvent(
+      {
         sources: [],
         totalCdCycles: 0,
         windowDurationMs: 0,
         timestamp: performance.now(),
         zonelessMode: true,
       },
+      `zpd-zoneless-${Date.now()}`
+    );
+  }
+
+  private dispatchZoneEvent(payload: any, eventId: string): void {
+    const message = {
+      eventId,
+      type: 'ZONE_POLLUTION_EVENT',
+      payload,
     };
 
     globalThis.dispatchEvent(

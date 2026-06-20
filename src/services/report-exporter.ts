@@ -15,6 +15,60 @@ import type { PerformanceScore } from '../types/scoring';
 import { sanitizeForExport } from '../utils/privacy';
 import { safeSerialize } from '../utils/serializer';
 
+function hasIssues(data: ReportData | null | undefined): data is ReportData {
+  return Boolean(data?.issues && data.issues.length > 0);
+}
+
+function getExportTimestamp(data: ReportData): string {
+  return formatTimestampForFilename(new Date(data.timestamp));
+}
+
+function severityOrderIndex(severity: Severity): number {
+  switch (severity) {
+    case 'critical':
+      return 0;
+    case 'high':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'low':
+      return 3;
+    case 'info':
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function getJsonContent(data: ReportData): string {
+  const sanitized = sanitizeForExport(data);
+  if (sanitized === null) {
+    return safeSerialize(data);
+  }
+
+  try {
+    return JSON.stringify(sanitized, null, 2);
+  } catch {
+    return safeSerialize(data);
+  }
+}
+
+function escapeMarkdownCell(value: string): string {
+  return value.replace(/\|/g, '\\|');
+}
+
+function buildIssueRow(issue: AnalysisIssue): string {
+  const component = escapeMarkdownCell(issue.component);
+  const severity = severityLabel(issue.severity);
+  const title = escapeMarkdownCell(issue.title);
+  const recommendation = escapeMarkdownCell(issue.recommendation);
+  return `| ${component} | ${severity} | ${title} | ${recommendation} |`;
+}
+
+function recommendationLine(issue: AnalysisIssue, index: number): string {
+  return [`  ${index + 1}. [${severityLabel(issue.severity)}] ${issue.title}`, `     ${issue.recommendation}`].join('\n');
+}
+
 /**
  * Formats a Date as YYYYMMDD-HHmmss for use in filenames.
  */
@@ -126,16 +180,8 @@ export function buildReportData(
   };
 
   // Build action items from issues (simple ranking by severity)
-  const severityOrder: Record<Severity, number> = {
-    critical: 0,
-    high: 1,
-    medium: 2,
-    low: 3,
-    info: 4,
-  };
-
   const sortedIssues = [...issues].sort(
-    (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
+    (a, b) => severityOrderIndex(a.severity) - severityOrderIndex(b.severity)
   );
 
   const actionItems: ActionItem[] = sortedIssues.map((issue, index) => ({
@@ -166,26 +212,12 @@ export function buildReportData(
  * No network requests are made.
  */
 export function exportAsJSON(data: ReportData): void {
-  if (!data?.issues || data.issues.length === 0) {
+  if (!hasIssues(data)) {
     return;
   }
 
-  const sanitized = sanitizeForExport(data);
-
-  // Use safeSerialize as fallback if sanitizeForExport returns null
-  let jsonContent: string;
-  if (sanitized === null) {
-    jsonContent = safeSerialize(data);
-  } else {
-    try {
-      jsonContent = JSON.stringify(sanitized, null, 2);
-    } catch {
-      jsonContent = safeSerialize(data);
-    }
-  }
-
-  const timestamp = formatTimestampForFilename(new Date(data.timestamp));
-  const filename = `angular-perf-report-${timestamp}.json`;
+  const jsonContent = getJsonContent(data);
+  const filename = `angular-perf-report-${getExportTimestamp(data)}.json`;
 
   triggerDownload(jsonContent, filename, 'application/json');
 }
@@ -201,21 +233,12 @@ export function exportAsJSON(data: ReportData): void {
  * No network requests are made.
  */
 export function exportAsMarkdown(data: ReportData): void {
-  if (!data?.issues || data.issues.length === 0) {
+  if (!hasIssues(data)) {
     return;
   }
 
   const counts = countBySeverity(data.issues);
-
-  const escapePipe = (str: string) => str.replace(/\|/g, '\\|');
-
-  const issueRows = data.issues.map((issue) => {
-    const component = escapePipe(issue.component);
-    const severity = severityLabel(issue.severity);
-    const title = escapePipe(issue.title);
-    const recommendation = escapePipe(issue.recommendation);
-    return `| ${component} | ${severity} | ${title} | ${recommendation} |`;
-  });
+  const issueRows = data.issues.map(buildIssueRow);
 
   const lines = [
     '# Angular Performance Inspector Report',
@@ -246,8 +269,7 @@ export function exportAsMarkdown(data: ReportData): void {
   ];
 
   const markdownContent = lines.join('\n');
-  const timestamp = formatTimestampForFilename(new Date(data.timestamp));
-  const filename = `angular-perf-report-${timestamp}.md`;
+  const filename = `angular-perf-report-${getExportTimestamp(data)}.md`;
 
   triggerDownload(markdownContent, filename, 'text/markdown');
 }
@@ -260,19 +282,13 @@ export function exportAsMarkdown(data: ReportData): void {
  * No network requests are made.
  */
 export async function copyToClipboard(data: ReportData): Promise<boolean> {
-  if (!data?.issues || data.issues.length === 0) {
+  if (!hasIssues(data)) {
     return false;
   }
 
   const counts = countBySeverity(data.issues);
   const topIssues = data.issues.slice(0, 5);
-
-  const recommendationLines = topIssues.map(
-    (issue, i) => [
-      `  ${i + 1}. [${severityLabel(issue.severity)}] ${issue.title}`,
-      `     ${issue.recommendation}`,
-    ].join('\n')
-  );
+  const recommendationLines = topIssues.map(recommendationLine);
 
   const lines = [
     'Angular Performance Inspector Report',

@@ -70,18 +70,9 @@ export class RenderTracker {
       this.mutationObserver.disconnect();
       this.mutationObserver = null;
     }
-    if (this.flushInterval !== null) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
-    if (this.discoveryInterval !== null) {
-      clearInterval(this.discoveryInterval);
-      this.discoveryInterval = null;
-    }
-    if (this.frameRequestId !== null) {
-      cancelAnimationFrame(this.frameRequestId);
-      this.frameRequestId = null;
-    }
+    this.stopBatching();
+    this.stopComponentDiscovery();
+    this.cancelPendingFrame();
     this.unhookZoneJs();
     this.componentElements.clear();
     this.pendingComponents.clear();
@@ -109,6 +100,20 @@ export class RenderTracker {
   private startComponentDiscovery(): void {
     // Re-discover every 3 seconds to catch lazy-loaded components
     this.discoveryInterval = globalThis.setInterval(() => this.discoverComponents(), 3000);
+  }
+
+  private stopComponentDiscovery(): void {
+    if (this.discoveryInterval !== null) {
+      clearInterval(this.discoveryInterval);
+      this.discoveryInterval = null;
+    }
+  }
+
+  private cancelPendingFrame(): void {
+    if (this.frameRequestId !== null) {
+      cancelAnimationFrame(this.frameRequestId);
+      this.frameRequestId = null;
+    }
   }
 
   private discoverComponents(): void {
@@ -194,12 +199,7 @@ export class RenderTracker {
     if (now - this.lastRouteChangeTime < 500) return;
     this.lastRouteChangeTime = now;
 
-    const message = {
-      eventId: `route-${Date.now()}`,
-      type: 'ROUTE_CHANGED',
-      payload: { timestamp: now },
-    };
-    globalThis.dispatchEvent(new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message }));
+    this.dispatchToContent('ROUTE_CHANGED', { timestamp: now }, 'route');
   }
 
   private processPendingMutations(): void {
@@ -297,6 +297,23 @@ export class RenderTracker {
     this.flushInterval = globalThis.setInterval(() => this.flush(), 100);
   }
 
+  private stopBatching(): void {
+    if (this.flushInterval !== null) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
+  }
+
+  private dispatchToContent(type: string, payload: unknown, eventIdPrefix: string): void {
+    const message = {
+      eventId: `${eventIdPrefix}-${Date.now()}`,
+      type,
+      payload,
+    };
+
+    globalThis.dispatchEvent(new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message }));
+  }
+
   private flush(): void {
     const events = this.clearBuffer();
     if (events.length === 0) return;
@@ -307,12 +324,6 @@ export class RenderTracker {
       sequenceNumber: ++this.batchSequence,
     };
 
-    const message = {
-      eventId: `batch-${batch.sequenceNumber}-${Date.now()}`,
-      type: 'EVENT_BATCH',
-      payload: batch,
-    };
-
-    globalThis.dispatchEvent(new CustomEvent(PAGE_TO_CONTENT_EVENT, { detail: message }));
+    this.dispatchToContent('EVENT_BATCH', batch, `batch-${batch.sequenceNumber}`);
   }
 }

@@ -37,6 +37,17 @@ const LIFECYCLE_HOOKS = new Set([
   'ngAfterViewChecked',
 ]);
 
+const TEMPLATE_COMPUTATION_PREFIXES = [
+  'get',
+  'compute',
+  'calculate',
+  'format',
+  'is',
+  'has',
+  'should',
+  'can',
+];
+
 // --- Educational content for detected issues ---
 
 const FUNCTION_IN_TEMPLATE_CONTENT = {
@@ -85,13 +96,13 @@ export class BestPracticesDetector extends BaseAnalyzer {
 
     const components = findAngularComponents();
     const limit = Math.min(components.length, config.maxElements ?? MAX_ELEMENTS_PER_SCAN);
+    const ng = (globalThis as any).ng;
 
     for (let i = 0; i < limit; i++) {
       const element = components[i];
       const componentName = getComponentName(element);
 
       // Get the Angular component instance via globalThis.ng
-      const ng = (globalThis as any).ng;
       if (!ng?.getComponent) {
         break;
       }
@@ -159,14 +170,13 @@ export class BestPracticesDetector extends BaseAnalyzer {
       const proto = Object.getPrototypeOf(component);
       if (!proto) return issues;
 
-      const cmpDef = component.constructor?.ɵcmp;
+      const templateString = this.getCompiledTemplateString(component);
       const publicMethods = this.collectPublicMethods(proto);
 
-      if (cmpDef?.template) {
+      if (templateString) {
         // Accurate path: check compiled template function for method references
-        const templateStr = cmpDef.template.toString();
         for (const methodName of publicMethods) {
-          if (templateStr.includes(methodName)) {
+          if (templateString.includes(methodName)) {
             issues.push(this.createTemplateFunctionIssue(componentName, methodName, element));
           }
         }
@@ -190,21 +200,14 @@ export class BestPracticesDetector extends BaseAnalyzer {
    * and private/internal methods.
    */
   private collectPublicMethods(proto: any): string[] {
-    const methods: string[] = [];
-    const propertyNames = Object.getOwnPropertyNames(proto);
-
-    for (const name of propertyNames) {
-      if (name === 'constructor') continue;
-      if (name.startsWith('_')) continue;
-      if (LIFECYCLE_HOOKS.has(name)) continue;
-
-      const descriptor = Object.getOwnPropertyDescriptor(proto, name);
-      if (descriptor && typeof descriptor.value === 'function') {
-        methods.push(name);
-      }
-    }
-
-    return methods;
+    return Object.getOwnPropertyNames(proto)
+      .filter((name) => name !== 'constructor')
+      .filter((name) => !name.startsWith('_'))
+      .filter((name) => !LIFECYCLE_HOOKS.has(name))
+      .filter((name) => {
+        const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+        return Boolean(descriptor && typeof descriptor.value === 'function');
+      });
   }
 
   /**
@@ -218,16 +221,12 @@ export class BestPracticesDetector extends BaseAnalyzer {
     if (methodName === 'toString' || methodName === 'valueOf') return false;
 
     // Flag methods that look like they compute/return values
-    return (
-      methodName.startsWith('get') ||
-      methodName.startsWith('compute') ||
-      methodName.startsWith('calculate') ||
-      methodName.startsWith('format') ||
-      methodName.startsWith('is') ||
-      methodName.startsWith('has') ||
-      methodName.startsWith('should') ||
-      methodName.startsWith('can')
-    );
+    return TEMPLATE_COMPUTATION_PREFIXES.some((prefix) => methodName.startsWith(prefix));
+  }
+
+  private getCompiledTemplateString(component: any): string | null {
+    const template = component.constructor?.ɵcmp?.template;
+    return typeof template === 'function' ? template.toString() : null;
   }
 
   /**
@@ -244,15 +243,14 @@ export class BestPracticesDetector extends BaseAnalyzer {
     const issues: AnalysisIssue[] = [];
 
     try {
-      const cmpDef = component.constructor?.ɵcmp;
+      const templateString = this.getCompiledTemplateString(component);
 
-      if (cmpDef?.template) {
-        const templateStr = cmpDef.template.toString();
+      if (templateString) {
 
         const hasNgFor =
-          templateStr.includes('ngForOf') || templateStr.includes('NgForOf');
+          templateString.includes('ngForOf') || templateString.includes('NgForOf');
         const hasTrackBy =
-          templateStr.includes('ngForTrackBy') || templateStr.includes('trackBy');
+          templateString.includes('ngForTrackBy') || templateString.includes('trackBy');
 
         if (hasNgFor && !hasTrackBy) {
           issues.push(this.createMissingTrackByIssue(componentName, element));

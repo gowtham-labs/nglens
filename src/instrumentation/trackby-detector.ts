@@ -17,6 +17,10 @@ export class TrackByDetector {
   private collectionThreshold = 100;
   private issueIdCounter = 0;
 
+  private isObjectLike(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object';
+  }
+
   /**
    * Sets the collection size threshold above which a missing trackBy
    * triggers a warning. Default is 100.
@@ -95,7 +99,6 @@ export class TrackByDetector {
     // Angular may store a numeric index in __ngContext__ pointing to the LView
     // Try to access via ng debug utilities
     try {
-      const getComponent = (globalThis as any).ng?.getComponent;
       const getContext = (globalThis as any).ng?.getContext;
       if (getContext) {
         const ctx = getContext(element);
@@ -135,7 +138,7 @@ export class TrackByDetector {
    * for characteristic properties.
    */
   private isNgForOfDirective(obj: any): boolean {
-    if (!obj || typeof obj !== 'object') return false;
+    if (!this.isObjectLike(obj)) return false;
     // NgForOf has _ngForOf (the iterable) and _trackByFn properties
     return '_ngForOf' in obj || (
       'ngForOf' in obj && '_differ' in obj
@@ -146,10 +149,21 @@ export class TrackByDetector {
    * Determines if an object is a ViewContainerRef that may host NgFor embedded views.
    */
   private isViewContainerRef(obj: any): boolean {
-    if (!obj || typeof obj !== 'object') return false;
+    if (!this.isObjectLike(obj)) return false;
     return '_lContainer' in obj || (
       '_hostLView' in obj && '_hostTNode' in obj
     );
+  }
+
+  private inspectPotentialEmbeddedView(candidate: unknown, element: Element, issues: TrackByIssue[]): void {
+    if (!Array.isArray(candidate)) return;
+
+    for (let j = 0; j < candidate.length; j++) {
+      const item = candidate[j];
+      if (this.isNgForOfDirective(item)) {
+        this.checkNgForOf(item, element, issues);
+      }
+    }
   }
 
   /**
@@ -162,20 +176,28 @@ export class TrackByDetector {
 
       // LContainer stores embedded views starting at a header offset
       for (let i = 0; i < lContainer.length; i++) {
-        const embeddedView = lContainer[i];
-        if (Array.isArray(embeddedView)) {
-          // Check embedded view for NgForOf context
-          for (let j = 0; j < embeddedView.length; j++) {
-            const item = embeddedView[j];
-            if (this.isNgForOfDirective(item)) {
-              this.checkNgForOf(item, element, issues);
-            }
-          }
-        }
+        this.inspectPotentialEmbeddedView(lContainer[i], element, issues);
       }
     } catch {
       // Skip if container inspection fails
     }
+  }
+
+  private createTrackByIssue(
+    componentName: string,
+    collectionProperty: string,
+    collectionSize: number
+  ): TrackByIssue {
+    return {
+      id: `trackby-${++this.issueIdCounter}-${Date.now()}`,
+      componentName,
+      collectionProperty,
+      collectionSize,
+      severity: 'WARNING',
+      recommendation: `Add a trackBy function to the *ngFor directive on "${collectionProperty}" ` +
+        `(${collectionSize} items). Without trackBy, Angular recreates all DOM elements when ` +
+        `the collection changes. Example: trackBy: (index, item) => item.id`,
+    };
   }
 
   /**
@@ -199,16 +221,7 @@ export class TrackByDetector {
     const componentName = this.getComponentName(element);
     const collectionProperty = this.getCollectionPropertyName(ngForOf);
 
-    issues.push({
-      id: `trackby-${++this.issueIdCounter}-${Date.now()}`,
-      componentName,
-      collectionProperty,
-      collectionSize,
-      severity: 'WARNING',
-      recommendation: `Add a trackBy function to the *ngFor directive on "${collectionProperty}" ` +
-        `(${collectionSize} items). Without trackBy, Angular recreates all DOM elements when ` +
-        `the collection changes. Example: trackBy: (index, item) => item.id`,
-    });
+    issues.push(this.createTrackByIssue(componentName, collectionProperty, collectionSize));
   }
 
   /**

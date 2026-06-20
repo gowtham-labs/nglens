@@ -40,6 +40,9 @@ interface IssueRule {
   gainReason: string;
 }
 
+type AssessmentRule = Omit<IssueRule, 'pattern'>;
+type AssessmentDefaults = Record<IssueCategory, AssessmentRule>;
+
 const ISSUE_RULES: IssueRule[] = [
   // trackBy / track expression issues — Easy + Large
   {
@@ -189,7 +192,7 @@ const ISSUE_RULES: IssueRule[] = [
 /**
  * Category-level fallback rules when no specific issue title pattern matches.
  */
-const CATEGORY_DEFAULTS: Record<IssueCategory, { difficulty: FixDifficulty; gain: ExpectedGain; difficultyReason: string; gainReason: string }> = {
+const CATEGORY_DEFAULTS: AssessmentDefaults = {
   'change-detection': {
     difficulty: 'easy',
     gain: 'large',
@@ -252,6 +255,29 @@ const CATEGORY_DEFAULTS: Record<IssueCategory, { difficulty: FixDifficulty; gain
   },
 };
 
+const UNKNOWN_CATEGORY_FALLBACK: DifficultyAssessment = {
+  difficulty: 'moderate',
+  gain: 'small',
+  difficultyReason: 'Unable to determine difficulty - review the issue details',
+  gainReason: 'Expected gain is uncertain without more context',
+};
+
+const LARGE_GAIN = 'large';
+
+function toAssessment(rule: AssessmentRule): DifficultyAssessment {
+  return {
+    difficulty: rule.difficulty,
+    gain: rule.gain,
+    difficultyReason: rule.difficultyReason,
+    gainReason: rule.gainReason,
+  };
+}
+
+function getRuleByTitle(title: string): IssueRule | undefined {
+  const titleLower = title.toLowerCase();
+  return ISSUE_RULES.find((rule) => titleLower.includes(rule.pattern));
+}
+
 /**
  * Assess the difficulty and expected gain for a single analysis issue.
  *
@@ -259,38 +285,27 @@ const CATEGORY_DEFAULTS: Record<IssueCategory, { difficulty: FixDifficulty; gain
  * Falls back to category-level defaults if no pattern matches.
  */
 export function assessDifficulty(issue: AnalysisIssue): DifficultyAssessment {
-  const titleLower = issue.title.toLowerCase();
-
-  // Check specific issue rules by pattern matching on title
-  for (const rule of ISSUE_RULES) {
-    if (titleLower.includes(rule.pattern)) {
-      return {
-        difficulty: rule.difficulty,
-        gain: rule.gain,
-        difficultyReason: rule.difficultyReason,
-        gainReason: rule.gainReason,
-      };
-    }
+  const issueRule = getRuleByTitle(issue.title);
+  if (issueRule) {
+    return toAssessment(issueRule);
   }
 
   // Fall back to category defaults
   const categoryDefault = CATEGORY_DEFAULTS[issue.category];
   if (categoryDefault) {
-    return {
-      difficulty: categoryDefault.difficulty,
-      gain: categoryDefault.gain,
-      difficultyReason: categoryDefault.difficultyReason,
-      gainReason: categoryDefault.gainReason,
-    };
+    return toAssessment(categoryDefault);
   }
 
   // Ultimate fallback for unknown categories
-  return {
-    difficulty: 'moderate',
-    gain: 'small',
-    difficultyReason: 'Unable to determine difficulty — review the issue details',
-    gainReason: 'Expected gain is uncertain without more context',
-  };
+  return UNKNOWN_CATEGORY_FALLBACK;
+}
+
+function isQuickWin(assessment: DifficultyAssessment): boolean {
+  return assessment.difficulty === 'easy' && (assessment.gain === LARGE_GAIN || assessment.gain === 'medium');
+}
+
+function gainRank(gain: ExpectedGain): number {
+  return gain === LARGE_GAIN ? 0 : 1;
 }
 
 /**
@@ -300,19 +315,13 @@ export function assessDifficulty(issue: AnalysisIssue): DifficultyAssessment {
  * Returns issues sorted by expected gain descending (large before medium).
  */
 export function getQuickWins(issues: AnalysisIssue[]): AnalysisIssue[] {
-  const quickWins: Array<{ issue: AnalysisIssue; assessment: DifficultyAssessment }> = [];
-
-  for (const issue of issues) {
-    const assessment = assessDifficulty(issue);
-    if (assessment.difficulty === 'easy' && (assessment.gain === 'large' || assessment.gain === 'medium')) {
-      quickWins.push({ issue, assessment });
-    }
-  }
+  const quickWins = issues
+    .map((issue) => ({ issue, assessment: assessDifficulty(issue) }))
+    .filter((entry) => isQuickWin(entry.assessment));
 
   // Sort: large gain first, then medium
   quickWins.sort((a, b) => {
-    if (a.assessment.gain === b.assessment.gain) return 0;
-    return a.assessment.gain === 'large' ? -1 : 1;
+    return gainRank(a.assessment.gain) - gainRank(b.assessment.gain);
   });
 
   return quickWins.map((entry) => entry.issue);
