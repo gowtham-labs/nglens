@@ -495,7 +495,7 @@ export class DomInspector extends BaseAnalyzer {
       return `${tag}#${element.id}`;
     }
     // Use Angular host attribute as a unique selector
-    for (const attr of element.attributes) {
+    for (const attr of Array.from(element.attributes)) {
       if (attr.name.startsWith('_nghost-')) {
         return `${tag}[${attr.name}]`;
       }

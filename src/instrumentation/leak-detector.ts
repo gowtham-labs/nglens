@@ -26,6 +26,9 @@ let nextSubscriptionId = 0;
 /** Unique ID counter for timer records */
 let nextTimerId = 0;
 
+/** Timers created just before Angular exposes a component instance can still belong to that component. */
+const UNOWNED_TIMER_ADOPTION_WINDOW_MS = 2000;
+
 /**
  * Generates a unique subscription record ID.
  */
@@ -77,7 +80,15 @@ export class LeakDetector {
    * Maps timer IDs (from setInterval/setTimeout) to the component that owns them.
    * Used to associate clearInterval/clearTimeout calls with the correct timer record.
    */
-  private readonly timerToComponent = new Map<number, { componentId: string; recordId: string }>();
+  private readonly timerToComponent = new Map<unknown, { componentId: string; recordId: string }>();
+
+  /**
+   * Timers observed without a component context. Angular often runs ngOnInit
+   * before our MutationObserver can resolve the host element to a component,
+   * so these candidates are adopted by the newly tracked component when the
+   * stack or timing strongly suggests ownership.
+   */
+  private readonly unownedTimers = new Map<unknown, { record: TimerRecord; stack: string }>();
 
   /** Original setInterval function, stored for restoration on stop() */
   private originalSetInterval: ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => number) | null = null;
@@ -131,6 +142,7 @@ export class LeakDetector {
     this.unhookTimerCreation();
     this.activeComponents.clear();
     this.timerToComponent.clear();
+    this.unownedTimers.clear();
     this.currentComponentId = null;
     this.contextStack.length = 0;
   }
@@ -142,14 +154,16 @@ export class LeakDetector {
    * Sets this component as the current context for subscription/timer tracking.
    */
   onComponentCreated(componentId: string, componentName: string): void {
-    this.activeComponents.set(componentId, {
+    const lifecycle: ComponentLifecycle = {
       componentId,
       componentName,
       createdAt: performance.now(),
       destroyedAt: null,
       subscriptions: [],
       timers: [],
-    });
+    };
+    this.activeComponents.set(componentId, lifecycle);
+    this.adoptRecentUnownedTimers(componentId, lifecycle);
     // Set as current component context so subscriptions/timers created
     // during component initialization are associated with this component
     this.currentComponentId = componentId;
@@ -192,7 +206,7 @@ export class LeakDetector {
         componentId,
         leakType: 'timer',
         severity: 'WARNING',
-        source: timer.type,
+        source: this.timerSourceLabel(timer.type),
         createdAt: timer.createdAt,
         detectedAt: performance.now(),
         lifecycleState: 'destroyed',
@@ -327,7 +341,8 @@ export class LeakDetector {
       originalSetTimeout: this.originalSetTimeout,
       originalClearInterval: this.originalClearInterval,
       originalClearTimeout: this.originalClearTimeout,
-      markTimerCleared: (id: number) => this.markTimerCleared(id),
+      markTimerCleared: (id: unknown) => this.markTimerCleared(id),
+      trackTimer: (id: unknown, type: TimerRecord['type'], stack: string) => this.trackTimer(id, type, stack),
     });
 
     // Patch setInterval
@@ -339,21 +354,7 @@ export class LeakDetector {
       const state = getTimerState();
       if (!state.originalSetInterval) return 0;
       const timerId = state.originalSetInterval(handler, timeout, ...args);
-
-      if (state.running && state.currentComponentId) {
-        const componentId = state.currentComponentId;
-        const lifecycle = state.activeComponents.get(componentId);
-        if (lifecycle) {
-          const record: TimerRecord = {
-            id: generateTimerId(),
-            type: 'interval',
-            createdAt: performance.now(),
-            cleared: false,
-          };
-          lifecycle.timers.push(record);
-          state.timerToComponent.set(timerId, { componentId, recordId: record.id });
-        }
-      }
+      state.trackTimer(timerId, 'interval', new Error().stack ?? '');
 
       return timerId;
     };
@@ -367,21 +368,7 @@ export class LeakDetector {
       const state = getTimerState();
       if (!state.originalSetTimeout) return 0;
       const timerId = state.originalSetTimeout(handler, timeout, ...args);
-
-      if (state.running && state.currentComponentId) {
-        const componentId = state.currentComponentId;
-        const lifecycle = state.activeComponents.get(componentId);
-        if (lifecycle) {
-          const record: TimerRecord = {
-            id: generateTimerId(),
-            type: 'timeout',
-            createdAt: performance.now(),
-            cleared: false,
-          };
-          lifecycle.timers.push(record);
-          state.timerToComponent.set(timerId, { componentId, recordId: record.id });
-        }
-      }
+      state.trackTimer(timerId, 'timeout', new Error().stack ?? '');
 
       return timerId;
     };
@@ -434,9 +421,16 @@ export class LeakDetector {
   /**
    * Marks a timer as cleared by looking up its component association.
    */
-  private markTimerCleared(timerId: number): void {
+  private markTimerCleared(timerId: unknown): void {
     const mapping = this.timerToComponent.get(timerId);
-    if (!mapping) return;
+    if (!mapping) {
+      const unowned = this.unownedTimers.get(timerId);
+      if (unowned) {
+        unowned.record.cleared = true;
+        this.unownedTimers.delete(timerId);
+      }
+      return;
+    }
 
     const lifecycle = this.activeComponents.get(mapping.componentId);
     if (lifecycle) {
@@ -446,6 +440,67 @@ export class LeakDetector {
       }
     }
     this.timerToComponent.delete(timerId);
+  }
+
+  private trackTimer(timerId: unknown, type: TimerRecord['type'], stack: string): void {
+    if (!this.running) return;
+
+    const record: TimerRecord = {
+      id: generateTimerId(),
+      type,
+      createdAt: performance.now(),
+      cleared: false,
+    };
+
+    if (this.currentComponentId) {
+      const componentId = this.currentComponentId;
+      const lifecycle = this.activeComponents.get(componentId);
+      if (lifecycle) {
+        lifecycle.timers.push(record);
+        this.timerToComponent.set(timerId, { componentId, recordId: record.id });
+        return;
+      }
+    }
+
+    if (!this.isLikelyInstrumentationTimer(stack)) {
+      this.unownedTimers.set(timerId, { record, stack });
+    }
+  }
+
+  private adoptRecentUnownedTimers(componentId: string, lifecycle: ComponentLifecycle): void {
+    const componentName = lifecycle.componentName;
+    const createdAt = lifecycle.createdAt;
+
+    for (const [timerId, pending] of this.unownedTimers) {
+      if (pending.record.cleared) {
+        this.unownedTimers.delete(timerId);
+        continue;
+      }
+
+      const closeToComponentCreation =
+        Math.abs(createdAt - pending.record.createdAt) <= UNOWNED_TIMER_ADOPTION_WINDOW_MS;
+      const stackMentionsComponent = pending.stack.includes(componentName);
+
+      if (!stackMentionsComponent && !closeToComponentCreation) continue;
+
+      lifecycle.timers.push(pending.record);
+      this.timerToComponent.set(timerId, { componentId, recordId: pending.record.id });
+      this.unownedTimers.delete(timerId);
+    }
+  }
+
+  private isLikelyInstrumentationTimer(stack: string): boolean {
+    const applicationFrames = stack
+      .split('\n')
+      .slice(1)
+      .filter(line => !line.includes('chrome-extension://') && !line.includes('/page-script.js'))
+      .filter(line => line.trim().length > 0);
+
+    return stack.includes('chrome-extension://') && applicationFrames.length === 0;
+  }
+
+  private timerSourceLabel(type: TimerRecord['type']): string {
+    return type === 'interval' ? 'setInterval' : 'setTimeout';
   }
 
   /**
@@ -528,7 +583,7 @@ export class LeakDetector {
    */
   popContext(): void {
     this.contextStack.pop();
-    this.currentComponentId = this.contextStack.at(-1) ?? null;
+    this.currentComponentId = this.contextStack[this.contextStack.length - 1] ?? null;
   }
 
   /**
@@ -593,6 +648,7 @@ export class LeakDetector {
 
       for (const mutation of mutations) {
         this.processAddedNodes(mutation.addedNodes, ng);
+        this.processRemovedNodes(mutation.removedNodes);
       }
     });
 
@@ -607,18 +663,45 @@ export class LeakDetector {
    * Angular component instances to track.
    */
   private processAddedNodes(nodes: NodeList, ng: NgGlobals): void {
-    for (const node of nodes) {
+    for (const node of Array.from(nodes)) {
       if (node instanceof HTMLElement) {
         this.checkAndTrackElement(node, ng);
         // Also check child elements for nested components
         const children = node.querySelectorAll('*');
-        for (const child of children) {
+        for (const child of Array.from(children)) {
           if (child instanceof HTMLElement) {
             this.checkAndTrackElement(child, ng);
           }
         }
       }
     }
+  }
+
+  /**
+   * Processes removed DOM nodes and treats tracked component hosts as destroyed.
+   * This catches components that do not implement ngOnDestroy and environments
+   * where DestroyRef is not reachable through Angular's debug APIs.
+   */
+  private processRemovedNodes(nodes: NodeList): void {
+    for (const node of Array.from(nodes)) {
+      if (node instanceof HTMLElement) {
+        this.destroyTrackedElement(node);
+        const children = node.querySelectorAll('[data-nglens-tracked]');
+        for (const child of Array.from(children)) {
+          if (child instanceof HTMLElement) {
+            this.destroyTrackedElement(child);
+          }
+        }
+      }
+    }
+  }
+
+  private destroyTrackedElement(element: HTMLElement): void {
+    const componentId = element.dataset['nglensTracked'];
+    if (!componentId) return;
+
+    this.onComponentDestroyed(componentId);
+    delete element.dataset['nglensTracked'];
   }
 
   /**
@@ -646,6 +729,8 @@ export class LeakDetector {
 
       // Hook destruction via DestroyRef if available (Angular 17+)
       this.hookDestroyRef(element, componentId, ng);
+
+      this.setCurrentComponentContext(null);
     } catch {
       // Element may not be an Angular component; skip silently
     }
@@ -670,7 +755,9 @@ export class LeakDetector {
 
       this.markAsTracked(element, componentId);
       this.onComponentCreated(componentId, componentName);
+      this.patchLifecycleHooks(instance, componentId);
       this.hookDestroyRef(element, componentId, ng);
+      this.setCurrentComponentContext(null);
     } catch {
       // Skip components that can't be tracked
     }
@@ -691,7 +778,7 @@ export class LeakDetector {
       const injector = ng.getOwningInjector?.(element);
       if (injector) {
         const destroyRef = injector.get?.(this.getDestroyRefToken(ng));
-        if (destroyRef && typeof destroyRef.onDestroy === 'function') {
+        if (this.isDestroyRef(destroyRef)) {
           destroyRef.onDestroy(() => {
             this.onComponentDestroyed(componentId);
           });
@@ -704,8 +791,11 @@ export class LeakDetector {
       if (component && typeof component.ngOnDestroy === 'function') {
         const originalOnDestroy = component.ngOnDestroy.bind(component);
         component.ngOnDestroy = () => {
-          this.onComponentDestroyed(componentId);
-          originalOnDestroy();
+          try {
+            originalOnDestroy();
+          } finally {
+            this.onComponentDestroyed(componentId);
+          }
         };
       }
     } catch {
@@ -747,7 +837,7 @@ export class LeakDetector {
 
       // Try to get ApplicationRef from the injector
       const appRef = injector.get?.(this.getApplicationRefToken());
-      return appRef ?? null;
+      return this.isApplicationRef(appRef) ? appRef : null;
     } catch {
       return null;
     }
@@ -762,6 +852,18 @@ export class LeakDetector {
       return (angularCore as Record<string, unknown>)['ApplicationRef'];
     }
     return null;
+  }
+
+  private isDestroyRef(value: unknown): value is DestroyRefInstance {
+    return Boolean(value) &&
+      typeof value === 'object' &&
+      typeof (value as DestroyRefInstance).onDestroy === 'function';
+  }
+
+  private isApplicationRef(value: unknown): value is ApplicationRef {
+    return Boolean(value) &&
+      typeof value === 'object' &&
+      Array.isArray((value as ApplicationRef).components);
   }
 
   /**
@@ -789,10 +891,12 @@ export class LeakDetector {
     }
 
     // Remove tracking attributes from DOM elements
-    const trackedElements = document.querySelectorAll('[data-nglens-tracked]');
-    for (const el of trackedElements) {
-      if (el instanceof HTMLElement) {
-        delete el.dataset['nglensTracked'];
+    if (typeof document !== 'undefined') {
+      const trackedElements = document.querySelectorAll('[data-nglens-tracked]');
+      for (const el of Array.from(trackedElements)) {
+        if (el instanceof HTMLElement) {
+          delete el.dataset['nglensTracked'];
+        }
       }
     }
 
@@ -817,7 +921,7 @@ interface ComponentInstance {
 }
 
 interface Injector {
-  get?: (token: unknown) => DestroyRefInstance | ApplicationRef | null;
+  get?: (token: unknown) => unknown;
 }
 
 interface DestroyRefInstance {

@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "lib": ["ES2020", "DOM"],
     "types": ["chrome"],
+    "experimentalDecorators": true,
     "ignoreDeprecations": "5.0"
   },
   "include": ["src"]

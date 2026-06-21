@@ -152,7 +152,7 @@ Find Angular performance problems and learn how to fix them — whether you're a
 - Detects expensive computed signals
 - Identifies O(n²) nested operations
 - Flags Signal/RxJS mixing without interop
-- Works on Angular 16+
+- Runtime tracking supports Angular 17-21
 
 👁️ **Visual Overlays**
 - See issues directly on your page

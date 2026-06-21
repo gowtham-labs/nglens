@@ -81,6 +81,7 @@ class ZonePollutionAnalyzer implements Analyzer {
         issues.push({
           id: `zone-pollution-${source.type}-${source.library || 'unknown'}`,
           analyzer: this.type,
+          component: source.library ?? source.type,
           severity: source.severity as any,
           category: 'render-performance',
           title: `Zone pollution: Excessive ${source.type} calls${source.library ? ` from ${source.library}` : ''}`,

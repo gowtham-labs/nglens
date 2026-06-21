@@ -81,6 +81,30 @@ describe('PanelState', () => {
     expect(state.latestComparison()).toBeNull();
   });
 
+  it('uses min and max render timestamps when capturing snapshot render rate', () => {
+    const state = new PanelState();
+
+    state.renderEvents.set([
+      {
+        componentName: 'OutOfOrderComponent',
+        timestamp: 60_000,
+        duration: 4,
+        causes: [{ type: 'zone' }],
+      },
+      {
+        componentName: 'OutOfOrderComponent',
+        timestamp: 0,
+        duration: 6,
+        causes: [{ type: 'zone' }],
+      },
+    ]);
+
+    state.captureSnapshot('Out of order');
+
+    expect(state.snapshots()[0].metrics.rendersPerMinute).toBe(2);
+    expect(state.snapshots()[0].metrics.averageRenderDuration).toBe(5);
+  });
+
   it('aggregates allIssues from leak, trackBy, hot, hotspot, and zone pollution sources', () => {
     const state = new PanelState();
 

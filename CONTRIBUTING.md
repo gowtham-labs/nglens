@@ -212,8 +212,8 @@ console.log(`Took ${duration}ms`);
 Manual testing required for PRs:
 
 - [ ] Extension builds successfully (`npm run build`)
-- [ ] Works on Angular 16+ apps
-- [ ] Works on Angular 12-15 apps (if applicable)
+- [ ] Works on Angular 17-21 apps
+- [ ] Fails gracefully on Angular 16 and earlier
 - [ ] Works in dev mode (window.ng available)
 - [ ] Works in production mode (no window.ng)
 - [ ] No console errors

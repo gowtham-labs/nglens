@@ -6,6 +6,7 @@
 
 /** Prefix for all performance marks/measures created by this extension */
 const PERF_PREFIX = '__ng_perf_';
+export type IdleHandle = number | ReturnType<typeof setTimeout>;
 
 /**
  * Creates a performance mark with the extension prefix.
@@ -93,7 +94,7 @@ export function now(): number {
 export function scheduleIdle(
   callback: () => void,
   timeout: number = 100
-): number {
+): IdleHandle {
   if (typeof requestIdleCallback === 'function') {
     return requestIdleCallback(
       () => callback(),
@@ -107,11 +108,11 @@ export function scheduleIdle(
 /**
  * Cancels a previously scheduled idle callback.
  */
-export function cancelIdle(handle: number): void {
-  if (typeof cancelIdleCallback === 'function') {
+export function cancelIdle(handle: IdleHandle): void {
+  if (typeof cancelIdleCallback === 'function' && typeof handle === 'number') {
     cancelIdleCallback(handle);
   } else {
-    clearTimeout(handle);
+    globalThis.clearTimeout(handle as unknown as ReturnType<typeof setTimeout>);
   }
 }
 

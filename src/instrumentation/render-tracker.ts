@@ -1,6 +1,6 @@
 // src/instrumentation/render-tracker.ts
 // Hybrid approach: MutationObserver + ng.getComponent + Zone.js
-// Works reliably on Angular 17-20+ without depending on internal APIs
+// Works reliably on Angular 17-21 without depending on internal APIs
 
 import type { RenderEvent, RenderCause, EventBatch } from '../types/render-events';
 
@@ -12,7 +12,7 @@ export class RenderTracker {
   private readonly eventBuffer: RenderEvent[] = [];
   private isRunning = false;
   private batchSequence = 0;
-  private flushInterval: number | null = null;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
   private mutationObserver: MutationObserver | null = null;
 
   // Zone.js tracking
@@ -27,7 +27,7 @@ export class RenderTracker {
   private frameRequestId: number | null = null;
 
   // Component discovery interval
-  private discoveryInterval: number | null = null;
+  private discoveryInterval: ReturnType<typeof setInterval> | null = null;
 
   private constructor() {}
 

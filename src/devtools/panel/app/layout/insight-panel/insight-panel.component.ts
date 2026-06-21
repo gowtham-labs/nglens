@@ -1,9 +1,11 @@
 import { Component, inject, computed } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 
 @Component({
   selector: 'app-insight-panel',
   standalone: true,
+  imports: [DecimalPipe],
   template: `
     @if (!selectedIssue()) {
       <div class="h-full flex items-center justify-center text-gray-500 text-sm">

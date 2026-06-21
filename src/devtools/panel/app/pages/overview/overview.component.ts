@@ -10,12 +10,27 @@ import {
   topQuickWins,
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
-import type { ComponentHotspot } from '../../../../../types/panel';
+import type { ComponentHotspot, SnapshotComparison } from '../../../../../types/panel';
 
 interface HealthSummary {
   label: string;
   detail: string;
   className: string;
+}
+
+interface DiagnosisCard {
+  label: string;
+  value: string;
+  detail: string;
+  className: string;
+}
+
+interface CompareMetric {
+  label: string;
+  baseline: string;
+  current: string;
+  delta: string;
+  verdict: 'better' | 'worse' | 'same';
 }
 
 @Component({
@@ -51,50 +66,63 @@ interface HealthSummary {
 
           <div class="grid grid-cols-3 gap-2 text-right min-w-[260px]">
             <div class="metric-cell">
-              <span>Issues</span>
+              <span>Open risks</span>
               <strong>{{ issuesCount() }}</strong>
+              <small>needs review</small>
             </div>
             <div class="metric-cell">
-              <span>Hotspots</span>
-              <strong>{{ hotspotsCount() }}</strong>
+              <span>Top render risk</span>
+              <strong [ngClass]="scoreClass(highestHotspotScore())">{{ highestHotspotScore() }}/100</strong>
+              <small>{{ riskLabel(highestHotspotScore()) }}</small>
             </div>
             <div class="metric-cell">
-              <span>Actions</span>
+              <span>Fix candidates</span>
               <strong>{{ actions().length }}</strong>
+              <small>{{ quickWins().length }} quick wins</small>
             </div>
           </div>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 mt-4">
+          @for (card of diagnosisCards(); track card.label) {
+            <div class="diagnosis-card">
+              <span>{{ card.label }}</span>
+              <strong [ngClass]="card.className">{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
+            </div>
+          }
+        </div>
+
         <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2 mt-4">
           <div class="metric-cell">
-            <span>Components</span>
-            <strong>{{ componentsCount() }}</strong>
-            <small>rendered</small>
-          </div>
-          <div class="metric-cell">
-            <span>Renders</span>
+            <span>Recorded renders</span>
             <strong>{{ state.renderEvents().length }}</strong>
-            <small>{{ renderRate() }} / min</small>
+            <small>events captured</small>
           </div>
           <div class="metric-cell">
-            <span>Avg render</span>
+            <span>Components seen</span>
+            <strong>{{ componentsCount() }}</strong>
+            <small>rendered at least once</small>
+          </div>
+          <div class="metric-cell">
+            <span>Render frequency</span>
+            <strong>{{ renderRate() }}/min</strong>
+            <small>all components</small>
+          </div>
+          <div class="metric-cell">
+            <span>Avg render cost</span>
             <strong>{{ averageRenderDuration() }}ms</strong>
-            <small>per event</small>
+            <small>per captured render</small>
           </div>
           <div class="metric-cell">
-            <span>Memory risks</span>
+            <span>Cleanup risks</span>
             <strong>{{ memoryRiskCount() }}</strong>
-            <small>cleanup signals</small>
+            <small>missing teardown</small>
           </div>
           <div class="metric-cell">
-            <span>Quick wins</span>
-            <strong>{{ quickWins().length }}</strong>
-            <small>ranked first</small>
-          </div>
-          <div class="metric-cell">
-            <span>Interactions</span>
+            <span>Action windows</span>
             <strong>{{ interactionsCount() }}</strong>
-            <small>render bursts</small>
+            <small>render bursts grouped</small>
           </div>
         </div>
 
@@ -108,41 +136,75 @@ interface HealthSummary {
         }
       </section>
 
-      @if (state.latestComparison(); as comparison) {
-        <section class="border border-gray-800 rounded bg-gray-900 p-4">
-          <div class="flex items-center justify-between gap-3 mb-3">
-            <h3 class="text-xs font-semibold text-gray-300 uppercase">Latest Snapshot Comparison</h3>
-            <span class="text-[10px] text-gray-500">
-              {{ comparison.baseline.label }} to {{ comparison.current.label }}
-            </span>
+      <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-xs font-semibold text-gray-300 uppercase">Compare Runs</h3>
+            <p class="text-[10px] text-gray-500 mt-0.5">{{ comparisonStatus() }}</p>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div class="metric-cell">
-              <span>Renders</span>
-              <strong [ngClass]="deltaClass(comparison.delta.renders)">{{ signed(comparison.delta.renders) }}</strong>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" class="compare-button" (click)="saveBaseline()">Save Baseline</button>
+            <button
+              type="button"
+              class="compare-button"
+              [class.opacity-50]="state.snapshots().length === 0"
+              [class.cursor-not-allowed]="state.snapshots().length === 0"
+              [disabled]="state.snapshots().length === 0"
+              (click)="captureCurrent()"
+            >
+              Capture Current
+            </button>
+            @if (state.snapshots().length > 0) {
+              <button type="button" class="compare-button muted" (click)="resetComparison()">Reset</button>
+            }
+          </div>
+        </div>
+
+        @if (state.latestComparison(); as comparison) {
+          <div class="overflow-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-gray-500 border-b border-gray-800">
+                  <th class="text-left py-2 px-4 font-medium">Metric</th>
+                  <th class="text-right py-2 px-3 font-medium">{{ comparison.baseline.label }}</th>
+                  <th class="text-right py-2 px-3 font-medium">{{ comparison.current.label }}</th>
+                  <th class="text-right py-2 px-4 font-medium">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (metric of comparisonMetrics(comparison); track metric.label) {
+                  <tr class="border-b border-gray-900 last:border-b-0">
+                    <td class="py-2.5 px-4 text-gray-300 font-medium">{{ metric.label }}</td>
+                    <td class="py-2.5 px-3 text-right text-gray-400">{{ metric.baseline }}</td>
+                    <td class="py-2.5 px-3 text-right text-gray-200">{{ metric.current }}</td>
+                    <td class="py-2.5 px-4 text-right">
+                      <span class="change-pill" [ngClass]="changeClass(metric.verdict)">
+                        {{ metric.delta }}
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="compare-empty">
+              <span>Baseline</span>
+              <strong>{{ state.snapshots().length > 0 ? state.snapshots()[0].label : 'Not saved' }}</strong>
             </div>
-            <div class="metric-cell">
-              <span>Avg ms</span>
-              <strong [ngClass]="deltaClass(comparison.delta.averageRenderDuration)">
-                {{ signed(comparison.delta.averageRenderDuration) }}
-              </strong>
-            </div>
-            <div class="metric-cell">
-              <span>Issues</span>
-              <strong [ngClass]="deltaClass(comparison.delta.issues)">{{ signed(comparison.delta.issues) }}</strong>
-            </div>
-            <div class="metric-cell">
-              <span>Hotspots</span>
-              <strong [ngClass]="deltaClass(comparison.delta.hotspots)">{{ signed(comparison.delta.hotspots) }}</strong>
+            <div class="compare-empty">
+              <span>Current</span>
+              <strong>{{ state.snapshots().length > 0 ? 'Ready to capture' : 'Waiting for baseline' }}</strong>
             </div>
           </div>
-        </section>
-      }
+        }
+      </section>
 
       <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
-            <h3 class="text-xs font-semibold text-gray-300 uppercase">Top Component Hotspots</h3>
+            <h3 class="text-xs font-semibold text-gray-300 uppercase">Top Render Hotspots</h3>
             <span class="text-[10px] text-gray-500">{{ topHotspots().length }} shown</span>
           </div>
 
@@ -192,7 +254,7 @@ interface HealthSummary {
 
         <div class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
-            <h3 class="text-xs font-semibold text-gray-300 uppercase">Top Quick Wins</h3>
+            <h3 class="text-xs font-semibold text-gray-300 uppercase">Fix First</h3>
             <span class="text-[10px] text-gray-500">{{ quickWins().length }} shown</span>
           </div>
 
@@ -230,7 +292,8 @@ interface HealthSummary {
     </div>
   `,
   styles: [`
-    .metric-cell {
+    .metric-cell,
+    .diagnosis-card {
       background: rgb(31 41 55 / 0.45);
       border: 1px solid rgb(55 65 81 / 0.55);
       border-radius: 4px;
@@ -238,7 +301,12 @@ interface HealthSummary {
       min-width: 0;
     }
 
-    .metric-cell span {
+    .diagnosis-card {
+      min-height: 98px;
+    }
+
+    .metric-cell span,
+    .diagnosis-card span {
       display: block;
       color: #9ca3af;
       font-size: 10px;
@@ -246,19 +314,23 @@ interface HealthSummary {
       font-weight: 600;
     }
 
-    .metric-cell strong {
+    .metric-cell strong,
+    .diagnosis-card strong {
       display: block;
       color: #f3f4f6;
       font-size: 15px;
       margin-top: 2px;
+      overflow-wrap: anywhere;
     }
 
-    .metric-cell small {
+    .metric-cell small,
+    .diagnosis-card small {
       display: block;
       color: #6b7280;
       font-size: 10px;
       line-height: 1.2;
       margin-top: 2px;
+      overflow-wrap: anywhere;
     }
 
     .rank-pill {
@@ -297,6 +369,64 @@ interface HealthSummary {
       font-weight: 700;
       text-transform: uppercase;
     }
+
+    .compare-button {
+      border: 1px solid rgb(75 85 99 / 0.75);
+      border-radius: 4px;
+      color: #d1d5db;
+      background: rgb(31 41 55 / 0.65);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      padding: 6px 8px;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    .compare-button:hover:not(:disabled) {
+      background: rgb(55 65 81 / 0.85);
+      border-color: rgb(96 165 250 / 0.55);
+      color: #f3f4f6;
+    }
+
+    .compare-button.muted {
+      color: #9ca3af;
+      background: rgb(17 24 39 / 0.45);
+    }
+
+    .compare-empty {
+      border: 1px dashed rgb(75 85 99 / 0.65);
+      border-radius: 4px;
+      padding: 10px;
+      background: rgb(17 24 39 / 0.35);
+      min-width: 0;
+    }
+
+    .compare-empty span {
+      display: block;
+      color: #9ca3af;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .compare-empty strong {
+      display: block;
+      color: #d1d5db;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .change-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 64px;
+      border-radius: 4px;
+      border: 1px solid rgb(75 85 99 / 0.6);
+      padding: 3px 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
   `],
 })
 export class OverviewComponent {
@@ -315,6 +445,7 @@ export class OverviewComponent {
   }));
 
   readonly quickWins = computed(() => topQuickWins(this.actions(), 3));
+  readonly topAction = computed(() => this.quickWins()[0] ?? this.actions()[0] ?? null);
   readonly topHotspots = computed(() => this.state.componentHotspots().slice(0, 3));
 
   readonly issuesCount = computed(() => this.state.allIssues().length);
@@ -322,6 +453,7 @@ export class OverviewComponent {
   readonly memoryRiskCount = computed(() => this.state.leakEvents().length);
   readonly hotspotsCount = computed(() => this.state.componentHotspots().filter(h => h.score >= 70).length);
   readonly interactionsCount = computed(() => this.state.interactionProfiles().length);
+  readonly highestHotspotScore = computed(() => this.topHotspots()[0]?.score ?? 0);
 
   readonly hasActivity = computed(() =>
     this.state.renderEvents().length > 0 ||
@@ -330,6 +462,47 @@ export class OverviewComponent {
     this.state.onPushRecommendations().length > 0 ||
     this.state.zonePollutionSources().length > 0
   );
+
+  readonly diagnosisCards = computed<DiagnosisCard[]>(() => {
+    const topAction = this.topAction();
+    const topHotspot = this.topHotspots()[0];
+
+    if (!this.hasActivity()) {
+      return [
+        {
+          label: 'What happened',
+          value: 'Nothing captured yet',
+          detail: 'Start tracking and use the Angular page to collect render, cleanup, and recommendation signals.',
+          className: 'text-gray-200',
+        },
+        {
+          label: 'Why it matters',
+          value: 'No evidence',
+          detail: 'ngLens will avoid ranking fixes until it has runtime activity from the current page.',
+          className: 'text-gray-300',
+        },
+        {
+          label: 'Where to look',
+          value: 'Waiting',
+          detail: 'The top component or source will appear here after the first meaningful recording.',
+          className: 'text-gray-300',
+        },
+        {
+          label: 'Fix first',
+          value: 'Record a workflow',
+          detail: 'Repeat the interaction that feels slow or suspicious, then compare the ranked evidence.',
+          className: 'text-cyan-300',
+        },
+      ];
+    }
+
+    return [
+      this.whatHappenedCard(topAction, topHotspot),
+      this.whyItMattersCard(topAction, topHotspot),
+      this.whereToLookCard(topAction, topHotspot),
+      this.fixFirstCard(topAction),
+    ];
+  });
 
   readonly healthSummary = computed<HealthSummary>(() => {
     if (!this.hasActivity()) {
@@ -383,6 +556,54 @@ export class OverviewComponent {
     return (total / events.length).toFixed(1);
   }
 
+  saveBaseline(): void {
+    this.state.clearSnapshots();
+    this.state.captureSnapshot('Baseline');
+  }
+
+  captureCurrent(): void {
+    if (this.state.snapshots().length === 0) return;
+    this.state.captureSnapshot('Current');
+  }
+
+  resetComparison(): void {
+    this.state.clearSnapshots();
+  }
+
+  comparisonStatus(): string {
+    const count = this.state.snapshots().length;
+    if (count === 0) return 'Save a baseline before comparing a later run.';
+    if (count === 1) return 'Baseline saved. Capture current after the next run.';
+    return 'Lower render cost, risk, and cleanup counts are better.';
+  }
+
+  comparisonMetrics(comparison: SnapshotComparison): CompareMetric[] {
+    const baseline = comparison.baseline.metrics;
+    const current = comparison.current.metrics;
+    const delta = comparison.delta;
+
+    return [
+      this.lowerIsBetterMetric('Render events', baseline.renders, current.renders, delta.renders),
+      this.lowerIsBetterMetric('Render frequency', baseline.rendersPerMinute, current.rendersPerMinute, delta.rendersPerMinute, '/min'),
+      this.lowerIsBetterMetric('Avg render cost', baseline.averageRenderDuration, current.averageRenderDuration, delta.averageRenderDuration, 'ms'),
+      this.lowerIsBetterMetric('Total render cost', baseline.totalRenderDuration, current.totalRenderDuration, delta.totalRenderDuration, 'ms'),
+      this.lowerIsBetterMetric('Open risks', baseline.issues, current.issues, delta.issues),
+      this.lowerIsBetterMetric('Cleanup risks', baseline.leaks, current.leaks, delta.leaks),
+      this.lowerIsBetterMetric('Render hotspots', baseline.hotspots, current.hotspots, delta.hotspots),
+    ];
+  }
+
+  changeClass(verdict: CompareMetric['verdict']): string {
+    switch (verdict) {
+      case 'better':
+        return 'text-green-300 bg-green-500/15 border-green-500/30';
+      case 'worse':
+        return 'text-red-300 bg-red-500/15 border-red-500/30';
+      case 'same':
+        return 'text-gray-300 bg-gray-700/25 border-gray-600/60';
+    }
+  }
+
   selectHotspot(hotspot: ComponentHotspot): void {
     this.state.selectedComponent.set(hotspot.componentName);
   }
@@ -416,6 +637,13 @@ export class OverviewComponent {
     return 'text-green-400';
   }
 
+  riskLabel(score: number): string {
+    if (score >= 90) return 'critical';
+    if (score >= 70) return 'high';
+    if (score >= 40) return 'watch';
+    return 'low';
+  }
+
   causeLabel(cause: ComponentHotspot['primaryCause']): string {
     switch (cause) {
       case 'signal': return 'Signal';
@@ -425,5 +653,154 @@ export class OverviewComponent {
       case 'manual-cd': return 'Manual CD';
       default: return 'Unknown';
     }
+  }
+
+  private lowerIsBetterMetric(
+    label: string,
+    baseline: number,
+    current: number,
+    delta: number,
+    unit = ''
+  ): CompareMetric {
+    return {
+      label,
+      baseline: this.formatMetricValue(baseline, unit),
+      current: this.formatMetricValue(current, unit),
+      delta: this.formatMetricDelta(delta, unit),
+      verdict: delta < 0 ? 'better' : delta > 0 ? 'worse' : 'same',
+    };
+  }
+
+  private formatMetricValue(value: number, unit: string): string {
+    const rounded = Math.abs(value) >= 10 || unit === ''
+      ? Math.round(value).toString()
+      : value.toFixed(1);
+    return unit ? `${rounded}${unit}` : rounded;
+  }
+
+  private formatMetricDelta(value: number, unit: string): string {
+    if (value === 0) return unit ? `0${unit}` : '0';
+    const rounded = Math.abs(value) >= 10 || unit === ''
+      ? Math.round(Math.abs(value)).toString()
+      : Math.abs(value).toFixed(1);
+    return `${value > 0 ? '+' : '-'}${rounded}${unit}`;
+  }
+
+  private whatHappenedCard(
+    action: RecommendationAction | null,
+    hotspot: ComponentHotspot | undefined
+  ): DiagnosisCard {
+    if (this.memoryRiskCount() > 0 && action?.kind === 'memory-cleanup') {
+      return {
+        label: 'What happened',
+        value: 'Cleanup risk surfaced',
+        detail: `${this.memoryRiskCount()} destroyed-component cleanup signal(s) need review.`,
+        className: 'text-amber-300',
+      };
+    }
+
+    if (hotspot) {
+      return {
+        label: 'What happened',
+        value: `${displayName(hotspot.componentName)} is hottest`,
+        detail: `${hotspot.renderCount} renders at ${hotspot.rendersPerMinute.toFixed(1)}/min. Main cause: ${this.causeLabel(hotspot.primaryCause)}.`,
+        className: this.scoreClass(hotspot.score),
+      };
+    }
+
+    if (action) {
+      return {
+        label: 'What happened',
+        value: `${this.actions().length} fix candidate(s)`,
+        detail: action.evidence,
+        className: this.actionTone(action),
+      };
+    }
+
+    return {
+      label: 'What happened',
+      value: 'Low-risk activity',
+      detail: 'ngLens captured activity, but no major hotspot or cleanup signal stands out yet.',
+      className: 'text-green-300',
+    };
+  }
+
+  private whyItMattersCard(
+    action: RecommendationAction | null,
+    hotspot: ComponentHotspot | undefined
+  ): DiagnosisCard {
+    if (action) {
+      return {
+        label: 'Why it matters',
+        value: `${action.expectedGain} gain potential`,
+        detail: action.evidence,
+        className: this.actionTone(action),
+      };
+    }
+
+    if (hotspot) {
+      return {
+        label: 'Why it matters',
+        value: `${this.riskLabel(hotspot.score)} render risk`,
+        detail: `${hotspot.averageDuration.toFixed(1)}ms average render cost across ${hotspot.renderCount} captured renders.`,
+        className: this.scoreClass(hotspot.score),
+      };
+    }
+
+    return {
+      label: 'Why it matters',
+      value: 'Healthy baseline',
+      detail: 'This recording can be kept as a baseline before a risky UI or state-management change.',
+      className: 'text-green-300',
+    };
+  }
+
+  private whereToLookCard(
+    action: RecommendationAction | null,
+    hotspot: ComponentHotspot | undefined
+  ): DiagnosisCard {
+    const target = action?.componentName ?? hotspot?.componentName;
+
+    if (target) {
+      return {
+        label: 'Where to look',
+        value: displayName(target),
+        detail: action?.source
+          ? `Evidence source: ${action.source}.`
+          : hotspot?.reasons.join(', ') ?? 'Open the row for component-level evidence.',
+        className: 'text-gray-100',
+      };
+    }
+
+    return {
+      label: 'Where to look',
+      value: 'No clear owner',
+      detail: 'There is not enough component-level evidence to point at a specific source yet.',
+      className: 'text-gray-300',
+    };
+  }
+
+  private fixFirstCard(action: RecommendationAction | null): DiagnosisCard {
+    if (!action) {
+      return {
+        label: 'Fix first',
+        value: 'No fix ranked',
+        detail: 'Keep recording or interact with the page until ngLens can rank a concrete action.',
+        className: 'text-gray-300',
+      };
+    }
+
+    return {
+      label: 'Fix first',
+      value: action.title,
+      detail: `${action.confidence} confidence. ${action.suggestedFix}`,
+      className: this.actionTone(action),
+    };
+  }
+
+  private actionTone(action: RecommendationAction): string {
+    if (action.expectedGain === 'Large' || action.confidence === 'High') return 'text-green-300';
+    if (action.expectedGain === 'Medium' || action.confidence === 'Medium') return 'text-cyan-300';
+    return 'text-amber-300';
   }
 }

@@ -497,12 +497,11 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
           // This is still heuristic but better than before
           const lines = methodStr.split('\n');
           for (const line of lines) {
-            const trimmed = line.trim();
-            // Skip comment lines
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+            const codeLine = this.extractExecutableCode(line);
+            if (!codeLine) continue;
 
             // Look for .subscribe( pattern
-            if (/\.\s*subscribe\s*\(/.test(trimmed)) {
+            if (/\.\s*subscribe\s*\(/.test(codeLine)) {
               count++;
               if (!properties.includes(methodName)) {
                 properties.push(methodName);
@@ -754,12 +753,12 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
           // Look for timer patterns, avoiding comments
           const lines = methodStr.split('\n');
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+            const codeLine = this.extractExecutableCode(line);
+            if (!codeLine) continue;
 
             if (
-              /\bsetInterval\s*\(/.test(trimmed) ||
-              /\bsetTimeout\s*\(/.test(trimmed)
+              /\bsetInterval\s*\(/.test(codeLine) ||
+              /\bsetTimeout\s*\(/.test(codeLine)
             ) {
               if (!methods.includes(methodName)) {
                 methods.push(methodName);
@@ -827,10 +826,10 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
           // Look for addEventListener patterns
           const lines = methodStr.split('\n');
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+            const codeLine = this.extractExecutableCode(line);
+            if (!codeLine) continue;
 
-            if (/\.addEventListener\s*\(/.test(trimmed)) {
+            if (/\.addEventListener\s*\(/.test(codeLine)) {
               if (!methods.includes(methodName)) {
                 methods.push(methodName);
               }
@@ -862,6 +861,24 @@ export class SubscriptionLeakDetector extends BaseAnalyzer {
     } catch {
       return false;
     }
+  }
+
+  private extractExecutableCode(line: string): string {
+    const trimmed = line.trim();
+    if (
+      trimmed.length === 0 ||
+      trimmed.startsWith('//') ||
+      trimmed.startsWith('*') ||
+      trimmed.startsWith('/*')
+    ) {
+      return '';
+    }
+
+    return trimmed
+      .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '')
+      .replace(/\/\*.*?\*\//g, '')
+      .replace(/\/\/.*$/, '')
+      .trim();
   }
 
   /**

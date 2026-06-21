@@ -12,6 +12,13 @@ import type {
 } from '../../../../../types/panel';
 import type { RenderCause } from '../../../../../types/render-events';
 
+interface RenderStoryCard {
+  label: string;
+  value: string;
+  detail: string;
+  className: string;
+}
+
 @Component({
   selector: 'app-rendering',
   standalone: true,
@@ -40,7 +47,7 @@ import type { RenderCause } from '../../../../../types/render-events';
             } @else {
               <div class="text-sm font-medium text-amber-300">Tracking is off</div>
               <p class="text-xs text-amber-100/70 mt-1">
-                Click Start, perform the page action, then this view will show what rendered and why.
+                Start tracking, repeat the slow action, then compare the rendered components and causes.
               </p>
             }
           </div>
@@ -48,47 +55,42 @@ import type { RenderCause } from '../../../../../types/render-events';
 
         <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 mt-3">
           <div class="metric-cell">
-            <span>Render events</span>
+            <span>Captured renders</span>
             <strong>{{ state.renderEvents().length }}</strong>
-            <small>component updates captured</small>
+            <small>component update events</small>
           </div>
           <div class="metric-cell">
-            <span>Components</span>
+            <span>Components rendered</span>
             <strong>{{ state.componentStats().length }}</strong>
-            <small>components affected</small>
+            <small>unique components</small>
           </div>
           <div class="metric-cell">
-            <span>Top risk</span>
+            <span>Worst component risk</span>
             <strong [ngClass]="scoreClass(highestRisk())">{{ highestRisk() }}/100</strong>
             <small>{{ riskLabel(highestRisk()) }}</small>
           </div>
           <div class="metric-cell">
-            <span>Main cause</span>
+            <span>Most common cause</span>
             <strong>{{ dominantCauseLabel() }}</strong>
             <small>{{ causeHint(dominantCause()) }}</small>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-2 mt-3">
-          <div class="guidance-cell">
-            <span>What looks risky</span>
-            <strong>{{ primaryRisk() }}</strong>
-          </div>
-          <div class="guidance-cell">
-            <span>Why it matters</span>
-            <strong>{{ riskImpact() }}</strong>
-          </div>
-          <div class="guidance-cell">
-            <span>Try first</span>
-            <strong>{{ firstFix() }}</strong>
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 mt-3">
+          @for (card of renderStoryCards(); track card.label) {
+            <div class="guidance-cell">
+              <span>{{ card.label }}</span>
+              <strong [ngClass]="card.className">{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
+            </div>
+          }
         </div>
       </section>
 
       <section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
         <div class="border border-gray-800 rounded overflow-hidden">
           <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
-            <h3 class="text-xs font-semibold text-gray-300 uppercase">Live Interaction Bursts</h3>
+            <h3 class="text-xs font-semibold text-gray-300 uppercase">Interaction Render Bursts</h3>
             <span class="text-[10px] text-gray-500">{{ interactions().length }} windows</span>
           </div>
           @if (interactions().length === 0) {
@@ -100,11 +102,11 @@ import type { RenderCause } from '../../../../../types/render-events';
               <table class="w-full text-xs">
                 <thead>
                   <tr class="text-gray-400 border-b border-gray-800">
-                    <th class="text-left py-2 px-2 font-medium">Action Window</th>
-                    <th class="text-right py-2 px-2 font-medium">Renders</th>
-                    <th class="text-right py-2 px-2 font-medium">Components</th>
-                    <th class="text-left py-2 px-2 font-medium">Likely Cause</th>
-                    <th class="text-left py-2 px-2 font-medium">Slowest</th>
+                    <th class="text-left py-2 px-2 font-medium">Burst</th>
+                    <th class="text-right py-2 px-2 font-medium">Render events</th>
+                    <th class="text-right py-2 px-2 font-medium">Components touched</th>
+                    <th class="text-left py-2 px-2 font-medium">Dominant cause</th>
+                    <th class="text-left py-2 px-2 font-medium">Slowest component</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -130,7 +132,7 @@ import type { RenderCause } from '../../../../../types/render-events';
 
         <div class="border border-gray-800 rounded overflow-hidden">
           <div class="px-3 py-2 border-b border-gray-800">
-            <h3 class="text-xs font-semibold text-gray-300 uppercase">Render Cause Mix</h3>
+            <h3 class="text-xs font-semibold text-gray-300 uppercase">Why Renders Happened</h3>
           </div>
           <div class="p-3 space-y-2">
             @for (cause of causeBreakdown(); track cause.type) {
@@ -156,7 +158,7 @@ import type { RenderCause } from '../../../../../types/render-events';
         <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-3">
           <div>
             <h3 class="text-xs font-semibold text-gray-300 uppercase">Component Render Hotspots</h3>
-            <p class="text-[10px] text-gray-500 mt-0.5">Select a row to open the detailed "Why did this render?" panel.</p>
+            <p class="text-[10px] text-gray-500 mt-0.5">Sorted by render frequency, total cost, and risk score.</p>
           </div>
           <span class="text-[10px] text-gray-500">{{ sortedStats().length }} components</span>
         </div>
@@ -171,8 +173,8 @@ import type { RenderCause } from '../../../../../types/render-events';
               <thead>
                 <tr class="text-gray-400 border-b border-gray-800">
                   <th class="text-left py-2 px-2 font-medium">Component</th>
-                  <th class="text-left py-2 px-2 font-medium">Why it rendered</th>
-                  <th class="text-right py-2 px-2 font-medium">Risk</th>
+                  <th class="text-left py-2 px-2 font-medium">Dominant cause</th>
+                  <th class="text-right py-2 px-2 font-medium">Risk score</th>
                   <th
                     class="text-right py-2 px-2 font-medium cursor-pointer hover:text-gray-200"
                     (click)="toggleSort('renderCount')"
@@ -186,7 +188,7 @@ import type { RenderCause } from '../../../../../types/render-events';
                     class="text-right py-2 px-2 font-medium cursor-pointer hover:text-gray-200"
                     (click)="toggleSort('rendersPerMinute')"
                   >
-                    /min
+                    Renders/min
                     @if (sortField() === 'rendersPerMinute') {
                       <span>{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
                     }
@@ -195,7 +197,7 @@ import type { RenderCause } from '../../../../../types/render-events';
                     class="text-right py-2 px-2 font-medium cursor-pointer hover:text-gray-200"
                     (click)="toggleSort('totalDuration')"
                   >
-                    Total ms
+                    Total cost
                     @if (sortField() === 'totalDuration') {
                       <span>{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
                     }
@@ -204,7 +206,7 @@ import type { RenderCause } from '../../../../../types/render-events';
                     class="text-right py-2 px-2 font-medium cursor-pointer hover:text-gray-200"
                     (click)="toggleSort('averageDuration')"
                   >
-                    Avg ms
+                    Avg cost
                     @if (sortField() === 'averageDuration') {
                       <span>{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
                     }
@@ -282,14 +284,17 @@ import type { RenderCause } from '../../../../../types/render-events';
       color: #f3f4f6;
       font-size: 13px;
       margin-top: 2px;
+      overflow-wrap: anywhere;
     }
 
-    .metric-cell small {
+    .metric-cell small,
+    .guidance-cell small {
       display: block;
       color: #6b7280;
       font-size: 10px;
       line-height: 1.2;
       margin-top: 2px;
+      overflow-wrap: anywhere;
     }
   `],
 })
@@ -313,6 +318,7 @@ export class RenderingComponent {
 
   readonly interactions = computed(() => this.state.interactionProfiles().slice(0, 12));
   readonly hotspots = computed(() => this.state.componentHotspots());
+  readonly topHotspot = computed(() => this.hotspots()[0] ?? null);
   readonly highestRisk = computed(() => this.hotspots()[0]?.score ?? 0);
 
   readonly hotspotScoreMap = computed(() => {
@@ -353,6 +359,66 @@ export class RenderingComponent {
   );
 
   readonly dominantCauseLabel = computed(() => this.causeLabel(this.dominantCause()));
+
+  readonly renderStoryCards = computed<RenderStoryCard[]>(() => {
+    const top = this.topHotspot();
+
+    if (!top) {
+      return [
+        {
+          label: 'What happened',
+          value: 'No renders ranked',
+          detail: 'Start tracking and repeat the slow or important user action.',
+          className: 'text-gray-200',
+        },
+        {
+          label: 'Likely cause',
+          value: this.dominantCauseLabel(),
+          detail: this.causeHint(this.dominantCause()),
+          className: 'text-gray-300',
+        },
+        {
+          label: 'Where to look',
+          value: 'Waiting',
+          detail: 'The hottest component appears here after render events are captured.',
+          className: 'text-gray-300',
+        },
+        {
+          label: 'Next action',
+          value: 'Record workflow',
+          detail: 'Use the page naturally, then inspect the top component row.',
+          className: 'text-cyan-300',
+        },
+      ];
+    }
+
+    return [
+      {
+        label: 'What happened',
+        value: this.renderActivityLabel(top),
+        detail: `${top.renderCount} renders, ${top.rendersPerMinute.toFixed(1)}/min, ${top.averageDuration.toFixed(1)}ms average.`,
+        className: this.scoreClass(top.score),
+      },
+      {
+        label: 'Likely cause',
+        value: this.causeLabel(top.primaryCause),
+        detail: this.causeHint(top.primaryCause),
+        className: this.causeTextClass(top.primaryCause),
+      },
+      {
+        label: 'Where to look',
+        value: displayName(top.componentName),
+        detail: top.reasons.join(', '),
+        className: 'text-gray-100',
+      },
+      {
+        label: 'Next action',
+        value: this.firstFix(),
+        detail: this.renderConfidence(top),
+        className: 'text-cyan-300',
+      },
+    ];
+  });
 
   toggleSort(field: HeatmapSortField): void {
     if (this.sortField() === field) {
@@ -489,6 +555,17 @@ export class RenderingComponent {
     }
   }
 
+  causeTextClass(cause: RenderCause['type'] | 'unknown'): string {
+    switch (cause) {
+      case 'parent': return 'text-purple-300';
+      case 'input': return 'text-cyan-300';
+      case 'zone': return 'text-blue-300';
+      case 'signal': return 'text-green-300';
+      case 'manual-cd': return 'text-amber-300';
+      default: return 'text-gray-300';
+    }
+  }
+
   primaryCause(stat: ComponentStats): RenderCause['type'] | 'unknown' {
     let winner: RenderCause['type'] | 'unknown' = 'unknown';
     let highest = 0;
@@ -509,5 +586,21 @@ export class RenderingComponent {
     if (cause === 'signal') return 'A signal update is driving this component render.';
     if (cause === 'manual-cd') return 'Manual detectChanges or markForCheck appears involved.';
     return 'Render cause is not clear yet.';
+  }
+
+  private renderActivityLabel(hotspot: ComponentHotspot): string {
+    if (hotspot.score >= 90) return 'Critical render hotspot';
+    if (hotspot.score >= 70) return 'High render hotspot';
+    if (hotspot.rendersPerMinute >= 100) return 'Frequent renders';
+    if (hotspot.averageDuration >= 16) return 'Slow render cost';
+    return 'Moderate render activity';
+  }
+
+  private renderConfidence(hotspot: ComponentHotspot): string {
+    const events = this.state.renderEvents().length;
+    if (events < 5) return 'Low evidence so far. Capture more interactions before changing architecture.';
+    if (hotspot.score >= 70) return 'High confidence: this component has repeated evidence in the current recording.';
+    if (hotspot.score >= 40) return 'Heuristic confidence: worth checking before optimizing broadly.';
+    return 'Low risk: keep as supporting evidence unless the user-visible action still feels slow.';
   }
 }

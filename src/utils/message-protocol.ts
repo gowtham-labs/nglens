@@ -151,7 +151,7 @@ function isEventBatchPayload(value: unknown): boolean {
 function isRenderEventPayload(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (!isBoundedString(value.componentName)) return false;
-  if (!isFiniteNumber(value.timestamp) || !isFiniteNumber(value.duration)) return false;
+  if (!isNonNegativeFiniteNumber(value.timestamp) || !isNonNegativeFiniteNumber(value.duration)) return false;
   if (!Array.isArray(value.causes) || value.causes.length > MAX_CAUSES_PER_EVENT) return false;
   return value.causes.every(isRenderCausePayload);
 }
@@ -172,8 +172,8 @@ function isLeakEventPayload(value: unknown): boolean {
     typeof value.severity === 'string' &&
     SEVERITY_LEVELS.has(value.severity) &&
     isBoundedString(value.source) &&
-    isFiniteNumber(value.createdAt) &&
-    isFiniteNumber(value.detectedAt) &&
+    isNonNegativeFiniteNumber(value.createdAt) &&
+    isNonNegativeFiniteNumber(value.detectedAt) &&
     value.lifecycleState === 'destroyed';
 }
 
@@ -182,7 +182,7 @@ function isTrackByIssuePayload(value: unknown): boolean {
     isBoundedString(value.id) &&
     isBoundedString(value.componentName) &&
     isBoundedString(value.collectionProperty) &&
-    isFiniteNumber(value.collectionSize) &&
+    isNonNegativeFiniteNumber(value.collectionSize) &&
     typeof value.severity === 'string' &&
     SEVERITY_LEVELS.has(value.severity) &&
     isBoundedString(value.recommendation, 1200);
@@ -191,7 +191,7 @@ function isTrackByIssuePayload(value: unknown): boolean {
 function isOnPushResultPayload(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (!isBoundedString(value.component)) return false;
-  if (!isFiniteNumber(value.score)) return false;
+  if (!isNumberInRange(value.score, 0, 100)) return false;
   if (value.currentStrategy !== 'Default' && value.currentStrategy !== 'OnPush') return false;
   if (!Array.isArray(value.factors) || value.factors.length > 20) return false;
   if (!isBoundedString(value.recommendation, 1200)) return false;
@@ -199,7 +199,7 @@ function isOnPushResultPayload(value: unknown): boolean {
   return value.factors.every((factor) =>
     isRecord(factor) &&
     isBoundedString(factor.name) &&
-    isFiniteNumber(factor.weight) &&
+    isNumberInRange(factor.weight, 0, 1) &&
     typeof factor.met === 'boolean' &&
     isBoundedString(factor.description, 1200)
   );
@@ -208,19 +208,23 @@ function isOnPushResultPayload(value: unknown): boolean {
 function isZonePollutionPayload(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (!Array.isArray(value.sources) || value.sources.length > MAX_ZONE_SOURCES) return false;
-  if (!isFiniteNumber(value.totalCdCycles) || !isFiniteNumber(value.windowDurationMs)) return false;
-  if (!isFiniteNumber(value.timestamp)) return false;
+  if (!isNonNegativeFiniteNumber(value.totalCdCycles)) return false;
+  const hasValidWindow = value.zonelessMode === true
+    ? isNonNegativeFiniteNumber(value.windowDurationMs)
+    : isPositiveFiniteNumber(value.windowDurationMs);
+  if (!hasValidWindow) return false;
+  if (!isNonNegativeFiniteNumber(value.timestamp)) return false;
 
   return value.sources.every((source) =>
     isRecord(source) &&
     isBoundedString(source.source) &&
     isBoundedString(source.type) &&
     (source.library === undefined || isBoundedString(source.library)) &&
-    isFiniteNumber(source.cdCyclesPerMinute) &&
+    isNonNegativeFiniteNumber(source.cdCyclesPerMinute) &&
     typeof source.severity === 'string' &&
     ZONE_SEVERITIES.has(source.severity) &&
-    isFiniteNumber(source.taskCount) &&
-    isFiniteNumber(source.lastSeen) &&
+    isNonNegativeFiniteNumber(source.taskCount) &&
+    isNonNegativeFiniteNumber(source.lastSeen) &&
     (source.fixSuggestion === undefined || isBoundedString(source.fixSuggestion, 1200))
   );
 }
@@ -235,6 +239,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value > 0;
+}
+
+function isNumberInRange(value: unknown, min: number, max: number): value is number {
+  return isFiniteNumber(value) && value >= min && value <= max;
 }
 
 function isBoundedString(value: unknown, maxLength = MAX_STRING_LENGTH): value is string {

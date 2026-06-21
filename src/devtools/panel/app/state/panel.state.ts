@@ -187,12 +187,14 @@ export class PanelState {
 
   private createSnapshot(label: string): PerformanceSnapshot {
     const stats = this.componentStats();
-    const renderCount = this.renderEvents().length;
+    const events = this.renderEvents();
+    const renderCount = events.length;
     const totalRenderDuration = stats.reduce((sum, stat) => sum + stat.totalDuration, 0);
     const averageRenderDuration = renderCount > 0 ? totalRenderDuration / renderCount : 0;
-    const firstRender = this.renderEvents()[0]?.timestamp;
-    const lastRender = this.renderEvents()[this.renderEvents().length - 1]?.timestamp;
-    const elapsedMinutes = firstRender && lastRender
+    const renderTimestamps = events.map(event => event.timestamp);
+    const firstRender = renderTimestamps.length > 0 ? Math.min(...renderTimestamps) : null;
+    const lastRender = renderTimestamps.length > 0 ? Math.max(...renderTimestamps) : null;
+    const elapsedMinutes = firstRender !== null && lastRender !== null
       ? Math.max((lastRender - firstRender) / 60000, 1 / 60)
       : 1 / 60;
 

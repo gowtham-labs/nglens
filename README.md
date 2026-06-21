@@ -6,6 +6,7 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 
 ## Features (V1)
 
+- **Angular Compatibility** — Runtime tracking supports Angular 17-21; Angular 21 has a dedicated smoke check
 - **Angular Detection** — Automatically detects Angular apps in both development and production mode
 - **Change Detection Analysis** — Flags Default change detection, missing `OnPush`, and `*ngFor` without `trackBy`
 - **Unnecessary Re-render Detection** — Identifies excessive DOM mutation frequency, render bottlenecks, and template anti-patterns
@@ -15,7 +16,7 @@ ngLens is a Chrome Extension that analyzes Angular applications at runtime, iden
 - **Zone.js Overhead Awareness** — Supports Zone-trigger and async-change-detection heuristics for Angular apps
 - **Slow Initial Load Insights** — Uses DOM and component tree heuristics to surface slow startup patterns
 - **Large Component Tree Detection** — Flags large tree depth and excessive DOM subtree size that hurt rendering performance
-- **Signals Analyzer** ⚡ NEW — Detects Angular 16+ Signals issues like expensive computed signals, improper signal usage, and Signal/RxJS mixing
+- **Signals Analyzer** ⚡ NEW — Detects Signals issues in supported Angular apps, including expensive computed signals, improper signal usage, and Signal/RxJS mixing
 - **State Management & Best Practices** — Calls out poor state management patterns and common Angular anti-patterns
 - **Performance Budget** — Self-monitors to stay under 3% CPU and 50MB memory
 - **Production Heuristics** — Works without `window.ng` using DOM attribute analysis
