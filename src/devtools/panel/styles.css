@@ -23,6 +23,11 @@
     padding: 0;
     overflow: hidden;
     height: 100vh;
+    /* Enable text selection globally */
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
   }
 
   code, pre, .font-mono {
