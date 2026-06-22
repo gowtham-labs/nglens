@@ -52,27 +52,9 @@ export class PanelState {
     this.buildInteractionProfiles(this.renderEvents())
   );
 
-  readonly latestComparison = computed<SnapshotComparison | null>(() => {
-    const snapshots = this.snapshots();
-    if (snapshots.length < 2) return null;
-    const baseline = snapshots[snapshots.length - 2];
-    const current = snapshots[snapshots.length - 1];
-    return {
-      baseline,
-      current,
-      delta: {
-        issues: current.metrics.issues - baseline.metrics.issues,
-        components: current.metrics.components - baseline.metrics.components,
-        renders: current.metrics.renders - baseline.metrics.renders,
-        rendersPerMinute: current.metrics.rendersPerMinute - baseline.metrics.rendersPerMinute,
-        averageRenderDuration: current.metrics.averageRenderDuration - baseline.metrics.averageRenderDuration,
-        totalRenderDuration: current.metrics.totalRenderDuration - baseline.metrics.totalRenderDuration,
-        leaks: current.metrics.leaks - baseline.metrics.leaks,
-        recommendations: current.metrics.recommendations - baseline.metrics.recommendations,
-        hotspots: current.metrics.hotspots - baseline.metrics.hotspots,
-      },
-    };
-  });
+  readonly latestComparison = computed<SnapshotComparison | null>(() =>
+    this.compareSnapshots(this.snapshots())
+  );
 
   readonly criticalPollutionCount = computed<number>(() =>
     this.zonePollutionSources().filter(s => s.severity === 'critical').length
@@ -94,16 +76,7 @@ export class PanelState {
   });
 
   // Computed: all issues from all sources combined (OnPush excluded — lives in Recommendations only)
-  readonly allIssues = computed<Issue[]>(() => {
-    const leaks = this.leakEvents().map(e => this.leakToIssue(e));
-    const trackby = this.trackByIssues().map(t => this.trackByToIssue(t));
-    const hot = this.hotComponents().map(s => this.hotComponentToIssue(s));
-    const hotspots = this.componentHotspots()
-      .filter(h => h.score >= 70)
-      .map(h => this.hotspotToIssue(h));
-    const pollution = this.zonePollutionIssues();
-    return [...leaks, ...trackby, ...hot, ...hotspots, ...pollution];
-  });
+  readonly allIssues = computed<Issue[]>(() => this.collectIssues());
 
   /**
    * Resets all mutable state signals to their initial values.
@@ -214,12 +187,14 @@ export class PanelState {
 
   private createSnapshot(label: string): PerformanceSnapshot {
     const stats = this.componentStats();
-    const renderCount = this.renderEvents().length;
+    const events = this.renderEvents();
+    const renderCount = events.length;
     const totalRenderDuration = stats.reduce((sum, stat) => sum + stat.totalDuration, 0);
     const averageRenderDuration = renderCount > 0 ? totalRenderDuration / renderCount : 0;
-    const firstRender = this.renderEvents()[0]?.timestamp;
-    const lastRender = this.renderEvents()[this.renderEvents().length - 1]?.timestamp;
-    const elapsedMinutes = firstRender && lastRender
+    const renderTimestamps = events.map(event => event.timestamp);
+    const firstRender = renderTimestamps.length > 0 ? Math.min(...renderTimestamps) : null;
+    const lastRender = renderTimestamps.length > 0 ? Math.max(...renderTimestamps) : null;
+    const elapsedMinutes = firstRender !== null && lastRender !== null
       ? Math.max((lastRender - firstRender) / 60000, 1 / 60)
       : 1 / 60;
 
@@ -239,6 +214,50 @@ export class PanelState {
         hotspots: this.componentHotspots().filter(h => h.score >= 70).length,
       },
     };
+  }
+
+  private collectIssues(): Issue[] {
+    const leaks = this.mapToIssues(this.leakEvents(), event => this.leakToIssue(event));
+    const trackby = this.mapToIssues(this.trackByIssues(), issue => this.trackByToIssue(issue));
+    const hot = this.mapToIssues(this.hotComponents(), stat => this.hotComponentToIssue(stat));
+    const hotspots = this.mapToIssues(
+      this.componentHotspots().filter(h => h.score >= 70),
+      hotspot => this.hotspotToIssue(hotspot)
+    );
+    return [...leaks, ...trackby, ...hot, ...hotspots, ...this.zonePollutionIssues()];
+  }
+
+  private compareSnapshots(snapshots: PerformanceSnapshot[]): SnapshotComparison | null {
+    if (snapshots.length < 2) return null;
+
+    const baseline = snapshots[snapshots.length - 2];
+    const current = snapshots[snapshots.length - 1];
+    return {
+      baseline,
+      current,
+      delta: this.metricDelta(baseline, current),
+    };
+  }
+
+  private metricDelta(
+    baseline: PerformanceSnapshot,
+    current: PerformanceSnapshot
+  ): PerformanceSnapshot['metrics'] {
+    return {
+      issues: current.metrics.issues - baseline.metrics.issues,
+      components: current.metrics.components - baseline.metrics.components,
+      renders: current.metrics.renders - baseline.metrics.renders,
+      rendersPerMinute: current.metrics.rendersPerMinute - baseline.metrics.rendersPerMinute,
+      averageRenderDuration: current.metrics.averageRenderDuration - baseline.metrics.averageRenderDuration,
+      totalRenderDuration: current.metrics.totalRenderDuration - baseline.metrics.totalRenderDuration,
+      leaks: current.metrics.leaks - baseline.metrics.leaks,
+      recommendations: current.metrics.recommendations - baseline.metrics.recommendations,
+      hotspots: current.metrics.hotspots - baseline.metrics.hotspots,
+    };
+  }
+
+  private mapToIssues<T>(items: T[], mapper: (item: T) => Issue): Issue[] {
+    return items.map(mapper);
   }
 
   private rankHotspots(stats: ComponentStats[]): ComponentHotspot[] {
@@ -344,8 +363,8 @@ export class PanelState {
       type: 'leak',
       componentName: event.componentName,
       severity: event.severity,
-      title: `${event.leakType} leak in ${event.componentName}`,
-      description: `Unclean ${event.leakType} from "${event.source}" detected after component destruction.`,
+      title: `Possible leak risk in ${event.componentName}`,
+      description: `Cleanup not detected for ${event.leakType} from "${event.source}" after component destruction.`,
       timestamp: event.detectedAt,
     };
   }
@@ -358,18 +377,6 @@ export class PanelState {
       severity: issue.severity,
       title: `Missing trackBy in ${issue.componentName}`,
       description: `Collection "${issue.collectionProperty}" has ${issue.collectionSize} items without trackBy.`,
-      timestamp: Date.now(),
-    };
-  }
-
-  private onPushToIssue(score: OnPushScore): Issue {
-    return {
-      id: `onpush-${score.component}`,
-      type: 'onpush',
-      componentName: score.component,
-      severity: 'INFO',
-      title: `OnPush candidate: ${score.component}`,
-      description: score.recommendation,
       timestamp: Date.now(),
     };
   }

@@ -1,10 +1,10 @@
 # Privacy Policy
 
-**Last Updated:** June 2025
+**Last Updated:** June 20, 2026
 
 ## Our Commitment
 
-ngLens is built with privacy as a core principle. All analysis happens locally in your browser. **No data ever leaves your machine.**
+ngLens is built with privacy as a core principle. All analysis happens locally in your browser. **Analysis data, page URLs, and source code never leave your machine.** Anonymous usage analytics are sent only if you explicitly opt in.
 
 ## What We Collect
 
@@ -44,7 +44,7 @@ If you select "No thanks" when prompted, or opt out later via settings:
 1. **Local Analysis Only:**
    - All code analysis runs in your browser
    - Data is processed locally on your machine
-   - Results are displayed in the extension popup
+   - Results are displayed in the DevTools panel and extension UI
    - Analysis results are never transmitted to external servers
 
 2. **Storage:**
@@ -67,7 +67,7 @@ If you select "No thanks" when prompted, or opt out later via settings:
 4. **Network Access:**
    - The only outbound network request is to Google Analytics (when opted in)
    - No analysis data, page URLs, or personal information is transmitted
-   - If analytics is declined, the extension makes zero network requests
+   - If analytics is declined, no analytics requests are made
 
 ## Third-Party Services
 
@@ -98,11 +98,11 @@ You can verify our privacy claims:
    - Open Chrome DevTools → Network tab
    - Use the extension
    - If opted in: only requests to `google-analytics.com/mp/collect`
-   - If opted out: zero network requests
+   - If opted out: no Google Analytics requests
 
 ## Your Data Rights
 
-Since we don't collect any data, there's nothing to:
+Since ngLens does not collect analysis data or personal data, there's nothing to:
 - Request access to
 - Request deletion of
 - Request modification of
@@ -112,7 +112,7 @@ All scan results are stored locally in your browser and are under your control.
 
 ## Updates to This Policy
 
-If we ever change our privacy practices (we won't), we will:
+If we change our privacy practices, we will:
 1. Update this document
 2. Increment the version number
 3. Notify users via extension update notes
@@ -139,12 +139,12 @@ ngLens complies with:
 - ✅ GDPR (EU General Data Protection Regulation)
 - ✅ CCPA (California Consumer Privacy Act)
 - ✅ Chrome Web Store Developer Program Policies
-- ✅ No data collection = No compliance issues
+- ✅ Opt-in analytics disclosed and controlled by user consent
 
 ## Transparency
 
 **You can verify everything:**
-1. Source code is fully open (GPL v3)
+1. Source code is fully open (MIT License)
 2. No obfuscation or minification of logic
 3. All dependencies are listed in package.json
 4. Build process is reproducible (check vite.config.ts)

@@ -30,18 +30,22 @@ export async function routeMessage(
 
   switch (type) {
     case 'SCAN_REQUEST':
-      return handleScanRequest(message, tabId);
+      return forwardToContentScript(
+        message,
+        tabId,
+        'Failed to communicate with content script. Try refreshing the page.'
+      );
 
     case 'SCAN_RESULTS':
       return handleScanResults(payload as ScanResultsPayload, tabId);
 
     case 'DETECTION_STATUS':
-      return handleDetectionStatus(message, tabId);
+      return forwardToContentScript(message, tabId, 'Failed to communicate with content script.');
 
     case 'OVERLAY_SHOW':
     case 'OVERLAY_HIDE':
     case 'OVERLAY_CLEAR_ALL':
-      return forwardToContentScript(message, tabId);
+      return forwardToContentScript(message, tabId, 'Failed to forward message to content script.');
 
     case 'ERROR':
       return handleError(message, tabId);
@@ -57,28 +61,6 @@ export async function routeMessage(
 
     default:
       return { success: false, error: `Unknown message type: ${type}` };
-  }
-}
-
-/**
- * Forwards a SCAN_REQUEST from popup to the content script of the active tab.
- */
-async function handleScanRequest(
-  message: ExtensionMessage,
-  tabId: number | undefined
-): Promise<unknown> {
-  if (!tabId) {
-    return { success: false, error: 'No active tab found' };
-  }
-
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, message);
-    return response;
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Failed to communicate with content script. Try refreshing the page.',
-    };
   }
 }
 
@@ -99,33 +81,12 @@ async function handleScanResults(
 }
 
 /**
- * Forwards DETECTION_STATUS request to the content script.
- */
-async function handleDetectionStatus(
-  message: ExtensionMessage,
-  tabId: number | undefined
-): Promise<unknown> {
-  if (!tabId) {
-    return { success: false, error: 'No active tab found' };
-  }
-
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, message);
-    return response;
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Failed to communicate with content script.',
-    };
-  }
-}
-
-/**
  * Forwards overlay messages to the content script.
  */
 async function forwardToContentScript(
   message: ExtensionMessage,
-  tabId: number | undefined
+  tabId: number | undefined,
+  errorMessage: string
 ): Promise<unknown> {
   if (!tabId) {
     return { success: false, error: 'No active tab found' };
@@ -137,7 +98,7 @@ async function forwardToContentScript(
   } catch (error) {
     return {
       success: false,
-      error: 'Failed to forward message to content script.',
+      error: errorMessage,
     };
   }
 }

@@ -1,7 +1,7 @@
 /**
  * ngLens - Angular Performance Analyzer
  * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Licensed under MIT
  *
  * https://github.com/gowtham-labs/nglens
  *
@@ -154,6 +154,7 @@ class FreezeEventAnalyzer implements Analyzer {
         issues.push({
           id: `freeze-cause-${cause.replace(/\s+/g, '-')}`,
           analyzer: this.type,
+          component: 'Application',
           severity: 'high',
           category: 'render-performance',
           title: `${cause} is causing freezes`,

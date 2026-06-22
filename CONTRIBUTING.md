@@ -80,7 +80,7 @@ All source files must include copyright header:
 /**
  * ngLens - Angular Performance Analyzer
  * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Licensed under MIT
  * 
  * https://github.com/gowtham-labs/nglens
  */
@@ -212,8 +212,8 @@ console.log(`Took ${duration}ms`);
 Manual testing required for PRs:
 
 - [ ] Extension builds successfully (`npm run build`)
-- [ ] Works on Angular 16+ apps
-- [ ] Works on Angular 12-15 apps (if applicable)
+- [ ] Works on Angular 17-21 apps
+- [ ] Fails gracefully on Angular 16 and earlier
 - [ ] Works in dev mode (window.ng available)
 - [ ] Works in production mode (no window.ng)
 - [ ] No console errors
@@ -239,9 +239,9 @@ Update these files when relevant:
 ## License
 
 By contributing, you agree:
-- Your code is licensed under GPL v3
+- Your code is licensed under the MIT License
 - You have rights to contribute the code
-- You waive any patent claims
+- You grant any patent rights necessary to use your contribution under the MIT License
 
 ## Questions?
 

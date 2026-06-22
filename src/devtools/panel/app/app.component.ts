@@ -82,10 +82,10 @@ export class AppComponent implements OnInit, OnDestroy {
   private isResizingActivity = false;
 
   constructor() {
-    // Auto-collapse when selectedComponent changes
+    // Open the explanation panel when a component is selected from Overview,
+    // Recommendations, or Render Inspector.
     effect(() => {
-      this.state.selectedComponent();
-      this.whyPanelExpanded.set(false);
+      this.whyPanelExpanded.set(Boolean(this.state.selectedComponent()));
     });
   }
 

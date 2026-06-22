@@ -1,8 +1,16 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
-import type { OnPushScore, TrackByIssue } from '../../../../../types/recommendation-events';
+import {
+  buildRecommendationActions,
+  confidenceClass,
+  difficultyClass,
+  gainClass,
+  topQuickWins,
+  type ActionKind,
+  type RecommendationAction,
+} from '../../utils/recommendation-actions';
 
 @Component({
   selector: 'app-recommendations',
@@ -10,158 +18,262 @@ import type { OnPushScore, TrackByIssue } from '../../../../../types/recommendat
   imports: [CommonModule],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
-      <!-- Summary -->
-      <section class="border border-gray-700 rounded-lg p-4 bg-gray-800/40 backdrop-blur-sm">
-        <h2 class="text-sm font-semibold text-gray-100 mb-4">Performance Recommendations</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="p-4 rounded-lg border border-purple-800/50 bg-purple-900/30">
-            <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">OnPush Candidates</div>
-            <div class="text-3xl font-bold text-purple-300">{{ getOnPushCandidates().length }}</div>
-            <div class="text-xs text-purple-400/80 mt-1">components can optimize</div>
+      <section class="border border-gray-800 rounded bg-gray-900 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-gray-100">Action Center</h2>
+            <p class="text-xs text-gray-400 mt-1">
+              Ranked fixes from render hotspots, trackBy checks, OnPush suitability, zone activity, and cleanup signals.
+            </p>
           </div>
-
-          <div class="p-4 rounded-lg border border-orange-800/50 bg-orange-900/30">
-            <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">Missing trackBy</div>
-            <div class="text-3xl font-bold text-orange-300">{{ getTrackByIssues().length }}</div>
-            <div class="text-xs text-orange-400/80 mt-1">*ngFor directives</div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[360px]">
+            <div class="summary-cell">
+              <span>Total actions</span>
+              <strong>{{ actions().length }}</strong>
+            </div>
+            <div class="summary-cell">
+              <span>Quick wins</span>
+              <strong>{{ quickWins().length }}</strong>
+            </div>
+            <div class="summary-cell">
+              <span>High confidence</span>
+              <strong>{{ highConfidenceCount() }}</strong>
+            </div>
+            <div class="summary-cell">
+              <span>Large gain</span>
+              <strong>{{ largeGainCount() }}</strong>
+            </div>
           </div>
         </div>
       </section>
 
-      @if (getOnPushCandidates().length === 0 && getTrackByIssues().length === 0) {
-        <div class="border border-green-800/50 rounded-lg p-8 bg-green-900/20 text-center">
-          <div class="text-2xl mb-2">✓</div>
-          <div class="text-green-300 font-semibold mb-1">No Recommendations</div>
-          <div class="text-xs text-gray-400">Your Angular app is well-optimized!</div>
+      @if (actions().length === 0) {
+        <div class="border border-green-800/50 rounded p-8 bg-green-900/15 text-center">
+          <div class="text-green-300 font-semibold mb-1">No ranked actions yet</div>
+          <div class="text-xs text-gray-400">Use the app while tracking to collect recommendation evidence.</div>
         </div>
-      }
-
-      <!-- OnPush Recommendations -->
-      @if (getOnPushCandidates().length > 0) {
-        <section class="border border-purple-700/50 rounded-lg overflow-hidden bg-purple-900/20 backdrop-blur-sm">
-          <div class="px-4 py-3 border-b border-purple-700/50 bg-purple-900/40">
-            <h3 class="text-sm font-semibold text-purple-200 uppercase">
-              OnPush Strategy Candidates ({{ getOnPushCandidates().length }})
-            </h3>
-            <p class="text-xs text-gray-400 mt-1">
-              These components are candidates for ChangeDetectionStrategy.OnPush optimization
-            </p>
+      } @else {
+        <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-xs font-semibold text-gray-300 uppercase">Fix First</h3>
+              <p class="text-[10px] text-gray-500 mt-0.5">Sorted by impact, confidence, and practicality.</p>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              @for (entry of kindCounts(); track entry.kind) {
+                <span class="count-pill">{{ kindLabel(entry.kind) }} {{ entry.count }}</span>
+              }
+            </div>
           </div>
 
-          <div class="divide-y divide-purple-700/30 max-h-64 overflow-auto">
-            @for (item of getOnPushCandidates(); track item.component) {
-              <div class="px-4 py-3 hover:bg-purple-900/30 cursor-pointer transition-colors group" (click)="selectRecommendation(item)">
-                <div class="flex items-start gap-3">
-                  <div class="text-2xl font-bold text-purple-400 group-hover:scale-110 transition-transform">{{ item.score }}<span class="text-xs">/100</span></div>
-                  <div class="flex-1">
-                    <div class="font-semibold text-gray-100 group-hover:text-purple-200 transition-colors">{{ displayName(item.component) }}</div>
-                    <div class="text-xs text-gray-400 mt-1">
-                      <span class="inline-block mr-2">✓ Input-driven:</span>
-                      {{ getInputDescription(item) }}
-                    </div>
-                    <div class="mt-2 p-2 rounded bg-purple-900/40 border border-purple-800/30 text-xs text-gray-300">
-                      <strong class="text-purple-200">Recommendation:</strong> {{ item.recommendation }}
-                    </div>
+          <div class="divide-y divide-gray-800">
+            @for (action of actions(); track action.id; let index = $index) {
+              <button
+                type="button"
+                class="w-full text-left p-4 hover:bg-gray-800/55 transition-colors"
+                (click)="selectAction(action)"
+              >
+                <div class="grid grid-cols-[36px_1fr] gap-3">
+                  <div class="rank-box" [ngClass]="rankClass(index)">
+                    {{ index + 1 }}
                   </div>
-                  <span class="text-[10px] text-purple-400 font-bold whitespace-nowrap">{{ item.currentStrategy }}</span>
-                </div>
-              </div>
-            }
-          </div>
-        </section>
-      }
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="kind-pill" [ngClass]="kindClass(action.kind)">
+                            {{ kindLabel(action.kind) }}
+                          </span>
+                          <span class="text-xs text-gray-500 truncate">
+                            {{ displayName(action.source) }}
+                          </span>
+                        </div>
+                        <h4 class="text-sm font-semibold text-gray-100 mt-2">{{ action.title }}</h4>
+                        <p class="text-xs text-gray-400 mt-1">{{ action.suggestedFix }}</p>
+                      </div>
 
-      <!-- TrackBy Issues -->
-      @if (getTrackByIssues().length > 0) {
-        <section class="border border-orange-700/50 rounded-lg overflow-hidden bg-orange-900/20 backdrop-blur-sm">
-          <div class="px-4 py-3 border-b border-orange-700/50 bg-orange-900/40">
-            <h3 class="text-sm font-semibold text-orange-200 uppercase">
-              Missing trackBy Functions ({{ getTrackByIssues().length }})
-            </h3>
-            <p class="text-xs text-gray-400 mt-1">
-              Add trackBy functions to improve list rendering performance
-            </p>
-          </div>
-
-          <div class="divide-y divide-orange-700/30 max-h-64 overflow-auto">
-            @for (item of getTrackByIssues(); track item.componentName) {
-              <div class="px-4 py-3 hover:bg-orange-900/30 cursor-pointer transition-colors group" (click)="selectRecommendation(item)">
-                <div class="flex items-start gap-3">
-                  <div class="w-12 h-12 rounded-lg bg-orange-900/40 flex items-center justify-center border border-orange-700/50 group-hover:border-orange-600 transition-colors">
-                    <span class="text-sm font-bold text-orange-400">{{ item.collectionSize }}</span>
-                  </div>
-                  <div class="flex-1">
-                    <div class="font-semibold text-gray-100 group-hover:text-orange-200 transition-colors">{{ displayName(item.componentName) }}</div>
-                    <div class="text-xs text-gray-400 mt-1">
-                      Collection <strong class="text-orange-300">{{ item.collectionProperty }}</strong> has {{ item.collectionSize }} items
-                    </div>
-                    <div class="mt-2 p-2 rounded bg-orange-900/40 border border-orange-700/30 text-xs text-gray-300 font-mono">
-                      <div class="mb-1">Add to your component:</div>
-                      <div class="bg-black/50 p-1.5 rounded text-orange-300 text-[10px] leading-relaxed">
-                        trackBy = (i: number, item: any) => item.id;
+                      <div class="flex flex-wrap gap-1.5 justify-end">
+                        <span class="badge" [ngClass]="confidenceClass(action.confidence)">
+                          {{ action.confidence }}
+                        </span>
+                        <span class="badge" [ngClass]="difficultyClass(action.difficulty)">
+                          {{ action.difficulty }}
+                        </span>
+                        <span class="badge" [ngClass]="gainClass(action.expectedGain)">
+                          {{ action.expectedGain }} gain
+                        </span>
                       </div>
                     </div>
-                    <div class="mt-2 text-xs text-gray-300">
-                      <strong class="text-orange-200">In template:</strong> *ngFor="let item of items; trackBy: trackBy"
+
+                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3">
+                      <div class="evidence-box">
+                        <span>Evidence</span>
+                        <strong>{{ action.evidence }}</strong>
+                      </div>
+
+                      @if (action.snippet) {
+                        <pre class="snippet"><code>{{ action.snippet }}</code></pre>
+                      } @else {
+                        <div class="evidence-box">
+                          <span>Next step</span>
+                          <strong>Open Render Inspector and inspect the selected component evidence.</strong>
+                        </div>
+                      }
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             }
           </div>
         </section>
       }
-
-      <!-- Best Practices Guide -->
-      <section class="border border-blue-700/50 rounded-lg p-4 bg-blue-900/20 backdrop-blur-sm">
-        <h3 class="text-xs font-semibold text-blue-300 mb-3 uppercase">Best Practices</h3>
-        <div class="space-y-3 text-xs text-gray-300">
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">1. Use ChangeDetectionStrategy.OnPush</strong>
-            <p class="text-gray-400 text-xs">For components that only depend on inputs, this dramatically reduces change detection cycles.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">2. Always Use trackBy in *ngFor</strong>
-            <p class="text-gray-400 text-xs">Without trackBy, Angular recreates DOM elements for every change, wasting performance.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">3. Memoize Expensive Computations</strong>
-            <p class="text-gray-400 text-xs">Use Angular Signals computed() to cache expensive operations until dependencies change.</p>
-          </div>
-          <div class="p-3 rounded bg-blue-900/30 border border-blue-800/30">
-            <strong class="block text-blue-300 mb-1">4. Lazy Load Modules</strong>
-            <p class="text-gray-400 text-xs">Use feature modules and lazy loading to reduce initial bundle size and improve startup time.</p>
-          </div>
-        </div>
-      </section>
     </div>
   `,
+  styles: [`
+    .summary-cell,
+    .evidence-box {
+      background: rgb(31 41 55 / 0.45);
+      border: 1px solid rgb(55 65 81 / 0.55);
+      border-radius: 4px;
+      padding: 8px;
+      min-width: 0;
+    }
+
+    .summary-cell span,
+    .evidence-box span {
+      display: block;
+      color: #9ca3af;
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .summary-cell strong {
+      display: block;
+      color: #f3f4f6;
+      font-size: 18px;
+      margin-top: 2px;
+    }
+
+    .evidence-box strong {
+      display: block;
+      color: #d1d5db;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.45;
+      margin-top: 4px;
+    }
+
+    .rank-box {
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      border: 1px solid rgb(75 85 99 / 0.7);
+      background: rgb(31 41 55 / 0.55);
+      font-size: 12px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .badge,
+    .kind-pill,
+    .count-pill {
+      border: 1px solid rgb(75 85 99 / 0.55);
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+
+    .count-pill {
+      color: #d1d5db;
+      background: rgb(31 41 55 / 0.45);
+    }
+
+    .snippet {
+      margin: 0;
+      min-height: 68px;
+      max-height: 132px;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: rgb(3 7 18 / 0.7);
+      border: 1px solid rgb(55 65 81 / 0.75);
+      border-radius: 4px;
+      color: #bfdbfe;
+      font-size: 11px;
+      line-height: 1.45;
+      padding: 8px;
+    }
+  `],
 })
 export class RecommendationsComponent {
   readonly state = inject(PanelState);
   readonly displayName = displayName;
+  readonly confidenceClass = confidenceClass;
+  readonly difficultyClass = difficultyClass;
+  readonly gainClass = gainClass;
 
-  getOnPushCandidates(): OnPushScore[] {
-    return this.state.onPushRecommendations().filter(r => r.score > 50);
-  }
+  readonly actions = computed(() => buildRecommendationActions({
+    trackByIssues: this.state.trackByIssues(),
+    onPushRecommendations: this.state.onPushRecommendations(),
+    hotspots: this.state.componentHotspots(),
+    zonePollutionSources: this.state.zonePollutionSources(),
+    leakEvents: this.state.leakEvents(),
+  }));
 
-  getTrackByIssues(): TrackByIssue[] {
-    return this.state.trackByIssues();
-  }
+  readonly quickWins = computed(() => topQuickWins(this.actions(), 3));
+  readonly highConfidenceCount = computed(() => this.actions().filter(action => action.confidence === 'High').length);
+  readonly largeGainCount = computed(() => this.actions().filter(action => action.expectedGain === 'Large').length);
 
-  selectRecommendation(item: OnPushScore | TrackByIssue): void {
-    if ('component' in item) {
-      // OnPush score
-      this.state.selectedComponent.set((item as OnPushScore).component);
-    } else {
-      // TrackBy issue
-      this.state.selectedComponent.set((item as TrackByIssue).componentName);
+  readonly kindCounts = computed(() => {
+    const counts = new Map<ActionKind, number>();
+    for (const action of this.actions()) {
+      counts.set(action.kind, (counts.get(action.kind) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([kind, count]) => ({ kind, count }));
+  });
+
+  selectAction(action: RecommendationAction): void {
+    this.state.selectedComponent.set(action.componentName);
+    const matchingIssue = this.state.allIssues().find(issue =>
+      issue.id === action.id ||
+      issue.id === `zone-pollution-${action.componentName}` ||
+      issue.id === `hotspot-${action.componentName}`
+    );
+    if (matchingIssue) {
+      this.state.selectedIssue.set(matchingIssue);
     }
   }
 
-  getInputDescription(item: OnPushScore): string {
-    const factor = item.factors?.find(f => f.name === 'Has inputs');
-    return factor?.description ?? '';
+  kindLabel(kind: ActionKind): string {
+    switch (kind) {
+      case 'trackby': return 'List';
+      case 'onpush': return 'OnPush';
+      case 'zone': return 'Zone';
+      case 'render-hotspot': return 'Render';
+      case 'memory-cleanup': return 'Memory';
+    }
+  }
+
+  kindClass(kind: ActionKind): string {
+    switch (kind) {
+      case 'trackby': return 'text-orange-300 bg-orange-500/15 border-orange-500/30';
+      case 'onpush': return 'text-purple-300 bg-purple-500/15 border-purple-500/30';
+      case 'zone': return 'text-blue-300 bg-blue-500/15 border-blue-500/30';
+      case 'render-hotspot': return 'text-amber-300 bg-amber-500/15 border-amber-500/30';
+      case 'memory-cleanup': return 'text-red-300 bg-red-500/15 border-red-500/30';
+    }
+  }
+
+  rankClass(index: number): string {
+    if (index === 0) return 'text-red-300';
+    if (index === 1) return 'text-amber-300';
+    if (index === 2) return 'text-yellow-300';
+    return 'text-gray-300';
   }
 }

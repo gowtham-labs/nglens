@@ -69,16 +69,18 @@ Please include:
   "permissions": [
     "activeTab",   // Only current tab
     "scripting",   // Inject analyzers
-    "tabs",        // Tab metadata
     "storage"      // Local storage only
+  ],
+  "host_permissions": [
+    "https://www.google-analytics.com/*" // Opt-in anonymous usage analytics only
   ]
 }
 ```
 
-**No network permissions:**
-- Cannot send data externally
-- Cannot fetch remote resources
-- Cannot communicate with servers
+**Network access:**
+- Analysis data, page URLs, and source code are not transmitted
+- Google Analytics is contacted only after explicit opt-in
+- No remote scripts or analysis APIs are loaded
 
 ### 3. Input Validation
 
@@ -181,14 +183,14 @@ However, we offer:
 Thank you to these security researchers:
 - [Names of researchers who reported issues]
 
-## License Security Note
+## License and Brand Note
 
-This project uses **GPL v3** license:
-- Derivatives must be open source
-- Source code must be disclosed
-- Prevents closed-source malicious forks
+This project uses the **MIT License**:
+- Permissive use, modification, distribution, and sublicensing
+- Copyright and license notices must be retained
+- Source is public and auditable
 
-Trademark "ngLens" prevents name impersonation.
+Trademark "ngLens" prevents name and logo impersonation.
 
 ## Contact
 
@@ -200,4 +202,4 @@ Trademark "ngLens" prevents name impersonation.
 
 - [OWASP Extension Security Guide](https://owasp.org/www-community/vulnerabilities/)
 - [Chrome Extension Security Best Practices](https://developer.chrome.com/docs/extensions/mv3/security/)
-- [GPL v3 License](https://www.gnu.org/licenses/gpl-3.0.html)
+- [MIT License](https://opensource.org/license/mit/)

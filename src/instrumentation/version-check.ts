@@ -6,6 +6,8 @@ export interface VersionCheckResult {
   major: number | null;
 }
 
+const DOM_MARKER_SCAN_LIMIT = 1000;
+
 /**
  * Detects the Angular version from the [ng-version] attribute on the root element.
  * Also checks for window.ng (available in Angular dev mode).
@@ -16,8 +18,10 @@ export interface VersionCheckResult {
  * - If version >= 17, returns { supported: true, version, major }
  */
 export function checkAngularVersion(): VersionCheckResult {
+  const doc = globalThis.document;
+
   // Strategy 1: Check [ng-version] attribute
-  const versionElement = document.querySelector('[ng-version]');
+  const versionElement = doc?.querySelector?.('[ng-version]') ?? null;
   if (versionElement) {
     const version = versionElement.getAttribute('ng-version');
     if (version) {
@@ -46,13 +50,34 @@ export function checkAngularVersion(): VersionCheckResult {
   }
 
   // Strategy 3: Check for Angular component markers in DOM
-  const hasAngularMarkers = document.querySelector('[_nghost]') !== null
-    || document.querySelector('[ng-reflect-]') !== null
-    || (globalThis as any).getAllAngularRootElements?.()?.length > 0;
+  const hasAngularMarkers = hasAngularDomMarkers(doc)
+    || ((globalThis as any).getAllAngularRootElements?.()?.length ?? 0) > 0;
 
   if (hasAngularMarkers) {
     return { supported: true, version: 'unknown', major: null };
   }
 
   return { supported: false, version: null, major: null };
+}
+
+function hasAngularDomMarkers(doc: Document | undefined): boolean {
+  if (!doc?.querySelectorAll) return false;
+
+  const elements = doc.querySelectorAll('*');
+  const limit = Math.min(elements.length, DOM_MARKER_SCAN_LIMIT);
+
+  for (let index = 0; index < limit; index++) {
+    const element = elements[index];
+    for (const attr of Array.from(element.attributes)) {
+      if (
+        attr.name.startsWith('_nghost') ||
+        attr.name.startsWith('_ngcontent') ||
+        attr.name.startsWith('ng-reflect-')
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }

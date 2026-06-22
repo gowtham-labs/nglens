@@ -1,7 +1,8 @@
 {
   "name": "nglens",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,28 +14,31 @@
     "test": "vitest --run"
   },
   "dependencies": {
-    "@angular/animations": "~19.2.0",
-    "@angular/cdk": "~19.2.0",
-    "@angular/common": "~19.2.0",
-    "@angular/compiler": "~19.2.0",
-    "@angular/core": "~19.2.0",
-    "@angular/platform-browser": "~19.2.0",
-    "@angular/router": "~19.2.0",
-    "rxjs": "^7.8.1",
+    "@angular/animations": "~22.0.2",
+    "@angular/cdk": "~22.0.2",
+    "@angular/common": "~22.0.2",
+    "@angular/compiler": "~22.0.2",
+    "@angular/core": "~22.0.2",
+    "@angular/platform-browser": "~22.0.2",
+    "@angular/router": "~22.0.2",
+    "rxjs": "^7.8.2",
     "tslib": "^2.6.3",
-    "zone.js": "^0.15.0"
+    "zone.js": "^0.16.2"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "~19.2.0",
-    "@angular/cli": "~19.2.0",
-    "@angular/compiler-cli": "~19.2.0",
+    "@angular/build": "~22.0.3",
+    "@angular/cli": "~22.0.3",
+    "@angular/compiler-cli": "~22.0.2",
     "@types/chrome": "^0.1.42",
     "autoprefixer": "^10.4.20",
     "fast-check": "4.8.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "vitest": "2.1.9"
+    "typescript": "6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "4.1.9"
+  },
+  "overrides": {
+    "piscina": "5.2.0"
   }
 }

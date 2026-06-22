@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added ⚡
 
 **Signals Analyzer (NEW):**
-- First tool to analyze Angular 16+ Signals performance
+- Added Signals performance analysis for supported Angular apps
 - Detects expensive computed signals with nested operations
 - Identifies O(n²) complexity in computed signals
 - Warns about large collections without proper equality
@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Works in production mode
 
 **Security Hardening:**
-- GPL v3 License (prevents closed-source forks)
+- MIT License (permissive open-source license)
 - Content Security Policy (strict CSP)
 - PRIVACY.md (transparency document)
 - SECURITY.md (vulnerability reporting)
@@ -88,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **No breaking changes.** Simply update the extension.
 
 **New Features:**
-- Signals performance analysis (Angular 16+)
+- Signals performance analysis for supported Angular apps
 - Visual overlays on page
 - Professional dark UI
 - Enhanced security

@@ -12,7 +12,7 @@
 
 import { SamplingConfig } from '../types/performance-budget';
 import { MAX_ELEMENTS_PER_SCAN, OBSERVER_DISCONNECT_MS } from './constants';
-import { scheduleIdle, cancelIdle, now } from './timing';
+import { scheduleIdle, cancelIdle, now, type IdleHandle } from './timing';
 
 // --- Default Sampling Configuration ---
 
@@ -133,7 +133,7 @@ export function createBatchedMutationObserver(
   const cfg = { ...DEFAULT_SAMPLING_CONFIG, ...config };
   let batchBuffer: MutationRecord[] = [];
   let batchTimer: ReturnType<typeof setTimeout> | null = null;
-  let idleHandle: number | null = null;
+  let idleHandle: IdleHandle | null = null;
 
   function flushBatch(): void {
     batchTimer = null;

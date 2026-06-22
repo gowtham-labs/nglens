@@ -29,7 +29,10 @@ export type AnalyzerType =
   | 'signals-analyzer'
   | 'rxjs-leak-detector'
   | 'enterprise-optimizer'
-  | 'best-practices-detector';
+  | 'best-practices-detector'
+  | 'freeze-event-analyzer'
+  | 'template-expression-analyzer'
+  | 'zone-pollution-analyzer';
 
 export type IssueCategory =
   | 'change-detection'

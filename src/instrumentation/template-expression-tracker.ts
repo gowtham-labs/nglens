@@ -1,7 +1,7 @@
 /**
  * ngLens - Angular Performance Analyzer
  * Copyright (c) 2026 ngLens Contributors
- * Licensed under GPL v3
+ * Licensed under MIT
  *
  * https://github.com/gowtham-labs/nglens
  *
@@ -29,6 +29,10 @@ interface TrackedExpression {
   slowestCall: number;
   targets: string[];
 }
+
+type InstrumentedFunction = ((this: any, ...args: any[]) => any) & {
+  __ngLensInstrumented?: boolean;
+};
 
 export class TemplateExpressionTracker {
   private expressions = new Map<string, TrackedExpression>();
@@ -107,7 +111,7 @@ export class TemplateExpressionTracker {
       const tracker = this;
       const trackedKey = `${componentName}#${methodName}`;
 
-      const instrumented = function (...args: any[]) {
+      const instrumented: InstrumentedFunction = function (this: any, ...args: any[]) {
         const start = performance.now();
         try {
           const result = original.apply(this, args);
@@ -149,12 +153,12 @@ export class TemplateExpressionTracker {
     descriptor: PropertyDescriptor
   ): void {
     try {
-      const original = descriptor.get;
+      const original = descriptor.get as InstrumentedFunction | undefined;
       if (!original || original.__ngLensInstrumented) return;
 
       const tracker = this;
 
-      const instrumented = function () {
+      const instrumented: InstrumentedFunction = function (this: any) {
         const start = performance.now();
         try {
           const result = original.call(this);
@@ -303,12 +307,12 @@ export class TemplateExpressionTracker {
     const originalSetTimeout = globalThis.setTimeout;
     const tracker = this;
 
-    globalThis.setTimeout = function (callback: any, delay: number, ...args: any[]) {
-      if (tracker.enabled && delay > 0) {
+    globalThis.setTimeout = function (this: typeof globalThis, callback: any, delay?: number, ...args: any[]) {
+      if (tracker.enabled && (delay ?? 0) > 0) {
         // Note: Tracking global timeouts would be noisy; only log if in template context
       }
       return originalSetTimeout.call(this, callback, delay, ...args);
-    };
+    } as typeof setTimeout;
   }
 
   /**

@@ -57,7 +57,7 @@ export class EventDispatcherService {
         break;
       case 'ROUTE_CHANGED':
         if (this.state.clearOnRouteChange()) {
-          this.state.renderEvents.set([]);
+          this.state.clearActivity();
         }
         break;
       case 'TAB_NAVIGATED':
