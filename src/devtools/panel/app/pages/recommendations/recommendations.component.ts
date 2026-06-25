@@ -1,5 +1,5 @@
-import { Component, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import {
@@ -7,131 +7,155 @@ import {
   confidenceClass,
   difficultyClass,
   gainClass,
-  topQuickWins,
   type ActionKind,
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
 
+interface ComponentGroup {
+  componentName: string;
+  displayName: string;
+  actions: RecommendationAction[];
+  topKind: ActionKind;
+  totalCount: number;
+  highestConfidence: string;
+}
+
 @Component({
   selector: 'app-recommendations',
   standalone: true,
-  imports: [CommonModule],
+  imports: [NgClass],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
+      <!-- Summary -->
       <section class="border border-gray-800 rounded bg-gray-900 p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 class="text-sm font-semibold text-gray-100">Action Center</h2>
             <p class="text-xs text-gray-400 mt-1">
-              Ranked fixes from render hotspots, trackBy checks, OnPush suitability, zone activity, and cleanup signals.
+              Grouped by component. Expand to see specific issues and sources.
             </p>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[360px]">
             <div class="summary-cell">
-              <span>Total actions</span>
-              <strong>{{ actions().length }}</strong>
+              <span>Components</span>
+              <strong>{{ componentGroups().length }}</strong>
             </div>
             <div class="summary-cell">
-              <span>Quick wins</span>
-              <strong>{{ quickWins().length }}</strong>
+              <span>Total issues</span>
+              <strong>{{ actions().length }}</strong>
             </div>
             <div class="summary-cell">
               <span>High confidence</span>
               <strong>{{ highConfidenceCount() }}</strong>
             </div>
             <div class="summary-cell">
-              <span>Large gain</span>
-              <strong>{{ largeGainCount() }}</strong>
+              <span>Quick wins</span>
+              <strong>{{ quickWinCount() }}</strong>
             </div>
           </div>
         </div>
       </section>
 
-      @if (actions().length === 0) {
+      <!-- Category filter tabs -->
+      <div class="flex gap-1.5 flex-wrap">
+        <button
+          (click)="activeFilter.set('all')"
+          class="filter-btn"
+          [ngClass]="activeFilter() === 'all' ? 'filter-btn-active' : 'filter-btn-inactive'">
+          All ({{ actions().length }})
+        </button>
+        @for (entry of kindCounts(); track entry.kind) {
+          <button
+            (click)="activeFilter.set(entry.kind)"
+            class="filter-btn"
+            [ngClass]="activeFilter() === entry.kind ? 'filter-btn-active' : 'filter-btn-inactive'">
+            {{ kindLabel(entry.kind) }} ({{ entry.count }})
+          </button>
+        }
+      </div>
+
+      @if (filteredGroups().length === 0) {
         <div class="border border-green-800/50 rounded p-8 bg-green-900/15 text-center">
-          <div class="text-green-300 font-semibold mb-1">No ranked actions yet</div>
+          <div class="text-green-300 font-semibold mb-1">No issues found</div>
           <div class="text-xs text-gray-400">Use the app while tracking to collect recommendation evidence.</div>
         </div>
       } @else {
-        <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
-          <div class="px-4 py-3 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 class="text-xs font-semibold text-gray-300 uppercase">Fix First</h3>
-              <p class="text-[10px] text-gray-500 mt-0.5">Sorted by impact, confidence, and practicality.</p>
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              @for (entry of kindCounts(); track entry.kind) {
-                <span class="count-pill">{{ kindLabel(entry.kind) }} {{ entry.count }}</span>
-              }
-            </div>
-          </div>
-
-          <div class="divide-y divide-gray-800">
-            @for (action of actions(); track action.id; let index = $index) {
+        <!-- Component groups -->
+        <div class="space-y-2">
+          @for (group of filteredGroups(); track group.componentName) {
+            <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
+              <!-- Component header (clickable to expand) -->
               <button
                 type="button"
-                class="w-full text-left p-4 hover:bg-gray-800/55 transition-colors"
-                (click)="selectAction(action)"
+                class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
+                (click)="toggleGroup(group.componentName)"
               >
-                <div class="grid grid-cols-[36px_1fr] gap-3">
-                  <div class="rank-box" [ngClass]="rankClass(index)">
-                    {{ index + 1 }}
+                <span class="text-[10px] text-gray-500">
+                  {{ isExpanded(group.componentName) ? '▼' : '▶' }}
+                </span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                      {{ group.totalCount }} {{ group.totalCount === 1 ? 'issue' : 'issues' }}
+                    </span>
                   </div>
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <span class="kind-pill" [ngClass]="kindClass(action.kind)">
-                            {{ kindLabel(action.kind) }}
-                          </span>
-                          <span class="text-xs text-gray-500 truncate">
-                            {{ displayName(action.source) }}
-                          </span>
-                        </div>
-                        <h4 class="text-sm font-semibold text-gray-100 mt-2">{{ action.title }}</h4>
-                        <p class="text-xs text-gray-400 mt-1">{{ action.suggestedFix }}</p>
-                      </div>
-
-                      <div class="flex flex-wrap gap-1.5 justify-end">
-                        <span class="badge" [ngClass]="confidenceClass(action.confidence)">
-                          {{ action.confidence }}
-                        </span>
-                        <span class="badge" [ngClass]="difficultyClass(action.difficulty)">
-                          {{ action.difficulty }}
-                        </span>
-                        <span class="badge" [ngClass]="gainClass(action.expectedGain)">
-                          {{ action.expectedGain }} gain
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3">
-                      <div class="evidence-box">
-                        <span>Evidence</span>
-                        <strong>{{ action.evidence }}</strong>
-                      </div>
-
-                      @if (action.snippet) {
-                        <pre class="snippet"><code>{{ action.snippet }}</code></pre>
-                      } @else {
-                        <div class="evidence-box">
-                          <span>Next step</span>
-                          <strong>Open Render Inspector and inspect the selected component evidence.</strong>
-                        </div>
-                      }
-                    </div>
+                  <div class="flex gap-1.5 mt-1">
+                    @for (action of group.actions.slice(0, 3); track action.id) {
+                      <span class="kind-pill" [ngClass]="kindClass(action.kind)">
+                        {{ kindLabel(action.kind) }}
+                      </span>
+                    }
+                    @if (group.actions.length > 3) {
+                      <span class="text-[10px] text-gray-500">+{{ group.actions.length - 3 }} more</span>
+                    }
                   </div>
                 </div>
+                <span class="badge" [ngClass]="confidenceClass(group.highestConfidence)">
+                  {{ group.highestConfidence }}
+                </span>
               </button>
-            }
-          </div>
-        </section>
+
+              <!-- Expanded: issues grouped by category -->
+              @if (isExpanded(group.componentName)) {
+                <div class="border-t border-gray-800 divide-y divide-gray-800/50">
+                  @for (action of group.actions; track action.id) {
+                    <div class="px-4 py-3 pl-10">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="kind-pill" [ngClass]="kindClass(action.kind)">
+                              {{ kindLabel(action.kind) }}
+                            </span>
+                            <span class="text-xs font-medium text-gray-100">{{ action.title }}</span>
+                          </div>
+                          <p class="text-xs text-gray-400 mt-1">{{ action.evidence }}</p>
+                          <p class="text-xs text-gray-500 mt-1 italic">Fix: {{ action.suggestedFix }}</p>
+                        </div>
+                        <div class="flex gap-1 flex-shrink-0">
+                          <span class="badge" [ngClass]="confidenceClass(action.confidence)">
+                            {{ action.confidence }}
+                          </span>
+                          <span class="badge" [ngClass]="gainClass(action.expectedGain)">
+                            {{ action.expectedGain }}
+                          </span>
+                        </div>
+                      </div>
+                      @if (action.snippet) {
+                        <pre class="snippet mt-2"><code>{{ action.snippet }}</code></pre>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </section>
+          }
+        </div>
       }
     </div>
   `,
   styles: [`
-    .summary-cell,
-    .evidence-box {
+    .summary-cell {
       background: rgb(31 41 55 / 0.45);
       border: 1px solid rgb(55 65 81 / 0.55);
       border-radius: 4px;
@@ -139,8 +163,7 @@ import {
       min-width: 0;
     }
 
-    .summary-cell span,
-    .evidence-box span {
+    .summary-cell span {
       display: block;
       color: #9ca3af;
       font-size: 10px;
@@ -155,50 +178,48 @@ import {
       margin-top: 2px;
     }
 
-    .evidence-box strong {
-      display: block;
-      color: #d1d5db;
-      font-size: 12px;
-      font-weight: 500;
-      line-height: 1.45;
-      margin-top: 4px;
-    }
-
-    .rank-box {
-      width: 32px;
-      height: 32px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 4px;
-      border: 1px solid rgb(75 85 99 / 0.7);
-      background: rgb(31 41 55 / 0.55);
-      font-size: 12px;
-      font-weight: 800;
-      flex-shrink: 0;
-    }
-
     .badge,
-    .kind-pill,
-    .count-pill {
+    .kind-pill {
       border: 1px solid rgb(75 85 99 / 0.55);
       border-radius: 4px;
-      padding: 3px 6px;
+      padding: 2px 6px;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       text-transform: uppercase;
       line-height: 1.2;
+      white-space: nowrap;
     }
 
-    .count-pill {
-      color: #d1d5db;
+    .filter-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .filter-btn-active {
+      background: rgb(59 130 246 / 0.2);
+      border-color: rgb(59 130 246 / 0.5);
+      color: #93c5fd;
+    }
+
+    .filter-btn-inactive {
       background: rgb(31 41 55 / 0.45);
+      border-color: rgb(55 65 81 / 0.55);
+      color: #9ca3af;
+    }
+
+    .filter-btn-inactive:hover {
+      color: #d1d5db;
+      border-color: rgb(75 85 99 / 0.7);
     }
 
     .snippet {
       margin: 0;
-      min-height: 68px;
-      max-height: 132px;
+      max-height: 100px;
       overflow: auto;
       white-space: pre-wrap;
       background: rgb(3 7 18 / 0.7);
@@ -218,6 +239,9 @@ export class RecommendationsComponent {
   readonly difficultyClass = difficultyClass;
   readonly gainClass = gainClass;
 
+  readonly activeFilter = signal<'all' | ActionKind>('all');
+  readonly expandedComponents = signal<Set<string>>(new Set());
+
   readonly actions = computed(() => buildRecommendationActions({
     trackByIssues: this.state.trackByIssues(),
     onPushRecommendations: this.state.onPushRecommendations(),
@@ -226,9 +250,13 @@ export class RecommendationsComponent {
     leakEvents: this.state.leakEvents(),
   }));
 
-  readonly quickWins = computed(() => topQuickWins(this.actions(), 3));
-  readonly highConfidenceCount = computed(() => this.actions().filter(action => action.confidence === 'High').length);
-  readonly largeGainCount = computed(() => this.actions().filter(action => action.expectedGain === 'Large').length);
+  readonly highConfidenceCount = computed(() =>
+    this.actions().filter(a => a.confidence === 'High').length
+  );
+
+  readonly quickWinCount = computed(() =>
+    this.actions().filter(a => a.difficulty === 'Easy' && a.expectedGain !== 'Small').length
+  );
 
   readonly kindCounts = computed(() => {
     const counts = new Map<ActionKind, number>();
@@ -238,16 +266,66 @@ export class RecommendationsComponent {
     return Array.from(counts.entries()).map(([kind, count]) => ({ kind, count }));
   });
 
-  selectAction(action: RecommendationAction): void {
-    this.state.selectedComponent.set(action.componentName);
-    const matchingIssue = this.state.allIssues().find(issue =>
-      issue.id === action.id ||
-      issue.id === `zone-pollution-${action.componentName}` ||
-      issue.id === `hotspot-${action.componentName}`
-    );
-    if (matchingIssue) {
-      this.state.selectedIssue.set(matchingIssue);
+  readonly componentGroups = computed<ComponentGroup[]>(() => {
+    const map = new Map<string, RecommendationAction[]>();
+    for (const action of this.actions()) {
+      const existing = map.get(action.componentName) ?? [];
+      existing.push(action);
+      map.set(action.componentName, existing);
     }
+
+    const groups: ComponentGroup[] = [];
+    for (const [componentName, actions] of map) {
+      const confidencePriority = { 'High': 3, 'Medium': 2, 'Heuristic': 1 };
+      const highest = actions.reduce((best, a) =>
+        (confidencePriority[a.confidence] ?? 0) > (confidencePriority[best.confidence] ?? 0) ? a : best
+      );
+
+      groups.push({
+        componentName,
+        displayName: displayName(componentName),
+        actions,
+        topKind: actions[0].kind,
+        totalCount: actions.length,
+        highestConfidence: highest.confidence,
+      });
+    }
+
+    return groups.sort((a, b) => {
+      const confA = { 'High': 3, 'Medium': 2, 'Heuristic': 1 }[a.highestConfidence] ?? 0;
+      const confB = { 'High': 3, 'Medium': 2, 'Heuristic': 1 }[b.highestConfidence] ?? 0;
+      if (confB !== confA) return confB - confA;
+      return b.totalCount - a.totalCount;
+    });
+  });
+
+  readonly filteredGroups = computed<ComponentGroup[]>(() => {
+    const filter = this.activeFilter();
+    if (filter === 'all') return this.componentGroups();
+
+    return this.componentGroups()
+      .map(group => ({
+        ...group,
+        actions: group.actions.filter(a => a.kind === filter),
+        totalCount: group.actions.filter(a => a.kind === filter).length,
+      }))
+      .filter(group => group.actions.length > 0);
+  });
+
+  toggleGroup(componentName: string): void {
+    this.expandedComponents.update(set => {
+      const next = new Set(set);
+      if (next.has(componentName)) {
+        next.delete(componentName);
+      } else {
+        next.add(componentName);
+      }
+      return next;
+    });
+  }
+
+  isExpanded(componentName: string): boolean {
+    return this.expandedComponents().has(componentName);
   }
 
   kindLabel(kind: ActionKind): string {
@@ -268,12 +346,5 @@ export class RecommendationsComponent {
       case 'render-hotspot': return 'text-amber-300 bg-amber-500/15 border-amber-500/30';
       case 'memory-cleanup': return 'text-red-300 bg-red-500/15 border-red-500/30';
     }
-  }
-
-  rankClass(index: number): string {
-    if (index === 0) return 'text-red-300';
-    if (index === 1) return 'text-amber-300';
-    if (index === 2) return 'text-yellow-300';
-    return 'text-gray-300';
   }
 }

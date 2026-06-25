@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { getSeverityLabels, type SeverityLabel } from '../../utils/severity-labels';
+import { RenderTimelineComponent } from './render-timeline.component';
 import type {
   ComponentHotspot,
   ComponentStats,
@@ -22,7 +23,7 @@ interface RenderStoryCard {
 @Component({
   selector: 'app-rendering',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, RenderTimelineComponent],
   template: `
     <div class="h-full overflow-auto p-4 space-y-4">
       <section class="border border-gray-800 rounded p-3 bg-gray-900">
@@ -118,7 +119,7 @@ interface RenderStoryCard {
                       </td>
                       <td class="py-1.5 px-2 text-right text-gray-300">{{ profile.renderCount }}</td>
                       <td class="py-1.5 px-2 text-right text-gray-300">{{ profile.componentCount }}</td>
-                      <td class="py-1.5 px-2 text-gray-300">{{ causeLabel(profile.dominantCause) }}</td>
+                      <td class="py-1.5 px-2 text-gray-300">{{ burstCauseDetail(profile) }}</td>
                       <td class="py-1.5 px-2 text-gray-300 truncate max-w-[160px]">
                         {{ profile.slowestComponent ? displayName(profile.slowestComponent) : 'Unknown' }}
                       </td>
@@ -153,6 +154,8 @@ interface RenderStoryCard {
           </div>
         </div>
       </section>
+
+      <app-render-timeline />
 
       <section class="border border-gray-800 rounded overflow-hidden">
         <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-3">
@@ -515,12 +518,49 @@ export class RenderingComponent {
   }
 
   actionLabel(profile: InteractionProfile): string {
-    if (profile.dominantCause === 'zone') return 'Async or DOM event burst';
-    if (profile.dominantCause === 'input') return 'Input-driven render burst';
-    if (profile.dominantCause === 'parent') return 'Parent-to-child cascade';
-    if (profile.dominantCause === 'signal') return 'Signal update burst';
-    if (profile.dominantCause === 'manual-cd') return 'Manual change detection burst';
-    return profile.label;
+    // Look up the actual render events in this burst window to get specific sources
+    const burstEvents = this.state.renderEvents().filter(e =>
+      e.timestamp >= profile.startTime && e.timestamp <= profile.endTime
+    );
+
+    const sources = new Map<string, number>();
+    for (const event of burstEvents) {
+      for (const cause of event.causes) {
+        const label = cause.source ?? cause.type;
+        if (label && label !== 'unknown') {
+          sources.set(label, (sources.get(label) ?? 0) + 1);
+        }
+      }
+    }
+
+    if (sources.size === 0) return profile.label;
+
+    // Show top source as the label
+    const topSource = Array.from(sources.entries()).sort((a, b) => b[1] - a[1])[0];
+    return this.formatSourceName(topSource[0]);
+  }
+
+  burstCauseDetail(profile: InteractionProfile): string {
+    const burstEvents = this.state.renderEvents().filter(e =>
+      e.timestamp >= profile.startTime && e.timestamp <= profile.endTime
+    );
+
+    const sources = new Map<string, number>();
+    for (const event of burstEvents) {
+      for (const cause of event.causes) {
+        const label = cause.source ?? cause.type;
+        if (label && label !== 'unknown') {
+          sources.set(label, (sources.get(label) ?? 0) + 1);
+        }
+      }
+    }
+
+    if (sources.size === 0) return this.causeLabel(profile.dominantCause);
+
+    const sorted = Array.from(sources.entries()).sort((a, b) => b[1] - a[1]);
+    return sorted.slice(0, 2)
+      .map(([source, count]) => `${this.formatSourceName(source)} (${count}x)`)
+      .join(', ');
   }
 
   causeLabel(cause: RenderCause['type'] | 'unknown'): string {
@@ -579,13 +619,35 @@ export class RenderingComponent {
   }
 
   componentHint(stat: ComponentStats): string {
-    const cause = this.primaryCause(stat);
-    if (cause === 'parent') return 'A parent render is repeatedly pulling this component into the update.';
-    if (cause === 'input') return 'Inputs or array/object references may be changing more often than expected.';
-    if (cause === 'zone') return 'A DOM event, timer, promise, or HTTP callback likely triggered this update.';
-    if (cause === 'signal') return 'A signal update is driving this component render.';
-    if (cause === 'manual-cd') return 'Manual detectChanges or markForCheck appears involved.';
-    return 'Render cause is not clear yet.';
+    // Show the actual trigger sources from render events for this component
+    const events = this.state.renderEvents().filter(e => e.componentName === stat.componentName);
+    const sources = new Map<string, number>();
+    for (const event of events) {
+      for (const cause of event.causes) {
+        const label = cause.source ?? cause.type;
+        sources.set(label, (sources.get(label) ?? 0) + 1);
+      }
+    }
+
+    if (sources.size === 0) return 'Render cause is not clear yet.';
+
+    // Show top 3 specific sources with counts
+    const sorted = Array.from(sources.entries()).sort((a, b) => b[1] - a[1]);
+    return sorted.slice(0, 3)
+      .map(([source, count]) => `${this.formatSourceName(source)} (${count}x)`)
+      .join(', ');
+  }
+
+  private formatSourceName(source: string): string {
+    if (source.startsWith('addEventListener:')) return source.replace('addEventListener:', '') + ' event';
+    if (source === 'setTimeout') return 'setTimeout';
+    if (source === 'setInterval') return 'setInterval';
+    if (source === 'fetch') return 'fetch/HTTP';
+    if (source === 'XMLHttpRequest') return 'XHR/HTTP';
+    if (source === 'Promise.then') return 'Promise';
+    if (source === 'requestAnimationFrame') return 'rAF';
+    if (source === 'unknown') return 'zone (unidentified)';
+    return source;
   }
 
   private renderActivityLabel(hotspot: ComponentHotspot): string {

@@ -44,7 +44,7 @@ export function buildRecommendationActions(input: RecommendationActionInput): Re
     ...input.hotspots
       .filter((hotspot) => hotspot.score >= 40)
       .map(hotspotAction),
-    ...input.leakEvents.map(memoryAction),
+    ...groupedMemoryActions(input.leakEvents),
   ].sort((a, b) => {
     if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
     return kindPriority(a.kind) - kindPriority(b.kind);
@@ -178,24 +178,49 @@ function hotspotAction(hotspot: ComponentHotspot): RecommendationAction {
   };
 }
 
-function memoryAction(event: LeakEvent): RecommendationAction {
-  const isSubscription = event.leakType === 'subscription';
-  return {
-    id: event.id,
-    kind: 'memory-cleanup',
-    title: `Possible leak risk: cleanup not detected`,
-    componentName: event.componentName,
-    source: event.source,
-    confidence: isSubscription ? 'Medium' : 'Heuristic',
-    evidence: `${leakTypeLabel(event.leakType)} created from "${event.source}" remained active when ${event.componentName} was destroyed.`,
-    difficulty: 'Medium',
-    expectedGain: 'Small',
-    suggestedFix: leakFix(event.leakType),
-    rankScore: event.severity === 'CRITICAL' ? 76 : 58,
-    snippet: isSubscription
-      ? `this.stream$\n  .pipe(takeUntilDestroyed(this.destroyRef))\n  .subscribe();`
-      : undefined,
-  };
+function groupedMemoryActions(events: LeakEvent[]): RecommendationAction[] {
+  // Group by component + leakType to avoid 1000+ individual cards
+  const groups = new Map<string, { events: LeakEvent[]; sources: Set<string> }>();
+
+  for (const event of events) {
+    const key = `${event.componentName}::${event.leakType}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { events: [], sources: new Set() };
+      groups.set(key, group);
+    }
+    group.events.push(event);
+    group.sources.add(event.source);
+  }
+
+  const actions: RecommendationAction[] = [];
+  for (const [, group] of groups) {
+    const representative = group.events[0];
+    const count = group.events.length;
+    const isSubscription = representative.leakType === 'subscription';
+    const hasCritical = group.events.some(e => e.severity === 'CRITICAL');
+    const sourcesPreview = Array.from(group.sources).slice(0, 3).join(', ');
+    const moreSourcesLabel = group.sources.size > 3 ? ` (+${group.sources.size - 3} more)` : '';
+
+    actions.push({
+      id: `memory-group-${representative.componentName}-${representative.leakType}`,
+      kind: 'memory-cleanup',
+      title: `${count} ${leakTypeLabel(representative.leakType).toLowerCase()}${count > 1 ? 's' : ''} without detected cleanup in ${representative.componentName}`,
+      componentName: representative.componentName,
+      source: representative.componentName,
+      confidence: isSubscription ? 'Medium' : 'Heuristic',
+      evidence: `${count} ${leakTypeLabel(representative.leakType).toLowerCase()} resource${count > 1 ? 's' : ''} from: ${sourcesPreview}${moreSourcesLabel}.`,
+      difficulty: 'Medium',
+      expectedGain: count >= 10 ? 'Medium' : 'Small',
+      suggestedFix: leakFix(representative.leakType),
+      rankScore: hasCritical ? 76 : (count >= 10 ? 65 : 58),
+      snippet: isSubscription
+        ? `this.stream$\n  .pipe(takeUntilDestroyed(this.destroyRef))\n  .subscribe();`
+        : undefined,
+    });
+  }
+
+  return actions;
 }
 
 function normalizedOnPushScore(item: OnPushScore): number {
