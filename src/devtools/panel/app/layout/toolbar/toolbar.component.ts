@@ -41,13 +41,6 @@ import { CommandService } from '../../services/command.service';
 
       <!-- Action buttons -->
       <button
-        (click)="toggleClearOnRoute()"
-        class="px-2 py-1 text-xs rounded border transition-colors"
-        [class]="clearOnRouteChange() ? 'border-blue-500 text-blue-400' : 'border-gray-600 text-gray-500'"
-        title="Clear activity on route change">
-        🔄 Route
-      </button>
-      <button
         (click)="toggleTracking()"
         class="px-2 py-1 text-xs rounded border transition-colors"
         [class]="isTracking() ? 'border-red-500 text-red-400 hover:bg-red-500/10' : 'border-green-500 text-green-400 hover:bg-green-500/10'">

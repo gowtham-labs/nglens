@@ -128,6 +128,7 @@ async function sendPanelMessageToContent(
       throw firstError;
     }
 
+    // Content script not ready — inject it programmatically.
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content.js'],
