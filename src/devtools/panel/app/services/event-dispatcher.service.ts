@@ -87,25 +87,38 @@ export class EventDispatcherService {
   }
 
   private handleEventBatch(payload: { events: RenderEvent[] }): void {
-    this.state.renderEvents.update(current => [...current, ...payload.events]);
+    this.state.renderEvents.update(current => {
+      const existingKeys = new Set(current.map(e => `${e.componentName}:${e.timestamp}`));
+      const newEvents = payload.events.filter(e => !existingKeys.has(`${e.componentName}:${e.timestamp}`));
+      return newEvents.length ? [...current, ...newEvents] : current;
+    });
   }
 
   private handleLeakEvent(payload: LeakEvent): void {
-    this.state.leakEvents.update(current => [...current, payload]);
+    this.state.leakEvents.update(current => {
+      if (current.some(e => e.id === payload.id)) return current;
+      return [...current, payload];
+    });
   }
 
   private handleTrackByIssue(payload: TrackByIssue): void {
-    this.state.trackByIssues.update(current => [...current, payload]);
+    this.state.trackByIssues.update(current => {
+      if (current.some(e => e.id === payload.id)) return current;
+      return [...current, payload];
+    });
   }
 
   private handleOnPushResult(payload: OnPushScore): void {
-    this.state.onPushRecommendations.update(current => [...current, payload]);
+    this.state.onPushRecommendations.update(current => {
+      if (current.some(e => e.component === payload.component)) return current;
+      return [...current, payload];
+    });
   }
 
   private handleError(payload: { message?: string; error?: string }): void {
-    this.state.setTrackingError(
-      payload.message ?? payload.error ?? 'ngLens could not start tracking this page.'
-    );
+    const message = payload.message ?? payload.error ?? 'ngLens could not start tracking this page.';
+    if (this.state.trackingError() === message) return;
+    this.state.setTrackingError(message);
   }
 
   private handleZonePollutionEvent(payload: ZonePollutionEvent): void {
