@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
+import { CommandService } from '../../services/command.service';
 import { displayName } from '../../utils/display-name';
 import type { LeakEvent } from '../../../../../types/leak-events';
 
@@ -93,39 +94,58 @@ interface ComponentLeakGroup {
           @for (group of filteredGroups(); track group.componentName) {
             <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
               <!-- Component header -->
-              <button
-                type="button"
-                class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
-                (click)="toggleGroup(group.componentName)"
-              >
-                <span class="text-[10px] text-gray-500">
-                  {{ isExpanded(group.componentName) ? '▼' : '▶' }}
-                </span>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                      {{ group.totalCount }} {{ group.totalCount === 1 ? 'risk' : 'risks' }}
-                    </span>
-                    @if (group.hasCritical) {
-                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">
-                        Critical
+              <div class="flex items-stretch">
+                <button
+                  type="button"
+                  class="flex-1 min-w-0 text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
+                  (click)="toggleGroup(group.componentName)"
+                >
+                  <span class="text-[10px] text-gray-500 flex-shrink-0">
+                    {{ isExpanded(group.componentName) ? '▼' : '▶' }}
+                  </span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                        {{ group.totalCount }} {{ group.totalCount === 1 ? 'risk' : 'risks' }}
                       </span>
-                    }
+                      @if (group.hasCritical) {
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">
+                          Critical
+                        </span>
+                      }
+                    </div>
+                    <div class="flex gap-2 mt-1 text-[10px] text-gray-500">
+                      @if (group.subscriptions.length > 0) {
+                        <span>{{ group.subscriptions.length }} subscription{{ group.subscriptions.length > 1 ? 's' : '' }}</span>
+                      }
+                      @if (group.timers.length > 0) {
+                        <span>{{ group.timers.length }} timer{{ group.timers.length > 1 ? 's' : '' }}</span>
+                      }
+                      @if (group.eventListeners.length > 0) {
+                        <span>{{ group.eventListeners.length }} listener{{ group.eventListeners.length > 1 ? 's' : '' }}</span>
+                      }
+                    </div>
                   </div>
-                  <div class="flex gap-2 mt-1 text-[10px] text-gray-500">
-                    @if (group.subscriptions.length > 0) {
-                      <span>{{ group.subscriptions.length }} subscription{{ group.subscriptions.length > 1 ? 's' : '' }}</span>
-                    }
-                    @if (group.timers.length > 0) {
-                      <span>{{ group.timers.length }} timer{{ group.timers.length > 1 ? 's' : '' }}</span>
-                    }
-                    @if (group.eventListeners.length > 0) {
-                      <span>{{ group.eventListeners.length }} listener{{ group.eventListeners.length > 1 ? 's' : '' }}</span>
-                    }
-                  </div>
-                </div>
-              </button>
+                </button>
+                <!-- Open component file in Sources panel -->
+                <button
+                  type="button"
+                  class="flex-shrink-0 px-3 flex items-center text-gray-600 hover:text-blue-400 transition-colors border-l border-gray-800"
+                  title="Open component file in Sources panel"
+                  (click)="openInSources(group.componentName)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </button>
+              </div>
 
               <!-- Expanded: deduplicated leak sources -->
               @if (isExpanded(group.componentName)) {
@@ -263,6 +283,7 @@ interface ComponentLeakGroup {
 })
 export class MemoryComponent {
   readonly state = inject(PanelState);
+  private readonly commandService = inject(CommandService);
 
   readonly activeFilter = signal<'all' | LeakType>('all');
   readonly expandedComponents = signal<Set<string>>(new Set());
@@ -331,6 +352,10 @@ export class MemoryComponent {
 
   isExpanded(componentName: string): boolean {
     return this.expandedComponents().has(componentName);
+  }
+
+  openInSources(componentName: string): void {
+    this.commandService.openInSources(componentName);
   }
 
   getFilteredEvents(group: ComponentLeakGroup): { source: string; type: LeakType; count: number; severity: string; timing: string }[] {

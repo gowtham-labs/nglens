@@ -24,6 +24,53 @@ export class CommandService {
   }
 
   /**
+   * Opens the source file of the given Angular component in the DevTools Sources panel.
+   *
+   * Uses `chrome.devtools.inspectedWindow.getResources()` to enumerate all resources
+   * loaded in the inspected window and matches by the kebab-case file name derived
+   * from the component class name (e.g. `HeroListComponent` → `hero-list.component`).
+   *
+   * TypeScript files (served by Vite/webpack dev-servers with source maps) are
+   * preferred over compiled JavaScript. Once the URL is found, it is opened via
+   * `chrome.devtools.panels.openResource()`.
+   */
+  openInSources(componentName: string): void {
+    const fileName = this.toComponentFileName(componentName);
+
+    chrome.devtools.inspectedWindow.getResources((resources) => {
+      // Prefer TypeScript source files (available when source maps are active)
+      const tsMatch = resources.find(r => r.url.includes(fileName) && r.url.endsWith('.ts'));
+      const jsMatch = resources.find(r => r.url.includes(fileName) && r.url.endsWith('.js'));
+      const match = tsMatch ?? jsMatch;
+
+      if (match) {
+        chrome.devtools.panels.openResource(match.url, 0, () => { /* opened */ });
+        return;
+      }
+
+      // Loose fallback: match just the kebab-case part (covers non-standard naming)
+      const kebab = fileName.replace('.component', '');
+      const loose = resources.find(r =>
+        r.url.includes(kebab) &&
+        (r.url.endsWith('.ts') || r.url.endsWith('.js'))
+      );
+
+      if (loose) {
+        chrome.devtools.panels.openResource(loose.url, 0, () => { /* opened */ });
+        return;
+      }
+
+      console.warn('[ngLens] Source file not found for:', componentName);
+    });
+  }
+
+  private toComponentFileName(className: string): string {
+    const cleaned = className.replace(/^_+/, '').replace(/Component$/, '');
+    const kebab = cleaned.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    return `${kebab}.component`;
+  }
+
+  /**
    * Selects the first DOM element for the given Angular component in the DevTools Elements panel.
    *
    * Strategy:
