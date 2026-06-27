@@ -155,10 +155,10 @@ interface ComponentGroup {
                           <p class="text-xs text-gray-500 mt-1 italic">Fix: {{ action.suggestedFix }}</p>
                         </div>
                         <div class="flex gap-1 flex-shrink-0">
-                          <span class="badge" [ngClass]="confidenceClass(action.confidence)">
+                          <span class="badge" [ngClass]="confidenceClass(action.confidence)" title="Confidence level of this recommendation">
                             {{ action.confidence }}
                           </span>
-                          <span class="badge" [ngClass]="gainClass(action.expectedGain)">
+                          <span class="badge" [ngClass]="gainClass(action.expectedGain)" title="Expected gain from this recommendation">
                             {{ action.expectedGain }}
                           </span>
                         </div>

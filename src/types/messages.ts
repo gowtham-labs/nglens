@@ -35,7 +35,9 @@ export type MessageType =
   | 'ONPUSH_RESULT'
   | 'DEGRADED_MODE'
   | 'ZONE_POLLUTION_EVENT'
-  | 'ROUTE_CHANGED';
+  | 'ROUTE_CHANGED'
+  | 'SCAN_APP_STRUCTURE'
+  | 'APP_STRUCTURE_RESULT';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

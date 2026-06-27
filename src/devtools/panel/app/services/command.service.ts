@@ -23,6 +23,10 @@ export class CommandService {
     this.send({ type: 'CLEAR_DATA', payload: null, timestamp: Date.now() });
   }
 
+  scanAppStructure(): void {
+    this.send({ type: 'SCAN_APP_STRUCTURE', payload: null, timestamp: Date.now() });
+  }
+
   /**
    * Opens the source file of the given Angular component in the DevTools Sources panel.
    *

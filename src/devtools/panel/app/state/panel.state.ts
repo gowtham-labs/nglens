@@ -3,6 +3,7 @@ import type { RenderEvent, RenderCause } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
 import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
+import type { AppStructureData } from '../../../../types/app-structure';
 import type {
   ComponentHotspot,
   ComponentStats,
@@ -35,6 +36,7 @@ export class PanelState {
   readonly onPushRecommendations = signal<OnPushScore[]>([]);
   readonly snapshots = signal<PerformanceSnapshot[]>([]);
   readonly zonePollutionSources = signal<PollutionSourceMetrics[]>([]);
+  readonly appStructure = signal<AppStructureData | null>(null);
 
   // Computed: aggregate render events into per-component stats
   readonly componentStats = computed(() => this.aggregateStats(this.renderEvents()));
@@ -95,6 +97,7 @@ export class PanelState {
     this.onPushRecommendations.set([]);
     this.snapshots.set([]);
     this.zonePollutionSources.set([]);
+    this.appStructure.set(null);
   }
 
   captureSnapshot(label?: string): void {

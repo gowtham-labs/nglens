@@ -21,6 +21,7 @@ import { TemplateExpressionTracker } from './template-expression-tracker';
 import { FreezeDetector } from './freeze-detector';
 import { ZonePollutionDetector } from './zone-pollution-detector';
 import { checkAngularVersion } from './version-check';
+import { collectAppStructure } from './app-structure-collector';
 
 /** Event name used by the content script to dispatch commands to the page script */
 const CONTENT_TO_PAGE_EVENT = '__ng_perf_to_page';
@@ -274,10 +275,24 @@ function handleCommand(event: Event): void {
     case 'CLEAR_DATA':
       handleClearData();
       break;
+    case 'SCAN_APP_STRUCTURE':
+      handleScanAppStructure();
+      break;
     default:
       // Not a command for the orchestrator — ignore
       break;
   }
+}
+
+/**
+ * Handles SCAN_APP_STRUCTURE command from the panel.
+ * Collects the full Angular app registry and dispatches results back.
+ */
+function handleScanAppStructure(): void {
+  safeInvoke(() => {
+    const data = collectAppStructure();
+    dispatchToContent('APP_STRUCTURE_RESULT', data);
+  });
 }
 
 /**

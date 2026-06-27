@@ -6,6 +6,7 @@ import type { RenderEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
 import type { ZonePollutionEvent } from '../../../../types/zone-pollution-events';
+import type { AppStructureData } from '../../../../types/app-structure';
 
 @Injectable({ providedIn: 'root' })
 export class EventDispatcherService {
@@ -65,6 +66,9 @@ export class EventDispatcherService {
         break;
       case 'CONNECTION_ACK':
         this.state.connectionState.set('connected');
+        break;
+      case 'APP_STRUCTURE_RESULT':
+        this.state.appStructure.set(message.payload as AppStructureData);
         break;
     }
   }

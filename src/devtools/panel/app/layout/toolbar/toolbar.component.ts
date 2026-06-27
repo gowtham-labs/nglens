@@ -34,6 +34,11 @@ import { CommandService } from '../../services/command.service';
            class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
           Recommendations
         </a>
+        <a routerLink="/app-structure"
+           routerLinkActive="bg-gray-700 text-white"
+           class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
+          App Map
+        </a>
       </nav>
 
       <!-- Spacer -->
