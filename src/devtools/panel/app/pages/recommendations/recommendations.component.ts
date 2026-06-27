@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import {
+  ActionConfidence,
   buildRecommendationActions,
   confidenceClass,
   difficultyClass,
@@ -17,7 +18,7 @@ interface ComponentGroup {
   actions: RecommendationAction[];
   topKind: ActionKind;
   totalCount: number;
-  highestConfidence: string;
+  highestConfidence: ActionConfidence;
 }
 
 @Component({
