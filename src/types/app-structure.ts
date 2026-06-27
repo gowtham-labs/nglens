@@ -68,12 +68,25 @@ export interface RouterInfo {
 
 export interface RouteRegistryEntry {
   path: string;
+  /** Full path from root, e.g. "/dashboard" or "/theme/colors" */
+  absolutePath: string;
   component: string | null;
   redirectTo: string | null;
   guards: string[];
   resolvers: string[];
   children: RouteRegistryEntry[];
   isLazy: boolean;
+  /** Route title from route.title or route.data.title */
+  title: string | null;
+  /** True when lazy children (loadChildren) have already been fetched */
+  loadedChildren: boolean;
+}
+
+/** One entry in the currently active route tree (from router.routerState.snapshot) */
+export interface ActiveRouteEntry {
+  absolutePath: string;
+  component: string;
+  outlet: string;
 }
 
 export type GuardType = 'CanActivate' | 'CanDeactivate' | 'CanMatch' | 'CanLoad';
@@ -240,6 +253,8 @@ export interface AppStructureData {
   resolvers: ResolverRegistryEntry[];
   modules: ModuleRegistryEntry[];
   routes: RouteRegistryEntry[];
+  /** Live snapshot of which components are rendered for each active route */
+  activeRoutes: ActiveRouteEntry[];
   stateManagement: StateManagementData;
   tokens: TokenRegistryEntry[];
   /** All providers registered in the root environment injector (from app.config.ts) */

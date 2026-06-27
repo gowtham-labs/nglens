@@ -10,6 +10,7 @@ import { NgClass, DecimalPipe } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { CommandService } from '../../services/command.service';
 import type {
+  ActiveRouteEntry,
   AppProviderEntry,
   BootstrapConfig,
   BootstrapConfigFeature,
@@ -40,12 +41,16 @@ type RegistryTab =
 interface FlatRoute {
   key: string;
   path: string;
+  absolutePath: string;
   component: string | null;
   redirectTo: string | null;
   guards: string[];
   resolvers: string[];
   depth: number;
   isLazy: boolean;
+  title: string | null;
+  loadedChildren: boolean;
+  isActive: boolean;
 }
 
 @Component({
@@ -738,25 +743,66 @@ interface FlatRoute {
                   }
                 </div>
               }
+
+              <!-- ── Active Route Tree (live snapshot) ── -->
+              @if ((data()?.activeRoutes ?? []).length > 0) {
+                <div class="mb-3 border border-indigo-800/40 rounded overflow-hidden">
+                  <div class="px-3 py-1.5 bg-indigo-900/30 border-b border-indigo-800/40 text-[10px] font-semibold text-indigo-300 uppercase tracking-wide flex items-center gap-2">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                    Active Route → Component Map
+                  </div>
+                  <div class="divide-y divide-indigo-800/20">
+                    @for (ar of data()!.activeRoutes; track ar.absolutePath + ar.outlet) {
+                      <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
+                        <span class="font-mono text-indigo-300 flex-shrink-0">{{ ar.absolutePath }}</span>
+                        @if (ar.outlet !== 'primary') {
+                          <span class="badge bg-gray-700 text-gray-400 border border-gray-600">[{{ ar.outlet }}]</span>
+                        }
+                        <span class="text-gray-600 flex-1">→</span>
+                        <span class="chip font-mono flex-shrink-0">{{ ar.component }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- ── Route Configuration Tree ── -->
+              <div class="section-title -mx-2 mb-1">Route Configuration</div>
               @if (!filteredFlatRoutes().length) {
                 <div class="py-8 text-center text-xs text-gray-500">No routes found</div>
               } @else {
-                @for (r of filteredFlatRoutes(); track r.key) {
-                  <div class="flex items-start gap-2 py-1.5 border-b border-gray-800/50 text-xs"
-                       [style.paddingLeft.px]="r.depth * 16 + 8">
-                    @if (r.depth > 0) { <span class="text-gray-600 select-none flex-shrink-0">└</span> }
-                    <span class="route-path flex-shrink-0">{{ r.depth === 0 ? '/' : '' }}{{ r.path || '(root)' }}</span>
+                @for (r of filteredFlatRoutes(); track r.key + r.depth) {
+                  <div class="flex items-start gap-1.5 py-1.5 border-b border-gray-800/50 text-xs"
+                       [style.paddingLeft.px]="r.depth * 14 + 6"
+                       [ngClass]="r.isActive ? 'bg-indigo-950/40' : ''">
+                    @if (r.depth > 0) { <span class="text-gray-600 select-none flex-shrink-0 mt-0.5">└</span> }
+                    <!-- Absolute path display -->
+                    <span class="route-path flex-shrink-0 min-w-0" [title]="r.absolutePath">
+                      {{ r.absolutePath }}
+                    </span>
                     @if (r.redirectTo !== null) {
                       <span class="text-amber-400 text-[10px] flex-shrink-0">→ {{ r.redirectTo }}</span>
                     }
+                    @if (r.title) {
+                      <span class="text-gray-500 text-[10px] truncate italic flex-shrink min-w-0" [title]="r.title">{{ r.title }}</span>
+                    }
                     <span class="flex-1 min-w-0">
                       <div class="chips">
-                        @if (r.isLazy) { <span class="tag-lazy">lazy</span> }
-                        @for (g of r.guards; track g)   { <span class="tag-guard">{{ g }}</span> }
+                        @if (r.isActive) {
+                          <span class="badge bg-green-900/60 text-green-300 border border-green-700/60">● active</span>
+                        }
+                        @if (r.isLazy && r.loadedChildren) {
+                          <span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">lazy ✓</span>
+                        } @else if (r.isLazy) {
+                          <span class="tag-lazy">lazy</span>
+                        }
+                        @for (g of r.guards; track g) { <span class="tag-guard">{{ g }}</span> }
                         @for (res of r.resolvers; track res) { <span class="tag-resolver">{{ res }}</span> }
                       </div>
                     </span>
-                    @if (r.component) { <span class="chip flex-shrink-0">{{ r.component }}</span> }
+                    @if (r.component) {
+                      <span class="chip flex-shrink-0 max-w-[10rem] truncate font-mono" [title]="r.component">{{ r.component }}</span>
+                    }
                   </div>
                 }
               }
@@ -1114,7 +1160,10 @@ export class AppStructureComponent implements OnInit {
     const q = this.searchQuery().toLowerCase();
     const items = this.data()?.routes ?? [];
     const filtered = q ? this.filterRoutes(items, q) : items;
-    return this.flattenRoutes(filtered, 0, '');
+    const activePaths = new Set(
+      (this.data()?.activeRoutes ?? []).map(r => r.absolutePath)
+    );
+    return this.flattenRoutes(filtered, 0, '', activePaths);
   });
 
   readonly filteredNgrx = computed<NgrxEntry[]>(() => {
@@ -1312,12 +1361,28 @@ export class AppStructureComponent implements OnInit {
     );
   }
 
-  private flattenRoutes(routes: RouteRegistryEntry[], depth: number, prefix: string): FlatRoute[] {
+  private flattenRoutes(routes: RouteRegistryEntry[], depth: number, prefix: string, activePaths: Set<string> = new Set()): FlatRoute[] {
     const result: FlatRoute[] = [];
     for (const r of routes) {
-      const key = `${prefix}/${r.path}`;
-      result.push({ key, path: r.path, component: r.component, redirectTo: r.redirectTo, guards: r.guards, resolvers: r.resolvers, depth, isLazy: r.isLazy });
-      result.push(...this.flattenRoutes(r.children, depth + 1, key));
+      // Use absolutePath from collector if available, else derive it
+      const absPath = r.absolutePath
+        ?? (r.path === '**' ? `${prefix}/**` : `${prefix}/${r.path}`.replace(/\/+/g, '/') || '/');
+      const key = absPath;
+      result.push({
+        key,
+        path: r.path,
+        absolutePath: absPath,
+        component: r.component,
+        redirectTo: r.redirectTo,
+        guards: r.guards,
+        resolvers: r.resolvers,
+        depth,
+        isLazy: r.isLazy,
+        title: r.title ?? null,
+        loadedChildren: r.loadedChildren ?? false,
+        isActive: activePaths.has(absPath),
+      });
+      result.push(...this.flattenRoutes(r.children, depth + 1, absPath, activePaths));
     }
     return result;
   }

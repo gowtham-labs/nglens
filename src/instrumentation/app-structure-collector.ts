@@ -10,6 +10,7 @@
  */
 
 import type {
+  ActiveRouteEntry,
   AppStructureData,
   ApplicationInfo,
   AppProviderCategory,
@@ -212,8 +213,9 @@ export function collectAppStructure(): AppStructureData {
 
   // ── Phase 3: route analysis ───────────────────────────────────────────────
   const routeConfig: any[] = router?.config ?? router?.routes ?? [];
-  const routes = parseRouteConfig(routeConfig);
+  const routes = parseRouteConfig(routeConfig, '');
   const { guards, resolvers } = extractGuardsAndResolvers(routeConfig);
+  const activeRoutes = router ? collectActiveRoutes(router) : [];
 
   // Routing strategy and summary info
   const routerInfo = buildRouterInfo(injector, routes, routeConfig);
@@ -258,6 +260,7 @@ export function collectAppStructure(): AppStructureData {
     resolvers,
     modules,
     routes,
+    activeRoutes,
     stateManagement: {
       signalState: Array.from(signalStateMap.values()),
       observableState: Array.from(observableStateMap.values()),
@@ -549,14 +552,80 @@ function isRxjsObservable(value: any): boolean {
 
 // ─── Injector Introspection ───────────────────────────────────────────────────
 
+/**
+ * Get the injector records Map from any Angular injector object.
+ * Handles both Angular <21 (_records) and Angular 21+ (records) naming,
+ * plus wrapper objects (.injector / ._injector).
+ */
+function getInjectorMap(obj: any): Map<any, any> | null {
+  if (!obj || typeof obj !== 'object') return null;
+  // Angular 21+: R3Injector uses public `records` field
+  if (obj.records instanceof Map) return obj.records;
+  // Angular <21: R3Injector used private convention `_records`
+  if (obj._records instanceof Map) return obj._records;
+  return null;
+}
+
 function tryGetInjector(ng: any, el: Element): any {
-  try { return ng.getInjector(el); } catch { return null; }
+  try {
+    const inj = ng.getInjector(el);
+    if (!inj) return null;
+
+    // Fast path: already an R3Injector (has records/._records directly)
+    if (getInjectorMap(inj)) return inj;
+
+    // Angular 17+ standalone: ng.getInjector() returns a NodeInjector (facade over
+    // _tNode/_lView). The real R3Injector lives at lView[INJECTOR=9]. Extract it so
+    // that all records-based introspection works.
+    const lView = inj._lView;
+    if (Array.isArray(lView)) {
+      const envInj = lView[9]; // INJECTOR constant (stable since Angular 14–21)
+      if (envInj) {
+        // R3Injector directly (Angular 21: .records, older: ._records)
+        if (getInjectorMap(envInj)) return envInj;
+        // R3EnvironmentInjector wraps an R3Injector in a `.injector` field
+        const inner = envInj.injector ?? envInj._injector;
+        if (inner && getInjectorMap(inner)) return inner;
+        // At minimum return something with a working .get() method
+        if (typeof envInj.get === 'function') return envInj;
+      }
+      // Also try ENVIRONMENT slot (index 10) as a fallback
+      const envSlot = lView[10];
+      if (envSlot && getInjectorMap(envSlot)) return envSlot;
+    }
+
+    // Angular 21 fallback: read LView from __ngContext__ directly (bypasses NodeInjector)
+    const ctxLView = (el as any).__ngContext__;
+    const directLView = Array.isArray(ctxLView) ? ctxLView : null;
+    if (directLView) {
+      for (const idx of [9, 10]) {
+        const candidate = directLView[idx];
+        if (!candidate || typeof candidate !== 'object') continue;
+        if (getInjectorMap(candidate)) return candidate;
+        const inner = candidate.injector ?? candidate._injector;
+        if (inner && getInjectorMap(inner)) return inner;
+      }
+    }
+
+    return inj;
+  } catch { return null; }
 }
 
 function getInjectorRecords(injector: any): Map<any, any> | null {
   try {
-    const r = injector._records ?? injector._def?.providers;
-    return r instanceof Map ? r : null;
+    // Direct: R3Injector (Angular 21: .records; older: ._records)
+    const direct = getInjectorMap(injector);
+    if (direct) return direct;
+
+    // R3EnvironmentInjector wraps R3Injector in .injector or ._injector
+    const wrapped = getInjectorMap(injector.injector) ?? getInjectorMap(injector._injector);
+    if (wrapped) return wrapped;
+
+    // Legacy NgModule injector
+    const legacy = injector._def?.providers;
+    if (legacy instanceof Map) return legacy;
+
+    return null;
   } catch {
     return null;
   }
@@ -718,8 +787,14 @@ function collectAppProviders(injector: any): AppProviderEntry[] {
 
   let current: any = injector;
   while (current) {
-    const records: Map<any, any> | undefined = current._records;
-    if (records instanceof Map) {
+    // Support both R3Injector (Angular 21: .records, older: ._records) and wrapper
+    const records: Map<any, any> | undefined =
+      getInjectorMap(current) ??
+      getInjectorMap(current.injector) ??
+      getInjectorMap(current._injector) ??
+      undefined;
+
+    if (records) {
       for (const [token] of records) {
         try {
           let name: string | null = null;
@@ -743,7 +818,8 @@ function collectAppProviders(injector: any): AppProviderEntry[] {
         } catch { /* ignore */ }
       }
     }
-    current = current._parent ?? current.parent ?? null;
+    current = current._parent ?? current.parent ??
+              current._injector?.parent ?? current.injector?.parent ?? null;
   }
 
   // Sort: app-defined first (user code), then feature groups, then Angular core
@@ -816,17 +892,24 @@ function scanInjectorServices(
 
 function findRouter(injector: any): any {
   // Strategy 1: Walk the full injector parent chain looking for a 'Router' class token.
-  // ng.getInjector(el) returns a NodeInjector; the Router lives in the EnvironmentInjector
-  // which is an ancestor, so we must walk up.
+  // Angular 21: R3Injector.records (public); older Angular: R3Injector._records.
   let current: any = injector;
   while (current) {
-    const records: Map<any, any> | undefined = current._records;
-    if (records instanceof Map) {
+    const records: Map<any, any> | undefined =
+      getInjectorMap(current) ??
+      getInjectorMap(current.injector) ??
+      getInjectorMap(current._injector) ??
+      undefined;
+
+    if (records) {
       for (const [token] of records) {
         if (typeof token === 'function' && token.name === 'Router') {
           try {
-            const inst = (current.get ?? injector.get).call(
-              current,
+            // Prefer calling .get() on the object that owns the records.
+            const owner = getInjectorMap(current) ? current :
+                          (getInjectorMap(current.injector) ? current.injector : current._injector ?? current);
+            const inst = (owner.get ?? injector.get).call(
+              owner,
               token,
               null,
               { optional: true } as any,
@@ -836,7 +919,8 @@ function findRouter(injector: any): any {
         }
       }
     }
-    current = current._parent ?? current.parent ?? null;
+    current = current._parent ?? current.parent ??
+              current._injector?.parent ?? current.injector?.parent ?? null;
   }
 
   // Strategy 2: Duck-type scan of the records that ARE visible from this injector.
@@ -855,8 +939,10 @@ function findRouter(injector: any): any {
     }
   }
 
-  // Strategy 3: Check the router-outlet element context (Angular stores the
-  // router reference on the RouterOutlet directive instance).
+  // Strategy 3: Scan router-outlet element. In Angular 17+ standalone apps the
+  // RouterOutlet directive may not have a public `router` property (Angular 21
+  // uses private class fields), so we duck-type scan all own properties of each
+  // directive instance looking for an object that looks like a Router.
   try {
     const ng = (globalThis as any).ng;
     const outlet = document.querySelector('router-outlet');
@@ -864,20 +950,45 @@ function findRouter(injector: any): any {
       // Dev mode: ng.getDirectives gives directive instances on the element
       const directives: any[] = ng.getDirectives?.(outlet) ?? [];
       for (const d of directives) {
+        // Quick check: older Angular exposed d.router directly
         if (d?.router && typeof d.router.navigate === 'function') return d.router;
+
+        // Angular 21+: scan all enumerable own props for a Router-shaped object
+        if (d && typeof d === 'object') {
+          for (const key of Object.getOwnPropertyNames(d)) {
+            try {
+              const val = (d as any)[key];
+              if (
+                val != null && typeof val === 'object' &&
+                typeof val.navigate === 'function' &&
+                typeof val.navigateByUrl === 'function' &&
+                (Array.isArray(val.config) || Array.isArray(val.routes))
+              ) return val;
+            } catch { /* ignore */ }
+          }
+        }
       }
-      // Fallback: check __ngContext__ LView slot 8 (env injector pointer)
+
+      // Fallback: extract from the outlet element's __ngContext__ LView.
+      // LView[9] = INJECTOR (Angular 14-21 stable constant; NOT slot 8 which is CONTEXT)
       const ctx = (outlet as any).__ngContext__;
       if (ctx) {
-        const envInjector = Array.isArray(ctx) ? ctx[8] : null;
-        if (envInjector?.get) {
-          // walk its records for Router
-          const envRecords: Map<any, any> | undefined = envInjector._records;
-          if (envRecords instanceof Map) {
-            for (const [token] of envRecords) {
+        const lView = Array.isArray(ctx) ? ctx : null;
+        if (lView) {
+          for (const idx of [9, 10]) {
+            const envInj = lView[idx];
+            if (!envInj) continue;
+            // Resolve to whichever object holds the records Map
+            const r3 = getInjectorMap(envInj) ? envInj :
+                       (getInjectorMap(envInj.injector) ? envInj.injector :
+                       (getInjectorMap(envInj._injector) ? envInj._injector : null));
+            if (!r3) continue;
+            const rMap = getInjectorMap(r3);
+            if (!rMap) continue;
+            for (const [token] of rMap) {
               if (typeof token === 'function' && token.name === 'Router') {
                 try {
-                  const inst = envInjector.get(token, null, { optional: true } as any);
+                  const inst = r3.get(token, null, { optional: true } as any);
                   if (inst && typeof inst.navigate === 'function') return inst;
                 } catch { /* ignore */ }
               }
@@ -888,28 +999,120 @@ function findRouter(injector: any): any {
     }
   } catch { /* ignore */ }
 
+  // Strategy 4: RouterLink directives have a public `router` property (Angular 21 confirmed).
+  // CoreUI and most Angular apps use routerLink extensively, making this very reliable.
+  try {
+    const ng4 = (globalThis as any).ng;
+    const linkElements = document.querySelectorAll('[routerLink],[data-routerlink],[ng-reflect-router-link]');
+    for (const linkEl of linkElements) {
+      const dirs: any[] = ng4?.getDirectives?.(linkEl) ?? [];
+      for (const d of dirs) {
+        // RouterLink stores Router as public `this.router = router` (Angular 21 confirmed)
+        if (d?.router && typeof d.router.navigate === 'function' &&
+            (Array.isArray(d.router.config) || Array.isArray(d.router.routes))) {
+          return d.router;
+        }
+        // Generic duck-type scan of all own properties
+        if (d && typeof d === 'object') {
+          for (const key of Object.getOwnPropertyNames(d)) {
+            try {
+              const val = (d as any)[key];
+              if (val != null && typeof val === 'object' &&
+                  typeof val.navigate === 'function' &&
+                  typeof val.navigateByUrl === 'function' &&
+                  (Array.isArray(val.config) || Array.isArray(val.routes))) return val;
+            } catch { /* ignore */ }
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
   return null;
 }
 
-function parseRouteConfig(config: any[]): RouteRegistryEntry[] {
+function parseRouteConfig(config: any[], parentPath = ''): RouteRegistryEntry[] {
   if (!Array.isArray(config)) return [];
   return config.slice(0, 500).map(route => {
     const isLazy = !!(route.loadComponent || route.loadChildren);
+    const pathSegment: string = route.path ?? '';
+
+    // Build the absolute path for this route
+    const absolutePath = pathSegment === '**'
+      ? `${parentPath}/**`
+      : `${parentPath}/${pathSegment}`.replace(/\/+/g, '/') || '/';
+
     // For already-loaded lazy modules, Angular stores loaded routes in _loadedRoutes
     const lazyChildren: any[] = route._loadedRoutes ?? route._loadedConfig?.routes ?? [];
     const rawChildren: any[] = Array.isArray(route.children) ? route.children : lazyChildren;
+    const loadedChildren = lazyChildren.length > 0;
+
+    // Resolve the component name. For lazy routes that have already been loaded,
+    // Angular stores the actual component in _loadedComponent (loadComponent) or
+    // we can resolve via rawChildren (loadChildren resolves to a routes array).
+    const component: string | null =
+      route.component?.name
+      ?? route._loadedComponent?.name          // Angular 17+: loaded lazy component
+      ?? (route.loadComponent ? '(lazy component)' : null)
+      ?? (route.loadChildren ? '(lazy module)' : null);
+
+    // Route title: from route.title (Angular 14+) or legacy route.data.title
+    const title: string | null =
+      (typeof route.title === 'string' ? route.title : null)
+      ?? (typeof route.data?.title === 'string' ? route.data.title : null);
+
     return {
-      path: route.path ?? '',
-      component: route.component?.name
-        ?? (route.loadComponent ? '(lazy component)' : null)
-        ?? (route.loadChildren ? '(lazy module)' : null),
+      path: pathSegment,
+      absolutePath,
+      component,
       redirectTo: route.redirectTo ?? null,
       guards: extractGuardNames(route),
       resolvers: extractResolverNames(route),
-      children: parseRouteConfig(rawChildren),
+      children: parseRouteConfig(rawChildren, absolutePath),
       isLazy,
+      title,
+      loadedChildren,
     };
   });
+}
+
+/**
+ * Collect the currently active route tree from router.routerState.snapshot.
+ * Returns one entry per rendered outlet showing the absolute path and component.
+ */
+function collectActiveRoutes(router: any): ActiveRouteEntry[] {
+  const result: ActiveRouteEntry[] = [];
+
+  function traverse(snapshot: any, pathSoFar: string): void {
+    if (!snapshot) return;
+    try {
+      const segments: string[] = Array.isArray(snapshot.url)
+        ? snapshot.url.map((s: any) => s.path ?? '').filter(Boolean)
+        : [];
+      const currentPath = segments.length
+        ? `${pathSoFar}/${segments.join('/')}`.replace(/\/+/g, '/')
+        : pathSoFar || '/';
+
+      const componentName: string | null = snapshot.component?.name ?? null;
+      const outlet: string = snapshot.outlet ?? 'primary';
+
+      // Skip internal Angular components (prefixed with ɵ) and null entries
+      if (componentName && !componentName.startsWith('ɵ') && !componentName.startsWith('Ɵ')) {
+        result.push({ absolutePath: currentPath, component: componentName, outlet });
+      }
+
+      for (const child of snapshot.children ?? []) {
+        traverse(child, currentPath);
+      }
+    } catch { /* ignore */ }
+  }
+
+  try {
+    const rootSnapshot = router.routerState?.snapshot?.root;
+    if (rootSnapshot) traverse(rootSnapshot, '');
+  } catch { /* ignore */ }
+
+  return result;
 }
 
 function countFlatRoutes(routes: RouteRegistryEntry[]): number {
@@ -924,8 +1127,12 @@ function detectRoutingStrategy(injector: any | null): RoutingStrategy {
   // Walk the injector chain looking for known Angular LocationStrategy class names.
   let current: any = injector;
   while (current) {
-    const records: Map<any, any> | undefined = current._records;
-    if (records instanceof Map) {
+    const records: Map<any, any> | undefined =
+      getInjectorMap(current) ??
+      getInjectorMap(current.injector) ??
+      getInjectorMap(current._injector) ??
+      undefined;
+    if (records) {
       for (const [token] of records) {
         if (typeof token === 'function') {
           if (token.name === 'HashLocationStrategy') return 'hash';
@@ -1500,9 +1707,7 @@ function detectPlainClasses(
   const result: PlainClassEntry[] = [];
   try {
     const records: Map<any, any> =
-      (injector as any)._records ??
-      (injector as any).records ??
-      new Map();
+      getInjectorMap(injector) ?? new Map();
 
     records.forEach((record: any, token: any) => {
       if (typeof token !== 'function') return;
