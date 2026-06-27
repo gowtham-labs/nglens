@@ -10,6 +10,7 @@ import {
   topQuickWins,
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
+import { CommandService } from '../../services/command.service';
 import type { ComponentHotspot, SnapshotComparison } from '../../../../../types/panel';
 
 interface HealthSummary {
@@ -232,11 +233,19 @@ interface CompareMetric {
                             {{ hotspot.reasons.join(', ') }}
                           </div>
                         </div>
-                        <div class="text-right">
+                        <div class="flex flex-col items-end gap-1">
                           <div class="text-sm font-bold" [ngClass]="scoreClass(hotspot.score)">
                             {{ hotspot.score }}/100
                           </div>
                           <div class="text-[10px] text-gray-500">{{ causeLabel(hotspot.primaryCause) }}</div>
+                          <span
+                            role="button"
+                            tabindex="0"
+                            title="Inspect in Elements panel"
+                            class="inspect-element-btn"
+                            (click)="$event.stopPropagation(); inspectElement(hotspot.componentName)"
+                            (keydown.enter)="$event.stopPropagation(); inspectElement(hotspot.componentName)"
+                          >⬡ Inspect</span>
                         </div>
                       </div>
                       <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
@@ -427,6 +436,30 @@ interface CompareMetric {
       font-size: 11px;
       font-weight: 800;
     }
+
+    .inspect-element-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 10px;
+      color: #6b7280;
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 2px 4px;
+      border: 1px solid transparent;
+      line-height: 1;
+      transition: color 100ms ease, background 100ms ease, border-color 100ms ease;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .inspect-element-btn:hover,
+    .inspect-element-btn:focus {
+      color: #60a5fa;
+      background: rgb(96 165 250 / 0.12);
+      border-color: rgb(96 165 250 / 0.3);
+      outline: none;
+    }
   `],
 })
 export class OverviewComponent {
@@ -435,6 +468,7 @@ export class OverviewComponent {
   readonly confidenceClass = confidenceClass;
   readonly difficultyClass = difficultyClass;
   readonly gainClass = gainClass;
+  private readonly commandService = inject(CommandService);
 
   readonly actions = computed(() => buildRecommendationActions({
     trackByIssues: this.state.trackByIssues(),
@@ -606,6 +640,10 @@ export class OverviewComponent {
 
   selectHotspot(hotspot: ComponentHotspot): void {
     this.state.selectedComponent.set(hotspot.componentName);
+  }
+
+  inspectElement(componentName: string): void {
+    this.commandService.inspectInElementsPanel(componentName);
   }
 
   selectAction(action: RecommendationAction): void {

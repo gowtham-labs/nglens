@@ -4,6 +4,7 @@ import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { getSeverityLabels, type SeverityLabel } from '../../utils/severity-labels';
 import { RenderTimelineComponent } from './render-timeline.component';
+import { CommandService } from '../../services/command.service';
 import type {
   ComponentHotspot,
   ComponentStats,
@@ -222,12 +223,22 @@ interface RenderStoryCard {
                     class="border-b border-gray-900 hover:bg-gray-800/50 cursor-pointer"
                     (click)="selectComponent(stat.componentName)"
                   >
-                    <td class="py-2 px-2 text-gray-200 truncate max-w-[240px]">
-                      <span
-                        class="inline-block w-2 h-2 rounded-full mr-2"
-                        [ngClass]="getSeverityClass(stat.rendersPerMinute)"
-                      ></span>
-                      {{ displayName(stat.componentName) }}
+                    <td class="py-2 px-2 text-gray-200 max-w-[240px]">
+                      <div class="flex items-center gap-1 min-w-0">
+                        <span
+                          class="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                          [ngClass]="getSeverityClass(stat.rendersPerMinute)"
+                        ></span>
+                        <span class="truncate flex-1">{{ displayName(stat.componentName) }}</span>
+                        <span
+                          role="button"
+                          tabindex="0"
+                          title="Inspect in Elements panel"
+                          class="inspect-element-btn flex-shrink-0"
+                          (click)="$event.stopPropagation(); inspectElement(stat.componentName)"
+                          (keydown.enter)="$event.stopPropagation(); inspectElement(stat.componentName)"
+                        >⬡</span>
+                      </div>
                       <div class="mt-1">
                         @for (label of getLabels(stat); track label) {
                           <span
@@ -299,11 +310,33 @@ interface RenderStoryCard {
       margin-top: 2px;
       overflow-wrap: anywhere;
     }
+
+    .inspect-element-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #6b7280;
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 1px 3px;
+      line-height: 1;
+      transition: color 100ms ease, background 100ms ease;
+      user-select: none;
+    }
+
+    .inspect-element-btn:hover,
+    .inspect-element-btn:focus {
+      color: #60a5fa;
+      background: rgb(96 165 250 / 0.12);
+      outline: none;
+    }
   `],
 })
 export class RenderingComponent {
   readonly state = inject(PanelState);
   readonly displayName = displayName;
+  private readonly commandService = inject(CommandService);
 
   readonly sortField = signal<HeatmapSortField>('rendersPerMinute');
   readonly sortDirection = signal<SortDirection>('desc');
@@ -434,6 +467,10 @@ export class RenderingComponent {
 
   selectComponent(componentName: string): void {
     this.state.selectedComponent.set(componentName);
+  }
+
+  inspectElement(componentName: string): void {
+    this.commandService.inspectInElementsPanel(componentName);
   }
 
   getLabels(stat: ComponentStats): SeverityLabel[] {
