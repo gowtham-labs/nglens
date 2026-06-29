@@ -1,0 +1,296 @@
+<div>
+
+  <!-- ── At-a-glance summary strip ── -->
+  <div class="px-3 py-3 bg-gray-800/60 border-b border-gray-700">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      @if (data()!.angularVersion) {
+        <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">Angular v{{ data()!.angularVersion }}</span>
+      }
+      @if (data()!.bootstrapConfig.bootstrapType === 'standalone') {
+        <span class="tag-standalone">Standalone</span>
+      } @else if (data()!.bootstrapConfig.bootstrapType === 'module-based') {
+        <span class="tag-module">NgModule</span>
+      }
+      @if (data()!.bootstrapConfig.zone === 'zone.js') {
+        <span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">zone.js</span>
+      } @else if (data()!.bootstrapConfig.zone === 'zoneless') {
+        <span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">zoneless</span>
+      }
+      @if (data()!.application.mode === 'development') { <span class="tag-dev">dev</span> }
+      @else if (data()!.application.mode === 'production') { <span class="tag-prod">prod</span> }
+      @if (data()!.bootstrapConfig.debugInfoEnabled) {
+        <span class="badge bg-gray-700 text-gray-400 border border-gray-600">debug info ✓</span>
+      }
+      @if (data()!.bootstrapConfig.errorHandlerCustom) {
+        <span class="badge bg-pink-900/50 text-pink-300 border border-pink-700/50">custom ErrorHandler</span>
+      }
+    </div>
+  </div>
+
+  <!-- Routing block -->
+  <div class="section-title">Routing</div>
+  @if (data()!.routerInfo) {
+    <div class="grid grid-cols-2 gap-0">
+      <div class="info-card">
+        <div class="info-label">Strategy</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          @if (data()!.routerInfo!.strategy === 'path') {
+            <span class="tag-prod">HTML5 History</span>
+            <span class="cell-dim">(PathLocationStrategy)</span>
+          } @else if (data()!.routerInfo!.strategy === 'hash') {
+            <span class="tag-impure">Hash-based</span>
+            <span class="cell-dim">(HashLocationStrategy)</span>
+          } @else {
+            <span class="cell-dim">unknown</span>
+          }
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">Base Href</div>
+        <div class="info-value">{{ data()!.routerInfo!.baseHref ?? '—' }}</div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">Total Routes</div>
+        <div class="info-value">{{ data()!.routerInfo!.totalRoutes }}</div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">Lazy Routes</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          @if (data()!.routerInfo!.hasLazyRoutes) {
+            <span class="tag-lazy">yes — lazy loading active</span>
+          } @else {
+            <span class="cell-dim">none detected</span>
+          }
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="note-box">
+      <span>ℹ</span><span>No Angular Router detected on this page.</span>
+    </div>
+  }
+
+  <!-- Config block -->
+  <div class="section-title flex items-center justify-between">
+    <span>Config  <span class="normal-case font-normal ml-1 text-gray-500">— ApplicationConfig / app.config.ts</span></span>
+    @if (data()!.bootstrapConfig.features.length) {
+      <span class="badge bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 mr-1">
+        {{ data()!.bootstrapConfig.features.length }} provider{{ data()!.bootstrapConfig.features.length !== 1 ? 's' : '' }}
+      </span>
+    }
+  </div>
+  <div class="grid grid-cols-2 gap-0">
+    <div class="info-card">
+      <div class="info-label">Bootstrap Type</div>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        @if (data()!.bootstrapConfig.bootstrapType === 'standalone') {
+          <span class="tag-standalone">Standalone API</span>
+          <span class="cell-dim">bootstrapApplication()</span>
+        } @else if (data()!.bootstrapConfig.bootstrapType === 'module-based') {
+          <span class="tag-module">NgModule-based</span>
+          <span class="cell-dim">bootstrapModule()</span>
+        } @else {
+          <span class="cell-dim">unknown</span>
+        }
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Zone Mode</div>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        @if (data()!.bootstrapConfig.zone === 'zone.js') {
+          <span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">zone.js</span>
+        } @else if (data()!.bootstrapConfig.zone === 'zoneless') {
+          <span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">zoneless</span>
+        } @else {
+          <span class="cell-dim">unknown</span>
+        }
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Debug Info</div>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        @if (data()!.bootstrapConfig.debugInfoEnabled) {
+          <span class="tag-dev">enabled</span>
+          <span class="cell-dim">ng.getComponent available</span>
+        } @else {
+          <span class="tag-prod">disabled</span>
+          <span class="cell-dim">production build</span>
+        }
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Error Handler</div>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        @if (data()!.bootstrapConfig.errorHandlerCustom) {
+          <span class="badge bg-pink-900/50 text-pink-300 border border-pink-700/50">custom</span>
+        } @else {
+          <span class="badge bg-gray-700 text-gray-400 border border-gray-600">default</span>
+        }
+      </div>
+    </div>
+    @if (data()!.bootstrapConfig.appId) {
+      <div class="info-card col-span-2">
+        <div class="info-label">APP_ID</div>
+        <div class="info-value font-mono">{{ data()!.bootstrapConfig.appId }}</div>
+      </div>
+    }
+  </div>
+  @if (data()!.bootstrapConfig.features.length) {
+    <div class="px-3 py-2.5 border-b border-gray-800">
+      <div class="info-label mb-2">Detected Providers</div>
+      <div class="grid grid-cols-2 gap-1.5">
+        @for (f of data()!.bootstrapConfig.features; track f.name) {
+          <div class="flex items-center justify-between px-2.5 py-1.5 bg-gray-800 rounded border border-gray-700/60">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span [class]="configFeatureClass(f)" class="flex-shrink-0">{{ f.featureType }}</span>
+              <span class="text-[11px] text-gray-200 font-mono truncate">{{ f.name }}</span>
+            </div>
+            @if (f.count != null && f.count > 0) {
+              <span class="badge bg-gray-700 text-gray-400 border border-gray-600 ml-1 flex-shrink-0">×{{ f.count }}</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  } @else {
+    <div class="note-box">
+      <span>ℹ</span>
+      <span>No bootstrap providers detected. Ensure the app is fully initialised before scanning.</span>
+    </div>
+  }
+
+  <!-- Application block -->
+  <div class="section-title">Application</div>
+  <div class="grid grid-cols-2 gap-0">
+    @if (data()!.application.rootSelector) {
+      <div class="info-card">
+        <div class="info-label">Root Selector</div>
+        <div class="info-value">&lt;{{ data()!.application.rootSelector }}&gt;</div>
+      </div>
+    }
+    @if (data()!.application.rootComponent) {
+      <div class="info-card">
+        <div class="info-label">Root Component</div>
+        <div class="info-value">{{ data()!.application.rootComponent }}</div>
+      </div>
+    }
+    <div class="info-card">
+      <div class="info-label">Angular Version</div>
+      <div class="info-value">{{ data()!.angularVersion ?? 'unknown' }}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Platform</div>
+      <div class="info-value">{{ data()!.application.platform }}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Build Mode</div>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        @if (data()!.application.mode === 'development') { <span class="tag-dev">development</span> }
+        @else if (data()!.application.mode === 'production') { <span class="tag-prod">production</span> }
+        @else { <span class="cell-dim">unknown</span> }
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Worker block -->
+  <div class="section-title">Service Worker &amp; App Shell</div>
+  @if (data()!.serviceWorker !== null) {
+    <div class="grid grid-cols-2 gap-0">
+      <div class="info-card">
+        <div class="info-label">Status</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          @if (data()!.serviceWorker!.registered) {
+            <span class="tag-sw-on">registered</span>
+          } @else {
+            <span class="tag-sw-off">not registered</span>
+          }
+        </div>
+      </div>
+      @if (data()!.serviceWorker!.state) {
+        <div class="info-card">
+          <div class="info-label">SW State</div>
+          <div class="info-value">{{ data()!.serviceWorker!.state }}</div>
+        </div>
+      }
+      @if (data()!.serviceWorker!.scriptUrl) {
+        <div class="info-card col-span-2">
+          <div class="info-label">Script URL</div>
+          <div class="info-value truncate" [title]="data()!.serviceWorker!.scriptUrl!">
+            {{ data()!.serviceWorker!.scriptUrl }}
+          </div>
+        </div>
+      }
+      <div class="info-card">
+        <div class="info-label">&#64;angular/service-worker (ngsw)</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          @if (data()!.serviceWorker!.hasNgsw) {
+            <span class="tag-sw-on">detected</span>
+          } @else {
+            <span class="tag-sw-off">not detected</span>
+          }
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">App Shell</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          @if (data()!.serviceWorker!.hasAppShell) {
+            <span class="tag-sw-on">detected</span>
+          } @else {
+            <span class="tag-sw-off">not detected</span>
+          }
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="note-box">
+      <span>ℹ</span>
+      <span>Service Worker API not available in this context.</span>
+    </div>
+  }
+
+  <!-- Libraries block -->
+  <div class="section-title">Detected Libraries</div>
+  @if (data()!.libraries.length) {
+    <div class="p-3 flex flex-wrap gap-2">
+      @for (lib of data()!.libraries; track lib.packageName) {
+        <div class="flex flex-col px-2.5 py-1.5 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs text-gray-100 font-medium">{{ lib.name }}</span>
+          <span class="text-[10px] text-gray-500 font-mono mt-0.5">{{ lib.packageName }}</span>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="py-4 text-center text-xs text-gray-500">
+      No well-known Angular libraries detected in the module registry.
+    </div>
+  }
+
+  <!-- Environments block -->
+  <div class="section-title">Environment Configuration</div>
+  @if (filteredEnvironments().length) {
+    @for (e of filteredEnvironments(); track e.key) {
+      <div class="row">
+        <span class="w-48 font-mono text-teal-300 flex-shrink-0 truncate" [title]="e.key">{{ e.key }}</span>
+        <span class="flex-1 cell-dim font-mono truncate" [title]="e.value">{{ e.value }}</span>
+      </div>
+    }
+  } @else {
+    <div class="py-4 text-center text-xs text-gray-500">
+      No environment config detected.
+      <span class="block text-gray-600 mt-0.5">
+        Expose your environment as <code class="font-mono">window.environment</code> or <code class="font-mono">window.__env</code> to see it here.
+      </span>
+    </div>
+  }
+
+  <!-- Web Workers note -->
+  <div class="section-title">Web Workers</div>
+  <div class="note-box">
+    <span>ℹ</span>
+    <span>
+      Web Workers run in an isolated thread and are not introspectable from the DevTools panel.
+      Use the browser's <strong class="text-gray-300">Application → Service Workers</strong> panel to inspect workers.
+    </span>
+  </div>
+
+</div>

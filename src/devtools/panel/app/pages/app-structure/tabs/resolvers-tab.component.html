@@ -1,0 +1,55 @@
+<div>
+  @if (filteredResolvers().length) {
+    <div class="px-3 py-2.5 bg-gray-800/40 border-b border-gray-700 text-[10px] text-gray-500">
+      {{ filteredResolvers().length }} route resolver{{ filteredResolvers().length !== 1 ? 's' : '' }} detected
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Class</span>
+      <span class="col-hdr w-20">Style</span>
+      <span class="col-hdr w-40">Source File</span>
+      <span class="col-hdr flex-1">Routes</span>
+    </div>
+    @for (r of filteredResolvers(); track r.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="r.className">{{ r.className }}</span>
+        <span class="w-20 flex-shrink-0">
+          @if (r.functional) {
+            <span class="badge bg-gray-700 text-gray-300 border border-gray-600">functional</span>
+          } @else {
+            <span class="tag-resolver">class</span>
+          }
+        </span>
+        <span class="w-40 flex-shrink-0 min-w-0">
+          @if (isExternalPkg(r.filePath)) {
+            <span [title]="r.filePath ?? ''" class="pkg-badge">{{ shortPath(r.filePath) }}</span>
+          } @else if (r.filePath) {
+            <button
+              class="src-path hover:text-indigo-400 transition-colors text-left truncate max-w-full block"
+              [title]="'Open ' + r.filePath + ' in Sources'"
+              (click)="openInSources(r)">
+              {{ shortPath(r.filePath) }}
+            </button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
+        <span class="flex-1 min-w-0">
+          <div class="chips">
+            @for (path of r.routes.slice(0, 6); track path) {
+              <span class="chip route-path text-blue-300">{{ path }}</span>
+            }
+            @if (r.routes.length > 6) { <span class="cell-dim">+{{ r.routes.length - 6 }}</span> }
+            @if (!r.routes.length) { <span class="cell-dim">—</span> }
+          </div>
+        </span>
+      </div>
+    }
+  } @else {
+    <div class="py-8 text-center text-xs text-gray-500">
+      No route resolvers detected.
+      <span class="block text-gray-600 mt-0.5">
+        Resolvers declared in route <code class="font-mono">resolve: &#123; … &#125;</code> configs will appear here after scanning.
+      </span>
+    </div>
+  }
+</div>

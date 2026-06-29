@@ -1,0 +1,35 @@
+<div>
+  <div class="section-title">Plain Classes <span class="normal-case font-normal ml-1 text-gray-500">— non-decorated, DI-registered</span></div>
+  @if (filteredPlainClasses().length) {
+    <div class="sticky top-8 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Class name</span>
+      <span class="col-hdr w-24">Found via</span>
+      <span class="col-hdr flex-1">File / Package</span>
+    </div>
+    @for (c of filteredPlainClasses(); track c.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate">{{ c.className }}</span>
+        <span class="w-24 flex-shrink-0">
+          <span class="badge"
+            [ngClass]="c.source === 'use-class' ? 'bg-amber-900/50 text-amber-300 border border-amber-700/50'
+                     : 'bg-gray-700 text-gray-400 border border-gray-600'">
+            {{ c.source }}
+          </span>
+        </span>
+        <span class="flex-1 min-w-0" [title]="c.filePath ?? ''" [ngClass]="isExternalPkg(c.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(c.filePath) }}</span>
+      </div>
+    }
+  } @else {
+    <div class="py-4 text-center text-xs text-gray-500">No plain classes detected in the injector.</div>
+  }
+
+  <div class="section-title mt-2">Compile-time Only Entities</div>
+  <div class="p-3 space-y-2">
+    @for (note of compiletimeNotes; track note.name) {
+      <div class="flex items-start gap-3 px-3 py-2.5 bg-gray-800/60 border border-gray-700 rounded text-xs">
+        <span class="text-gray-500 font-mono w-24 flex-shrink-0">{{ note.name }}</span>
+        <span class="text-gray-400">{{ note.reason }}</span>
+      </div>
+    }
+  </div>
+</div>

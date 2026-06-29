@@ -1,0 +1,27 @@
+<div>
+  <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+    <span class="col-hdr w-48">Selector</span>
+    <span class="col-hdr w-48">Class</span>
+    <span class="col-hdr flex-1">Inputs / Outputs</span>
+    <span class="col-hdr w-32">File / Package</span>
+  </div>
+  @for (d of filteredDirectives(); track d.className) {
+    <div class="row">
+      <span class="w-48 cell-primary truncate">{{ d.selector || '—' }}</span>
+      <span class="w-48 flex items-center gap-1">
+        <span class="cell-primary truncate">{{ d.className }}</span>
+        @if (d.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
+      </span>
+      <span class="flex-1 min-w-0">
+        @if (d.inputs.length || d.outputs.length) {
+          <div class="chips">
+            @for (inp of d.inputs.slice(0, 5); track inp) { <span class="chip text-green-400">&#64;{{ inp }}</span> }
+            @for (out of d.outputs.slice(0, 4); track out) { <span class="chip text-amber-400">{{ out }}</span> }
+          </div>
+        } @else { <span class="cell-dim">—</span> }
+      </span>
+      <span class="w-32 flex-shrink-0 min-w-0" [title]="d.filePath ?? ''" [ngClass]="isExternalPkg(d.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(d.filePath) }}</span>
+    </div>
+  }
+  @if (!filteredDirectives().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+</div>

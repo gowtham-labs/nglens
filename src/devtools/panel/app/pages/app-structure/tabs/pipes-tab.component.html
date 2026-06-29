@@ -1,0 +1,23 @@
+<div>
+  <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+    <span class="col-hdr w-40">Pipe name</span>
+    <span class="col-hdr w-48">Class</span>
+    <span class="col-hdr w-20">Purity</span>
+    <span class="col-hdr flex-1">File / Package</span>
+  </div>
+  @for (p of filteredPipes(); track p.className) {
+    <div class="row">
+      <span class="w-40 font-mono text-yellow-300">{{ p.name }}</span>
+      <span class="w-48 flex items-center gap-1">
+        <span class="cell-primary truncate">{{ p.className }}</span>
+        @if (p.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
+      </span>
+      <span class="w-20 flex-shrink-0">
+        @if (p.pure) { <span class="tag-pure">pure</span> }
+        @else { <span class="tag-impure">impure</span> }
+      </span>
+      <span class="flex-1 min-w-0" [title]="p.filePath ?? ''" [ngClass]="isExternalPkg(p.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(p.filePath) }}</span>
+    </div>
+  }
+  @if (!filteredPipes().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+</div>

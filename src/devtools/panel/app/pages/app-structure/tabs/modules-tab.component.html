@@ -1,0 +1,29 @@
+@for (m of filteredModules(); track m.className) {
+  <div class="px-3 py-2 border-b border-gray-800">
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="tag-module">NgModule</span>
+      <span class="text-xs font-mono font-medium text-gray-100">{{ m.className }}</span>
+      @if (m.filePath) {
+        <span class="max-w-xs min-w-0" [title]="m.filePath" [ngClass]="isExternalPkg(m.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(m.filePath) }}</span>
+      }
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+      @for (group of [
+        { label: 'Declarations', items: m.declarations },
+        { label: 'Imports',      items: m.imports },
+        { label: 'Exports',      items: m.exports },
+        { label: 'Providers',    items: m.providers }
+      ]; track group.label) {
+        <div>
+          <span class="text-gray-500 uppercase tracking-wide">{{ group.label }}</span>
+          <div class="chips mt-0.5">
+            @for (item of group.items.slice(0, 8); track item) { <span class="chip">{{ item }}</span> }
+            @if (group.items.length > 8) { <span class="cell-dim">+{{ group.items.length - 8 }}</span> }
+            @if (!group.items.length) { <span class="cell-dim">—</span> }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+@if (!filteredModules().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
