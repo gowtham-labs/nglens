@@ -2,7 +2,8 @@ import type { AppProviderCategory } from '../../types/app-structure';
 
 export const MAX_SCAN_ELEMENTS = 3000;
 export const MAX_INSTANCE_PROPS = 200;
-export const SKIP_PROP_PREFIXES = ['_', 'ɵ', 'ng', '__'];
+/** Skip only true Angular-internal prefixes. Developer-defined `_` private props are scanned. */
+export const SKIP_PROP_PREFIXES = ['ɵ', 'Ɵ', '__ng'];
 
 // ─── Library source detection ─────────────────────────────────────────────────
 export const LIBRARY_NAME_PATTERNS: Array<[RegExp, string]> = [

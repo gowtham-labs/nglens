@@ -43,4 +43,18 @@ export class ComponentsTabComponent {
 
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
+
+  /** Formats signal property names for a tooltip, labelling underscore-prefixed ones as private. */
+  signalTooltip(names: string[]): string {
+    const pub  = names.filter(n => !n.startsWith('_'));
+    const priv = names.filter(n =>  n.startsWith('_'));
+    const parts: string[] = [];
+    if (pub.length)  parts.push(pub.join(', '));
+    if (priv.length) parts.push('private: ' + priv.join(', '));
+    return parts.join(' | ');
+  }
+
+  privateCount(names: string[]): number {
+    return names.filter(n => n.startsWith('_')).length;
+  }
 }

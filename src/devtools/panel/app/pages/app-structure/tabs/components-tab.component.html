@@ -22,13 +22,23 @@
         @if (signalMap().get(c.className); as sig) {
           <div class="chips">
             @if (sig.writableSignals.length) {
-              <span class="chip-signal" [title]="sig.writableSignals.join(', ')">⚡{{ sig.writableSignals.length }}</span>
+              <span class="chip-signal" [title]="signalTooltip(sig.writableSignals)">
+                ⚡{{ sig.writableSignals.length - privateCount(sig.writableSignals) }}
+                @if (privateCount(sig.writableSignals) > 0) {
+                  <span class="opacity-50" [title]="'private (underscore-prefixed): ' + sig.writableSignals.filter(s => s.startsWith('_')).join(', ')">+{{ privateCount(sig.writableSignals) }}🔒</span>
+                }
+              </span>
             }
             @if (sig.computedSignals.length) {
-              <span class="chip-computed" [title]="sig.computedSignals.join(', ')">⊕{{ sig.computedSignals.length }}</span>
+              <span class="chip-computed" [title]="signalTooltip(sig.computedSignals)">
+                ⊕{{ sig.computedSignals.length - privateCount(sig.computedSignals) }}
+                @if (privateCount(sig.computedSignals) > 0) {
+                  <span class="opacity-50">+{{ privateCount(sig.computedSignals) }}🔒</span>
+                }
+              </span>
             }
             @if (sig.effects.length) {
-              <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50" [title]="sig.effects.join(', ')">⬡{{ sig.effects.length }}</span>
+              <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50" [title]="signalTooltip(sig.effects)">⬡{{ sig.effects.length }}</span>
             }
           </div>
         }
