@@ -17,7 +17,6 @@ import { PipesTabComponent } from './tabs/pipes-tab.component';
 import { ServicesTabComponent } from './tabs/services-tab.component';
 import { ModulesTabComponent } from './tabs/modules-tab.component';
 import { RoutesTabComponent } from './tabs/routes-tab.component';
-import { StateTabComponent } from './tabs/state-tab.component';
 import { GuardsTabComponent } from './tabs/guards-tab.component';
 import { InterceptorsTabComponent } from './tabs/interceptors-tab.component';
 import { ResolversTabComponent } from './tabs/resolvers-tab.component';
@@ -37,7 +36,6 @@ import { AppConfigTabComponent } from './tabs/app-config-tab.component';
     ServicesTabComponent,
     ModulesTabComponent,
     RoutesTabComponent,
-    StateTabComponent,
     GuardsTabComponent,
     InterceptorsTabComponent,
     ResolversTabComponent,
@@ -65,7 +63,6 @@ export class AppStructureComponent implements OnInit {
     { id: 'services',     label: 'Services',     icon: '⬡',  count: computed(() => this.data()?.services.length    ?? 0) },
     { id: 'modules',      label: 'Modules',      icon: '⬢',  count: computed(() => this.data()?.modules.length     ?? 0) },
     { id: 'routes',       label: 'Routes',       icon: '↗',  count: computed(() => this.countRoutes(this.data()?.routes ?? [])) },
-    { id: 'state',        label: 'State',        icon: '⚡', count: computed(() => { const sm = this.data()?.stateManagement; return sm ? sm.signalState.length + sm.observableState.length + sm.ngrx.length : 0; }) },
     { id: 'guards',       label: 'Guards',       icon: '🛡', count: computed(() => this.data()?.guards.length       ?? 0) },
     { id: 'interceptors', label: 'Interceptors', icon: '⟳', count: computed(() => this.data()?.interceptors.length ?? 0) },
     { id: 'resolvers',    label: 'Resolvers',    icon: '↺', count: computed(() => this.data()?.resolvers.length    ?? 0) },

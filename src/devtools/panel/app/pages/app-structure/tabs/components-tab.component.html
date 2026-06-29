@@ -1,46 +1,4 @@
 <div>
-  <!-- CD summary bar -->
-  @if (data()!.changeDetectionSummary.total > 0) {
-    <div class="px-3 py-2.5 bg-gray-800/40 border-b border-gray-700">
-      <div class="flex items-center gap-3 text-[10px] mb-2">
-        <span class="text-gray-500 uppercase tracking-wide font-semibold">Change Detection</span>
-        <span class="tag-onpush">OnPush &nbsp;{{ data()!.changeDetectionSummary.onPush }}</span>
-        <span class="tag-default">Default &nbsp;{{ data()!.changeDetectionSummary.default }}</span>
-        <span class="text-gray-500 ml-auto">{{ data()!.changeDetectionSummary.total }} components</span>
-      </div>
-      <div class="flex h-1.5 rounded-full overflow-hidden bg-gray-700 gap-px">
-        <div class="bg-green-500 rounded-l-full transition-all"
-             [style.width.%]="data()!.changeDetectionSummary.onPush / data()!.changeDetectionSummary.total * 100"
-             [title]="'OnPush: ' + data()!.changeDetectionSummary.onPush + ' (' + (data()!.changeDetectionSummary.onPush / data()!.changeDetectionSummary.total * 100 | number:'1.0-0') + '%)'">
-        </div>
-        <div class="bg-gray-500 rounded-r-full flex-1"
-             [title]="'Default: ' + data()!.changeDetectionSummary.default + ' (' + (data()!.changeDetectionSummary.default / data()!.changeDetectionSummary.total * 100 | number:'1.0-0') + '%)'">
-        </div>
-      </div>
-      <div class="flex gap-4 mt-1.5 text-[10px] text-gray-500">
-        <span><span class="inline-block w-2 h-2 rounded-sm bg-green-500 mr-1"></span>OnPush {{ (data()!.changeDetectionSummary.onPush / data()!.changeDetectionSummary.total * 100 | number:'1.0-0') }}%</span>
-        <span><span class="inline-block w-2 h-2 rounded-sm bg-gray-500 mr-1"></span>Default {{ (data()!.changeDetectionSummary.default / data()!.changeDetectionSummary.total * 100 | number:'1.0-0') }}%</span>
-      </div>
-      @if (signalMap().size > 0 || signalInputComponentCount() > 0) {
-        <div class="flex items-center gap-3 mt-2 pt-2 border-t border-gray-700/60 text-[10px]">
-          <span class="text-gray-500 uppercase tracking-wide font-semibold">Signals</span>
-          @if (signalMap().size > 0) {
-            <span class="chip-signal">⚡ {{ signalMap().size }} component{{ signalMap().size !== 1 ? 's' : '' }} use signals</span>
-          }
-          @if (signalInputComponentCount() > 0) {
-            <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" title="Signal inputs via input() or input.required()">↩ {{ signalInputTotalCount() }} input{{ signalInputTotalCount() !== 1 ? 's' : '' }}</span>
-          }
-          @if (modelInputTotalCount() > 0) {
-            <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" title="Two-way signal bindings via model()">⇄ {{ modelInputTotalCount() }} model{{ modelInputTotalCount() !== 1 ? 's' : '' }}</span>
-          }
-          @if (signalStatsEffectCount() > 0) {
-            <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50">{{ signalStatsEffectCount() }} effect{{ signalStatsEffectCount() !== 1 ? 's' : '' }}</span>
-          }
-          <span class="text-gray-600 ml-auto">{{ signalStatsWritableTotal() }}w · {{ signalStatsComputedTotal() }}c total</span>
-        </div>
-      }
-    </div>
-  }
   <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
     <span class="col-hdr w-40">Selector</span>
     <span class="col-hdr w-48">Class</span>
@@ -103,4 +61,28 @@
     </div>
   }
   @if (!filteredComponents().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+
+  <!-- ── Model Inputs ── -->
+  @if (filteredModelComponents().length) {
+    <div class="section-title mt-2">
+      Model Inputs
+      <span class="normal-case font-normal ml-1 text-gray-500">— two-way bindings via <code class="font-mono text-[10px]">model()</code></span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">model() properties</span>
+    </div>
+    @for (c of filteredModelComponents(); track c.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="c.className">{{ c.className }}</span>
+        <div class="flex-1 min-w-0">
+          <div class="chips">
+            @for (m of c.modelInputs; track m) {
+              <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" title="model()">⇄ {{ m }}</span>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
 </div>

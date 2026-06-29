@@ -1,7 +1,7 @@
 export type RegistryTab =
   | 'app' | 'components' | 'directives' | 'pipes'
   | 'services' | 'modules' | 'routes'
-  | 'state' | 'guards' | 'interceptors' | 'resolvers' | 'classes' | 'tokens' | 'app-config';
+  | 'guards' | 'interceptors' | 'resolvers' | 'classes' | 'tokens' | 'app-config';
 
 export interface FlatRoute {
   key: string;
