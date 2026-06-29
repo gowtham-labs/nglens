@@ -10,7 +10,7 @@ import type {
   ServiceRegistryEntry,
   ServiceRole,
   SignalStateEntry,
-} from '../types/app-structure';
+} from '../../types/app-structure';
 import {
   _classNameToSource,
   detectModuleSource,

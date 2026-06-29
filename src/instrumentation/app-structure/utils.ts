@@ -1,4 +1,4 @@
-import type { AppProviderCategory } from '../types/app-structure';
+import type { AppProviderCategory } from '../../types/app-structure';
 import { LIBRARY_NAME_PATTERNS, PROVIDER_CATEGORY_PATTERNS } from './constants';
 
 // ─── Per-scan mutable state ───────────────────────────────────────────────────

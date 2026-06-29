@@ -6,7 +6,7 @@ import type {
   ObservableStateEntry,
   SignalStateEntry,
   TokenRegistryEntry,
-} from '../types/app-structure';
+} from '../../types/app-structure';
 import { PROVIDER_SKIP_PREFIXES } from './constants';
 import { categorizeProvider, tryGetFilePathFromCtor } from './utils';
 import { scanInstanceState } from './state-scanner';

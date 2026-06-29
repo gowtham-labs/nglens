@@ -36,7 +36,7 @@ import type {
 type RegistryTab =
   | 'app' | 'components' | 'directives' | 'pipes'
   | 'services' | 'modules' | 'routes'
-  | 'state' | 'guards' | 'classes' | 'tokens' | 'app-config';
+  | 'state' | 'guards' | 'interceptors' | 'resolvers' | 'classes' | 'tokens' | 'app-config';
 
 interface FlatRoute {
   key: string;
@@ -109,7 +109,7 @@ interface FlatRoute {
         <div class="flex-1">
           <h2 class="text-sm font-semibold text-gray-100">App Map</h2>
           <p class="text-xs text-gray-400 mt-0.5">
-            Components · Directives · Pipes · Services · Guards · State · Classes · Tokens · App Config · Routes
+            Components · Directives · Pipes · Services · Guards · Interceptors · Resolvers · State · Classes · Tokens · App Config · Routes
           </p>
         </div>
         @if (data()) {
@@ -895,7 +895,7 @@ interface FlatRoute {
             </div>
           }
 
-          <!-- ╔══ GUARDS & INTERCEPTORS ══╗ -->
+          <!-- ╔══ GUARDS ══╗ -->
           @if (activeTab() === 'guards') {
             <div>
               @if (filteredGuards().length) {
@@ -927,41 +927,120 @@ interface FlatRoute {
                 }
               }
 
+              @if (!filteredGuards().length) {
+                <div class="py-8 text-center text-xs text-gray-500">No guards detected</div>
+              }
+            </div>
+          }
+
+          <!-- ╔══ INTERCEPTORS ══╗ -->
+          @if (activeTab() === 'interceptors') {
+            <div>
               @if (filteredInterceptors().length) {
-                <div class="section-title">HTTP Interceptors</div>
+                <div class="px-3 py-2.5 bg-gray-800/40 border-b border-gray-700 text-[10px] text-gray-500">
+                  {{ filteredInterceptors().length }} HTTP interceptor{{ filteredInterceptors().length !== 1 ? 's' : '' }} detected
+                  — execution order is left-to-right (#1 runs first)
+                </div>
+                <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+                  <span class="col-hdr w-8">#</span>
+                  <span class="col-hdr w-52">Class</span>
+                  <span class="col-hdr w-20">Style</span>
+                  <span class="col-hdr flex-1">Source File</span>
+                </div>
                 @for (i of filteredInterceptors(); track i.className) {
                   <div class="row">
                     <span class="w-8 flex-shrink-0 text-gray-500 font-mono text-[10px]">#{{ i.order + 1 }}</span>
-                    <span class="w-52 cell-primary truncate">{{ i.className }}</span>
-                    @if (i.functional) { <span class="badge bg-gray-700 text-gray-300 border border-gray-600">fn</span> }
-                    <span class="tag-iceptor">interceptor</span>
-                    <span class="flex-1 min-w-0" [title]="i.filePath ?? ''" [ngClass]="isExternalPkg(i.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(i.filePath) }}</span>
+                    <span class="w-52 cell-primary truncate" [title]="i.className">{{ i.className }}</span>
+                    <span class="w-20 flex-shrink-0">
+                      @if (i.functional) {
+                        <span class="badge bg-gray-700 text-gray-300 border border-gray-600">functional</span>
+                      } @else {
+                        <span class="tag-iceptor">class</span>
+                      }
+                    </span>
+                    <span class="flex-1 min-w-0">
+                      @if (isExternalPkg(i.filePath)) {
+                        <span [title]="i.filePath ?? ''" class="pkg-badge">{{ shortPath(i.filePath) }}</span>
+                      } @else if (i.filePath) {
+                        <button
+                          class="src-path hover:text-indigo-400 transition-colors text-left truncate max-w-full block"
+                          [title]="'Open ' + i.filePath + ' in Sources'"
+                          (click)="openInterceptorInSources(i)">
+                          {{ shortPath(i.filePath) }}
+                        </button>
+                      } @else {
+                        <span class="cell-dim">—</span>
+                      }
+                    </span>
                   </div>
                 }
+              } @else {
+                <div class="py-8 text-center text-xs text-gray-500">
+                  No HTTP interceptors detected.
+                  <span class="block text-gray-600 mt-0.5">
+                    Interceptors registered via <code class="font-mono">withInterceptors()</code> or
+                    <code class="font-mono">HTTP_INTERCEPTORS</code> will appear here after scanning.
+                  </span>
+                </div>
               }
+            </div>
+          }
 
+          <!-- ╔══ RESOLVERS ══╗ -->
+          @if (activeTab() === 'resolvers') {
+            <div>
               @if (filteredResolvers().length) {
-                <div class="section-title">Resolvers</div>
+                <div class="px-3 py-2.5 bg-gray-800/40 border-b border-gray-700 text-[10px] text-gray-500">
+                  {{ filteredResolvers().length }} route resolver{{ filteredResolvers().length !== 1 ? 's' : '' }} detected
+                </div>
+                <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+                  <span class="col-hdr w-52">Class</span>
+                  <span class="col-hdr w-20">Style</span>
+                  <span class="col-hdr w-40">Source File</span>
+                  <span class="col-hdr flex-1">Routes</span>
+                </div>
                 @for (r of filteredResolvers(); track r.className) {
                   <div class="row">
-                    <span class="w-44 cell-primary truncate">{{ r.className }}</span>
-                    <span class="w-24 flex-shrink-0">
-                      @if (r.functional) { <span class="badge bg-gray-700 text-gray-300 border border-gray-600 mr-1">fn</span> }
-                      <span class="tag-resolver">resolver</span>
+                    <span class="w-52 cell-primary truncate" [title]="r.className">{{ r.className }}</span>
+                    <span class="w-20 flex-shrink-0">
+                      @if (r.functional) {
+                        <span class="badge bg-gray-700 text-gray-300 border border-gray-600">functional</span>
+                      } @else {
+                        <span class="tag-resolver">class</span>
+                      }
                     </span>
-                    <span class="w-32 flex-shrink-0 min-w-0" [title]="r.filePath ?? ''" [ngClass]="isExternalPkg(r.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(r.filePath) }}</span>
+                    <span class="w-40 flex-shrink-0 min-w-0">
+                      @if (isExternalPkg(r.filePath)) {
+                        <span [title]="r.filePath ?? ''" class="pkg-badge">{{ shortPath(r.filePath) }}</span>
+                      } @else if (r.filePath) {
+                        <button
+                          class="src-path hover:text-indigo-400 transition-colors text-left truncate max-w-full block"
+                          [title]="'Open ' + r.filePath + ' in Sources'"
+                          (click)="openResolverInSources(r)">
+                          {{ shortPath(r.filePath) }}
+                        </button>
+                      } @else {
+                        <span class="cell-dim">—</span>
+                      }
+                    </span>
                     <span class="flex-1 min-w-0">
                       <div class="chips">
-                        @for (path of r.routes.slice(0, 6); track path) { <span class="chip route-path text-blue-300">{{ path }}</span> }
+                        @for (path of r.routes.slice(0, 6); track path) {
+                          <span class="chip route-path text-blue-300">{{ path }}</span>
+                        }
                         @if (r.routes.length > 6) { <span class="cell-dim">+{{ r.routes.length - 6 }}</span> }
+                        @if (!r.routes.length) { <span class="cell-dim">—</span> }
                       </div>
                     </span>
                   </div>
                 }
-              }
-
-              @if (!filteredGuards().length && !filteredInterceptors().length && !filteredResolvers().length) {
-                <div class="py-8 text-center text-xs text-gray-500">No guards, interceptors or resolvers detected</div>
+              } @else {
+                <div class="py-8 text-center text-xs text-gray-500">
+                  No route resolvers detected.
+                  <span class="block text-gray-600 mt-0.5">
+                    Resolvers declared in route <code class="font-mono">resolve: &#123; … &#125;</code> configs will appear here after scanning.
+                  </span>
+                </div>
               }
             </div>
           }
@@ -1104,24 +1183,29 @@ export class AppStructureComponent implements OnInit {
 
   private readonly guardsCount = computed(() => {
     const d = this.data();
-    return (d?.guards.length ?? 0) + (d?.interceptors.length ?? 0) + (d?.resolvers.length ?? 0);
+    return d?.guards.length ?? 0;
   });
+
+  private readonly interceptorsCount = computed(() => this.data()?.interceptors.length ?? 0);
+  private readonly resolversCount = computed(() => this.data()?.resolvers.length ?? 0);
 
   private readonly classesCount = computed(() => this.data()?.plainClasses.length ?? 0);
 
   readonly tabs: Array<{ id: RegistryTab; label: string; icon: string; count: () => number }> = [
-    { id: 'app',         label: 'App Info',     icon: '🏠', count: computed(() => 0) },
-    { id: 'components',  label: 'Components',   icon: '◈',  count: computed(() => this.data()?.components.length  ?? 0) },
-    { id: 'directives',  label: 'Directives',   icon: '◇',  count: computed(() => this.data()?.directives.length  ?? 0) },
-    { id: 'pipes',       label: 'Pipes',         icon: '|>', count: computed(() => this.data()?.pipes.length       ?? 0) },
-    { id: 'services',    label: 'Services',      icon: '⬡',  count: computed(() => this.data()?.services.length    ?? 0) },
-    { id: 'modules',     label: 'Modules',       icon: '⬢',  count: computed(() => this.data()?.modules.length     ?? 0) },
-    { id: 'routes',      label: 'Routes',        icon: '↗',  count: computed(() => this.countRoutes(this.data()?.routes ?? [])) },
-    { id: 'state',       label: 'State',         icon: '⚡', count: this.stateCount },
-    { id: 'guards',      label: 'Guards & I/O',  icon: '🛡', count: this.guardsCount },
-    { id: 'classes',     label: 'Classes',       icon: '📦', count: this.classesCount },
-    { id: 'tokens',      label: 'Tokens',        icon: '🔑', count: computed(() => this.data()?.tokens.length     ?? 0) },
-    { id: 'app-config',  label: 'App Config',    icon: '⚙️',  count: computed(() => this.data()?.appProviders.length ?? 0) },
+    { id: 'app',          label: 'App Info',      icon: '🏠', count: computed(() => 0) },
+    { id: 'components',   label: 'Components',    icon: '◈',  count: computed(() => this.data()?.components.length  ?? 0) },
+    { id: 'directives',   label: 'Directives',    icon: '◇',  count: computed(() => this.data()?.directives.length  ?? 0) },
+    { id: 'pipes',        label: 'Pipes',          icon: '|>', count: computed(() => this.data()?.pipes.length       ?? 0) },
+    { id: 'services',     label: 'Services',       icon: '⬡',  count: computed(() => this.data()?.services.length    ?? 0) },
+    { id: 'modules',      label: 'Modules',        icon: '⬢',  count: computed(() => this.data()?.modules.length     ?? 0) },
+    { id: 'routes',       label: 'Routes',         icon: '↗',  count: computed(() => this.countRoutes(this.data()?.routes ?? [])) },
+    { id: 'state',        label: 'State',          icon: '⚡', count: this.stateCount },
+    { id: 'guards',       label: 'Guards',         icon: '🛡', count: this.guardsCount },
+    { id: 'interceptors', label: 'Interceptors',   icon: '⟳', count: this.interceptorsCount },
+    { id: 'resolvers',    label: 'Resolvers',      icon: '↺', count: this.resolversCount },
+    { id: 'classes',      label: 'Classes',        icon: '📦', count: this.classesCount },
+    { id: 'tokens',       label: 'Tokens',         icon: '🔑', count: computed(() => this.data()?.tokens.length     ?? 0) },
+    { id: 'app-config',   label: 'App Config',     icon: '⚙️',  count: computed(() => this.data()?.appProviders.length ?? 0) },
   ];
 
   // ── Filtered computed ─────────────────────────────────────────────────────
@@ -1274,14 +1358,25 @@ export class AppStructureComponent implements OnInit {
     return q ? items.filter(e => e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q)) : items;
   });
 
+  // ── Sources panel integration ─────────────────────────────────────────────
+
+  /** Opens the interceptor's source file in the DevTools Sources panel. */
+  openInterceptorInSources(interceptor: InterceptorRegistryEntry): void {
+    this.cmd.openClassFileInSources(interceptor.className, interceptor.filePath, 'interceptor');
+  }
+
+  /** Opens the resolver's source file in the DevTools Sources panel. */
+  openResolverInSources(resolver: ResolverRegistryEntry): void {
+    this.cmd.openClassFileInSources(resolver.className, resolver.filePath, 'resolver');
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   ngOnInit(): void {
     if (!this.data()) this.scan();
   }
 
-  scan(): void {
-    // Reset previous data so the polling interval doesn't exit immediately
+  scan(): void {    // Reset previous data so the polling interval doesn't exit immediately
     this.data.set(null);
     this.scanning.set(true);
     this.cmd.scanAppStructure();

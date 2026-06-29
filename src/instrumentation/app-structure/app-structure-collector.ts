@@ -18,7 +18,7 @@ import type {
   PipeRegistryEntry,
   ServiceRegistryEntry,
   SignalStateEntry,
-} from '../types/app-structure';
+} from '../../types/app-structure';
 import { MAX_SCAN_ELEMENTS } from './constants';
 import { _classNameToSource } from './utils';
 import { processConstructor, tryLViewScan, enrichServiceRoles } from './ivy-metadata';

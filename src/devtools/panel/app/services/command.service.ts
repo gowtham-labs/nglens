@@ -68,10 +68,70 @@ export class CommandService {
     });
   }
 
+  /**
+   * Opens the source file of a given Angular class (interceptor, resolver, guard, etc.)
+   * in the DevTools Sources panel.
+   *
+   * Strategy:
+   * 1. If a `filePath` is available and is a local source file (has a .ts/.js extension and is
+   *    not an npm package), match resources by the file's base name.
+   * 2. Fall back to deriving the file name from the class name and the provided `suffix`
+   *    (e.g. `MyAuthInterceptor` + `'interceptor'` → `my-auth.interceptor.ts`).
+   *
+   * @param className  The Angular class name (e.g. `AuthInterceptor`, `UserDataResolver`).
+   * @param filePath   The file path stored in the registry (may be null or an npm package name).
+   * @param suffix     Conventional file suffix without dot (e.g. `'interceptor'`, `'resolver'`, `'guard'`).
+   */
+  openClassFileInSources(className: string, filePath: string | null, suffix: string): void {
+    chrome.devtools.inspectedWindow.getResources((resources) => {
+      // Strategy 1: use stored filePath when it refers to a local source file
+      if (filePath && this.isLocalSourcePath(filePath)) {
+        const fileName = filePath.split('/').pop() ?? '';
+        if (fileName) {
+          const byPath = resources.find(r =>
+            r.url.endsWith(fileName) &&
+            (r.url.endsWith('.ts') || r.url.endsWith('.js'))
+          );
+          if (byPath) {
+            chrome.devtools.panels.openResource(byPath.url, 0, () => { /* opened */ });
+            return;
+          }
+        }
+      }
+
+      // Strategy 2: derive file name from class name + suffix convention
+      // e.g. MyAuthInterceptor → strip "Interceptor" → my-auth → my-auth.interceptor
+      const suffixCapitalized = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+      const cleaned = className
+        .replace(/^_+/, '')
+        .replace(new RegExp(`${suffixCapitalized}$`), '');
+      const kebab = cleaned.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+      const fileBase = `${kebab}.${suffix}`;
+
+      const tsMatch = resources.find(r => r.url.includes(fileBase) && r.url.endsWith('.ts'));
+      const jsMatch = resources.find(r => r.url.includes(fileBase) && r.url.endsWith('.js'));
+      const match = tsMatch ?? jsMatch;
+
+      if (match) {
+        chrome.devtools.panels.openResource(match.url, 0, () => { /* opened */ });
+        return;
+      }
+
+      console.warn(`[ngLens] Source file not found for ${suffix}: ${className}`);
+    });
+  }
+
   private toComponentFileName(className: string): string {
     const cleaned = className.replace(/^_+/, '').replace(/Component$/, '');
     const kebab = cleaned.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
     return `${kebab}.component`;
+  }
+
+  /** Returns true when the path is a local source file (not an npm package name). */
+  private isLocalSourcePath(path: string): boolean {
+    if (!path) return false;
+    if (path.startsWith('@') || path.includes('node_modules/')) return false;
+    return path.includes('.ts') || path.includes('.js') || path.includes('.mjs');
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { AppProviderCategory } from '../types/app-structure';
+import type { AppProviderCategory } from '../../types/app-structure';
 
 export const MAX_SCAN_ELEMENTS = 3000;
 export const MAX_INSTANCE_PROPS = 200;

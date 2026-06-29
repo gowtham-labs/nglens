@@ -10,7 +10,7 @@ import type {
   ServiceRegistryEntry,
   ServiceWorkerInfo,
   TokenRegistryEntry,
-} from '../types/app-structure';
+} from '../../types/app-structure';
 import { tryGetFilePathFromCtor } from './utils';
 import { getInjectorMap, getInjectorRecords } from './injector';
 

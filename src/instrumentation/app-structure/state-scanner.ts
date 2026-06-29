@@ -1,4 +1,4 @@
-import type { ObservableStateEntry, SignalStateEntry } from '../types/app-structure';
+import type { ObservableStateEntry, SignalStateEntry } from '../../types/app-structure';
 import { MAX_INSTANCE_PROPS, SKIP_PROP_PREFIXES } from './constants';
 
 /**

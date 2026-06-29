@@ -6,7 +6,7 @@ import type {
   RouteRegistryEntry,
   RouterInfo,
   RoutingStrategy,
-} from '../types/app-structure';
+} from '../../types/app-structure';
 import { tryGetFilePathFromCtor } from './utils';
 import { getInjectorMap, getInjectorRecords } from './injector';
 
