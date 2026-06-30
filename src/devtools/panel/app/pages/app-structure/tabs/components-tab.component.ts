@@ -6,6 +6,8 @@ import type {
   CdStrategyMismatchEntry, CdRefAbuseEntry, HeavyLifecycleHookEntry, OnPushInputMutationRisk,
   LargeListDetection, ImportBloatEntry, DeferOpportunityEntry, AnimationIssueEntry,
   FormsMixingEntry, QueryListOveruseEntry,
+  TemplateFunctionCallEntry, NgForWithoutTrackByEntry, SubscriptionLeakEntry,
+  DeepNestingEntry, DirectDomManipulationEntry,
 } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
@@ -115,6 +117,37 @@ export class ComponentsTabComponent {
   readonly queryListOveruse = computed<QueryListOveruseEntry[]>(() => {
     const q = this.searchQuery().toLowerCase();
     const items = this.pd()?.queryListOveruse ?? [];
+    return q ? items.filter(i => i.className.toLowerCase().includes(q)) : items;
+  });
+
+  // ── New Detections (N1, N2, N5, N8, N14) ─────────────────────────────────
+  readonly templateFunctionCalls = computed<TemplateFunctionCallEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.pd()?.templateFunctionCalls ?? [];
+    return q ? items.filter(i => i.className.toLowerCase().includes(q) || i.selector.toLowerCase().includes(q)) : items;
+  });
+
+  readonly ngForWithoutTrackBy = computed<NgForWithoutTrackByEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.pd()?.ngForWithoutTrackBy ?? [];
+    return q ? items.filter(i => i.className.toLowerCase().includes(q) || i.selector.toLowerCase().includes(q)) : items;
+  });
+
+  readonly subscriptionLeaks = computed<SubscriptionLeakEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.pd()?.subscriptionLeaks ?? [];
+    return q ? items.filter(i => i.className.toLowerCase().includes(q)) : items;
+  });
+
+  readonly deepNesting = computed<DeepNestingEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.pd()?.deepNesting ?? [];
+    return q ? items.filter(i => i.leafClassName.toLowerCase().includes(q) || i.leafSelector.toLowerCase().includes(q)) : items;
+  });
+
+  readonly directDomManipulation = computed<DirectDomManipulationEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.pd()?.directDomManipulation ?? [];
     return q ? items.filter(i => i.className.toLowerCase().includes(q)) : items;
   });
 

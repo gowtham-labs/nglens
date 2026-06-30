@@ -70,4 +70,22 @@
       </div>
     }
   }
+
+  <!-- N22: providedIn: 'any' Services -->
+  @if (providedInAny().length) {
+    <div class="section-title mt-2">
+      ⚠ Services with <span class="font-mono">providedIn: 'any'</span>
+      <span class="normal-case font-normal ml-1 text-gray-500">— creates a separate instance per lazy-loaded NgModule; use <span class="font-mono">'root'</span> unless isolation is intentional</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr flex-1">Service</span>
+      <span class="col-hdr w-48">File</span>
+    </div>
+    @for (s of providedInAny(); track s.className) {
+      <div class="row">
+        <span class="flex-1 cell-primary truncate" [title]="s.className">{{ s.className }}</span>
+        <span class="w-48 src-path truncate" [title]="s.filePath ?? ''">{{ shortPath(s.filePath) }}</span>
+      </div>
+    }
+  }
 </div>

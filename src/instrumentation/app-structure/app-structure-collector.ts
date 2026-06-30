@@ -124,12 +124,13 @@ export function collectAppStructure(): AppStructureData {
   const plainClasses = injector ? detectPlainClasses(injector, knownClassNames) : [];
   const bootstrapConfig = detectBootstrapConfig(injector, ng, rootEl, services, tokens);
 
-  // ── Phase 6: performance anti-pattern detections (all 18 items) ───────────
+  // ── Phase 6: performance anti-pattern detections ─────────────────────────
   const performanceDetections = collectPerformanceDetections(
     ng,
     components,
     directives,
     pipes,
+    services,
     injector,
     routes,
     signalStateMap,

@@ -346,4 +346,126 @@
       </div>
     }
   }
+
+  <!-- N1: Template Method Calls -->
+  @if (templateFunctionCalls().length) {
+    <div class="section-title mt-2">
+      ⚠ Template Method Calls
+      <span class="normal-case font-normal ml-1 text-gray-500">— methods called in binding expressions re-execute on every CD cycle; use a pipe or computed signal instead</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Component</span>
+      <span class="col-hdr w-28">Selector</span>
+      <span class="col-hdr flex-1">Called methods</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (t of templateFunctionCalls(); track t.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate" [title]="t.className">{{ t.className }}</span>
+        <span class="w-28 text-xs text-gray-400 truncate" [title]="t.selector">{{ t.selector }}</span>
+        <span class="flex-1 chips">
+          @for (m of t.calledMethods; track m) { <span class="chip text-amber-400">{{ m }}()</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="t.filePath ?? ''">{{ shortPath(t.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- N2: *ngFor Without trackBy -->
+  @if (ngForWithoutTrackBy().length) {
+    <div class="section-title mt-2">
+      ⚠ *ngFor Without trackBy
+      <span class="normal-case font-normal ml-1 text-gray-500">— full DOM rebuild on every array change; add trackBy to tell Angular which items changed</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr w-36">Selector</span>
+      <span class="col-hdr flex-1">File</span>
+    </div>
+    @for (n of ngForWithoutTrackBy(); track n.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="n.className">{{ n.className }}</span>
+        <span class="w-36 text-xs text-gray-400 truncate" [title]="n.selector">{{ n.selector }}</span>
+        <span class="flex-1 src-path truncate" [title]="n.filePath ?? ''">{{ shortPath(n.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- N5: Observable Subscription Leaks -->
+  @if (subscriptionLeaks().length) {
+    <div class="section-title mt-2">
+      ⚠ Observable Subscription Leaks
+      <span class="normal-case font-normal ml-1 text-gray-500">— subscribe() called without takeUntil / takeUntilDestroyed / unsubscribe; use takeUntilDestroyed()</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr w-36">Leaky hooks</span>
+      <span class="col-hdr w-28">ngOnDestroy</span>
+      <span class="col-hdr flex-1">File</span>
+    </div>
+    @for (s of subscriptionLeaks(); track s.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="s.className">{{ s.className }}</span>
+        <span class="w-36 chips">
+          @for (h of s.inHooks; track h) { <span class="chip text-red-400">{{ h }}</span> }
+        </span>
+        <span class="w-28">
+          @if (s.hasDestroyHook) {
+            <span class="badge-warning">present</span>
+          } @else {
+            <span class="badge-error">missing</span>
+          }
+        </span>
+        <span class="flex-1 src-path truncate" [title]="s.filePath ?? ''">{{ shortPath(s.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- N8: Deep Component Nesting -->
+  @if (deepNesting().length) {
+    <div class="section-title mt-2">
+      ⚠ Deep Component Nesting (&gt;{{ 15 }} Angular elements deep)
+      <span class="normal-case font-normal ml-1 text-gray-500">— deeply nested trees increase CD traversal cost; consider flattening or using OnPush</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Leaf component</span>
+      <span class="col-hdr w-36">Selector</span>
+      <span class="col-hdr w-24 text-right">Depth</span>
+    </div>
+    @for (d of deepNesting(); track d.leafClassName) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="d.leafClassName">{{ d.leafClassName }}</span>
+        <span class="w-36 text-xs text-gray-400 truncate" [title]="d.leafSelector">{{ d.leafSelector }}</span>
+        <span class="w-24 text-right">
+          <span class="chip" [ngClass]="d.depth > 25 ? 'text-red-400' : 'text-amber-400'">{{ d.depth }}</span>
+        </span>
+      </div>
+    }
+  }
+
+  <!-- N14: Direct DOM Manipulation via ElementRef -->
+  @if (directDomManipulation().length) {
+    <div class="section-title mt-2">
+      ⚠ Direct DOM Manipulation via ElementRef
+      <span class="normal-case font-normal ml-1 text-gray-500">— bypasses Angular's rendering pipeline; use Renderer2, &#64;HostBinding, or animations API instead</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Component</span>
+      <span class="col-hdr w-36">Hooks</span>
+      <span class="col-hdr flex-1">Patterns</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (d of directDomManipulation(); track d.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate" [title]="d.className">{{ d.className }}</span>
+        <span class="w-36 chips">
+          @for (h of d.inHooks; track h) { <span class="chip text-violet-400">{{ h }}</span> }
+        </span>
+        <span class="flex-1 chips">
+          @for (p of d.patterns; track p) { <span class="chip text-orange-400">{{ p }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="d.filePath ?? ''">{{ shortPath(d.filePath) }}</span>
+      </div>
+    }
+  }
 </div>

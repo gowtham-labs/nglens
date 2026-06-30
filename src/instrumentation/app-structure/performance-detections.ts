@@ -1,8 +1,8 @@
 /**
- * Performance Detections — 18 Angular performance anti-patterns.
+ * Performance Detections — Angular performance anti-patterns.
  * Runs in the page's MAIN world as part of the app-structure collection.
  *
- * Detected items:
+ * Original 18 detections (#1–#18):
  *  #1  Impure pipes (pure: false) — re-execute on every CD cycle
  *  #2  @HostListener on high-frequency events (scroll, resize, mousemove) without debounce
  *  #3  Large *ngFor / @for lists without CDK virtual scrolling
@@ -21,6 +21,15 @@
  *  #16 Standalone component importing full NgModules instead of individual components
  *  #17 Angular animation triggers using layout-causing CSS properties (width, height, …)
  *  #18 APP_INITIALIZER registration count and async-initializer detection
+ *
+ * New detections (N1–N22):
+ *  N1  Template method/function calls re-executing on every CD cycle
+ *  N2  *ngFor / @for without a custom trackBy function
+ *  N5  Observable .subscribe() in lifecycle hooks without managed cleanup
+ *  N8  Component tree nesting depth exceeding threshold
+ *  N11 Router with lazy routes but no preloading strategy configured
+ *  N14 Direct DOM manipulation via ElementRef.nativeElement in lifecycle hooks
+ *  N22 Service using providedIn: 'any' — creates a new instance per lazy module
  */
 
 import type {
@@ -28,6 +37,7 @@ import type {
   DirectiveRegistryEntry,
   PipeRegistryEntry,
   RouteRegistryEntry,
+  ServiceRegistryEntry,
   SignalStateEntry,
   PerformanceDetections,
   ImpurePipeEntry,
@@ -47,6 +57,13 @@ import type {
   ImportBloatEntry,
   AnimationIssueEntry,
   AppInitializerInfoEntry,
+  TemplateFunctionCallEntry,
+  NgForWithoutTrackByEntry,
+  SubscriptionLeakEntry,
+  DeepNestingEntry,
+  PreloadingStrategyInfo,
+  DirectDomManipulationEntry,
+  ProvidedInAnyEntry,
 } from '../../types/app-structure';
 import { MAX_SCAN_ELEMENTS } from './constants';
 import { getInjectorMap, getInjectorRecords } from './injector';
@@ -96,6 +113,54 @@ const ANGULAR_INTERNAL_SERVICES = new Set([
   'DomRendererFactory2', 'EventManager', 'AnimationDriver',
 ]);
 
+// ─── Constants for new detections ────────────────────────────────────────────
+
+/** Minimum ancestor Angular-context element count to flag as deeply nested */
+const DEEP_NESTING_THRESHOLD = 15;
+
+/** Angular lifecycle / utility methods to ignore when detecting template function calls */
+const TEMPLATE_METHOD_EXCLUSIONS = new Set([
+  '$any', '$implicit', 'ngOnInit', 'ngOnChanges', 'ngOnDestroy',
+  'ngAfterViewInit', 'ngAfterViewChecked', 'ngAfterContentInit',
+  'ngAfterContentChecked', 'ngDoCheck', 'writeValue', 'registerOnChange',
+  'registerOnTouched', 'setDisabledState', 'validate', 'transform', 'trackBy',
+]);
+
+/** Lifecycle hooks where subscribe() without cleanup indicates a leak */
+const INIT_HOOKS = [
+  'constructor', 'ngOnInit', 'ngOnChanges', 'ngAfterViewInit',
+  'ngAfterContentInit', 'ngDoCheck',
+] as const;
+
+/** Patterns that indicate cleanup / lifecycle management is already handled */
+const SUBSCRIPTION_CLEANUP_PATTERNS = [
+  'takeUntil', 'takeUntilDestroyed', 'unsubscribe',
+  'Subscription', 'destroy$', 'sub$', 'subscription',
+  'DestroyRef', 'destroyRef',
+];
+
+/** Lifecycle hooks where direct DOM access via ElementRef is problematic */
+const DOM_MANIPULATION_HOOKS = [
+  'ngOnInit', 'ngAfterViewInit', 'ngAfterViewChecked', 'ngDoCheck',
+  'ngOnChanges', 'ngAfterContentInit', 'ngAfterContentChecked',
+] as const;
+
+/** DOM access patterns to detect in lifecycle hook source */
+const DOM_MANIPULATION_PATTERNS: readonly [pattern: string, label: string][] = [
+  ['nativeElement.style', 'nativeElement.style'],
+  ['nativeElement.className', 'nativeElement.className'],
+  ['nativeElement.querySelector', 'nativeElement.querySelector'],
+  ['nativeElement.querySelectorAll', 'nativeElement.querySelectorAll'],
+  ['nativeElement.innerHTML', 'nativeElement.innerHTML'],
+  ['nativeElement.textContent', 'nativeElement.textContent'],
+  ['nativeElement.setAttribute', 'nativeElement.setAttribute'],
+  ['nativeElement.appendChild', 'nativeElement.appendChild'],
+  ['nativeElement.removeChild', 'nativeElement.removeChild'],
+  ['document.querySelector', 'document.querySelector'],
+  ['document.getElementById', 'document.getElementById'],
+  ['document.createElement', 'document.createElement'],
+];
+
 // ─── Module-level ExpressionChanged interception state ───────────────────────
 const exprChangedState: {
   count: number;
@@ -106,8 +171,9 @@ const exprChangedState: {
 // ─── Public entry point ───────────────────────────────────────────────────────
 
 /**
- * Runs all 18 performance detections and returns the results as a single
- * `PerformanceDetections` object suitable for inclusion in `AppStructureData`.
+ * Runs all performance detections (original #1–#18 plus new N1–N22) and returns
+ * the results as a single `PerformanceDetections` object suitable for inclusion
+ * in `AppStructureData`.
  *
  * Safe to call repeatedly — all detectors are side-effect-free except for
  * the one-time `console.error` hook for ExpressionChanged errors (#12).
@@ -117,6 +183,7 @@ export function collectPerformanceDetections(
   components: ComponentRegistryEntry[],
   directives: DirectiveRegistryEntry[],
   pipes: PipeRegistryEntry[],
+  services: ServiceRegistryEntry[],
   injector: any,
   routes: RouteRegistryEntry[],
   signalStateMap: Map<string, SignalStateEntry>,
@@ -145,6 +212,14 @@ export function collectPerformanceDetections(
     importBloat:              detectImportBloat(components, ctorMap),                          // #16
     animationIssues:          detectAnimationIssues(components, ctorMap),                      // #17
     appInitializerInfo:       collectAppInitializerInfo(injector),                             // #18
+    // ── New detections ──
+    templateFunctionCalls:    detectTemplateFunctionCalls(components, ctorMap),                // N1
+    ngForWithoutTrackBy:      detectNgForWithoutTrackBy(ng, components, ctorMap),              // N2
+    subscriptionLeaks:        detectSubscriptionLeaks(components, ctorMap),                    // N5
+    deepNesting:              detectDeepNesting(ng, components),                               // N8
+    preloadingStrategy:       detectPreloadingStrategy(injector, routes),                      // N11
+    directDomManipulation:    detectDirectDomManipulation(components, ctorMap),                // N14
+    providedInAny:            detectProvidedInAny(services, ctorMap),                          // N22
   };
 }
 
@@ -933,4 +1008,385 @@ function resolveImportsFromDef(cmp: any): any[] {
     add(cmp.dependencies);
   } catch { /* ignore */ }
   return result;
+}
+
+// ─── N1: Template method calls re-executing on every CD cycle ────────────────
+
+/**
+ * Scans the compiled template function source for `ctx.method(` patterns.
+ * Angular compiles templates to functions where `ctx` is the component instance.
+ * Any method called in a binding expression re-executes on every CD cycle.
+ *
+ * Excludes: Angular lifecycle hooks, known Angular API methods, and event
+ * handler calls detected inside ɵɵlistener callback bodies.
+ */
+function detectTemplateFunctionCalls(
+  components: ComponentRegistryEntry[],
+  ctorMap: Map<string, Function>,
+): TemplateFunctionCallEntry[] {
+  const results: TemplateFunctionCallEntry[] = [];
+  for (const comp of components) {
+    if (comp.filePath?.includes('node_modules')) continue;
+    const ctor = ctorMap.get(comp.className);
+    if (!ctor) continue;
+    const def = (ctor as any).ɵcmp;
+    if (!def?.template) continue;
+
+    let templateSrc: string;
+    try { templateSrc = def.template.toString(); } catch { continue; }
+
+    // Build a set of method names that appear exclusively in ɵɵlistener callbacks
+    // (event handlers) — these are fine because they only run on events, not on CD.
+    const listenerOnlyMethods = new Set<string>();
+    const listenerRegex = /ɵɵlistener\([^,]+,\s*function[^{]*\{[^}]*ctx\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
+    let lm: RegExpExecArray | null;
+    while ((lm = listenerRegex.exec(templateSrc)) !== null) listenerOnlyMethods.add(lm[1]);
+
+    const proto = (ctor as any).prototype;
+    const calledMethods: string[] = [];
+    const seen = new Set<string>();
+
+    const callRegex = /\bctx\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
+    let match: RegExpExecArray | null;
+    while ((match = callRegex.exec(templateSrc)) !== null) {
+      const name = match[1];
+      if (seen.has(name) || TEMPLATE_METHOD_EXCLUSIONS.has(name)) continue;
+      if (listenerOnlyMethods.has(name)) continue; // event handler — skip
+      seen.add(name);
+      try {
+        if (proto && typeof proto[name] === 'function') calledMethods.push(name);
+      } catch { /* ignore */ }
+    }
+
+    if (calledMethods.length > 0) {
+      results.push({
+        className: comp.className,
+        selector: comp.selector,
+        filePath: comp.filePath,
+        calledMethods,
+      });
+    }
+  }
+  return results;
+}
+
+// ─── N2: *ngFor / @for without trackBy ───────────────────────────────────────
+
+/**
+ * Detects *ngFor usages that lack a custom trackBy function.
+ * Strategy:
+ *  1. Inspect live NgForOf directive instances for the default identity trackBy.
+ *  2. Fall back to template source scan: `ngForOf` binding present but no
+ *     `ngForTrackBy` in the same template function.
+ */
+function detectNgForWithoutTrackBy(
+  ng: any,
+  components: ComponentRegistryEntry[],
+  ctorMap: Map<string, Function>,
+): NgForWithoutTrackByEntry[] {
+  const results: NgForWithoutTrackByEntry[] = [];
+  const seen = new Set<string>();
+
+  // Pass 1 — live NgForOf instances (Angular 14–16 *ngFor)
+  if (ng?.getDirectives) {
+    const userCompNames = new Set(
+      components.filter(c => !c.filePath?.includes('node_modules')).map(c => c.className),
+    );
+    try {
+      const els = document.querySelectorAll('*');
+      const limit = Math.min(els.length, MAX_SCAN_ELEMENTS);
+      for (let i = 0; i < limit; i++) {
+        const el = els[i];
+        try {
+          const dirs: any[] = ng.getDirectives(el) ?? [];
+          for (const d of dirs) {
+            const dName: string = d?.constructor?.name ?? '';
+            if (dName !== 'NgForOf' && dName !== 'NgFor') continue;
+
+            // Check if user set a real trackBy (non-trivial function)
+            const trackBy = d.ngForTrackBy ?? d._trackByFn ?? null;
+            if (trackBy) {
+              const src = trackBy.toString().replace(/\s+/g, '');
+              // Default identity: very short, returns item only
+              const isDefaultIdentity = src.length < 60 ||
+                src.includes('returnitem') || src.includes('return i') ||
+                /\(i,a\)=>a/.test(src) || /\(index,item\)=>item/.test(src);
+              if (!isDefaultIdentity) continue; // real custom trackBy — skip
+            }
+
+            const owning = ng.getOwningComponent ? ng.getOwningComponent(el) : null;
+            const componentName: string = owning?.constructor?.name ?? 'Unknown';
+            if (!userCompNames.has(componentName) || seen.has(componentName)) continue;
+            seen.add(componentName);
+            const selector: string = owning?.constructor?.ɵcmp?.selectors?.[0]?.[0] ?? '';
+            const filePath: string | null = owning?.constructor?.ɵcmp?.filePath ?? null;
+            results.push({ className: componentName, selector, filePath });
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Pass 2 — template source scan (covers @for blocks and components not yet in DOM)
+  for (const comp of components) {
+    if (seen.has(comp.className)) continue;
+    if (comp.filePath?.includes('node_modules')) continue;
+    const ctor = ctorMap.get(comp.className);
+    const def = (ctor as any)?.ɵcmp;
+    if (!def?.template) continue;
+    try {
+      const src = def.template.toString();
+      const hasNgForOf = src.includes('ngForOf') || src.includes('"ngForOf"') || src.includes("'ngForOf'");
+      if (hasNgForOf && !src.includes('ngForTrackBy') && !src.includes('trackBy')) {
+        seen.add(comp.className);
+        results.push({ className: comp.className, selector: comp.selector, filePath: comp.filePath });
+      }
+    } catch { /* ignore */ }
+  }
+
+  return results.slice(0, 30);
+}
+
+// ─── N5: Observable subscription leaks ───────────────────────────────────────
+
+/**
+ * Scans component prototype lifecycle hooks for `.subscribe(` calls that have
+ * no visible cleanup pattern (takeUntil, takeUntilDestroyed, Subscription, …).
+ * When a class-wide search also finds no cleanup, the component is flagged.
+ */
+function detectSubscriptionLeaks(
+  components: ComponentRegistryEntry[],
+  ctorMap: Map<string, Function>,
+): SubscriptionLeakEntry[] {
+  const results: SubscriptionLeakEntry[] = [];
+  for (const comp of components) {
+    if (comp.filePath?.includes('node_modules')) continue;
+    const ctor = ctorMap.get(comp.className);
+    const proto = (ctor as any)?.prototype;
+    if (!proto) continue;
+
+    const leakyHooks: string[] = [];
+    for (const hook of INIT_HOOKS) {
+      try {
+        const fn = proto[hook];
+        if (typeof fn !== 'function') continue;
+        const src = fn.toString();
+        if (!src.includes('.subscribe(')) continue;
+        // Does the same method have cleanup?
+        const methodHasCleanup = SUBSCRIPTION_CLEANUP_PATTERNS.some(p => src.includes(p));
+        if (methodHasCleanup) continue;
+        leakyHooks.push(hook);
+      } catch { /* ignore */ }
+    }
+
+    if (leakyHooks.length === 0) continue;
+
+    // Final check: is there any cleanup pattern anywhere on the class?
+    let classHasCleanup = false;
+    try {
+      for (const key of Object.getOwnPropertyNames(proto)) {
+        const ms: string = proto[key]?.toString?.() ?? '';
+        if (SUBSCRIPTION_CLEANUP_PATTERNS.some(p => ms.includes(p))) {
+          classHasCleanup = true;
+          break;
+        }
+      }
+    } catch { /* ignore */ }
+    if (classHasCleanup) continue;
+
+    const hasDestroyHook = typeof proto.ngOnDestroy === 'function';
+    results.push({ className: comp.className, filePath: comp.filePath, inHooks: leakyHooks, hasDestroyHook });
+  }
+  return results;
+}
+
+// ─── N8: Component tree deep nesting ─────────────────────────────────────────
+
+/**
+ * Counts the number of ancestor elements that carry Angular context
+ * (`__ngContext__`) for each leaf component element. Flags components
+ * whose ancestor Angular-element depth exceeds DEEP_NESTING_THRESHOLD.
+ */
+function detectDeepNesting(
+  ng: any,
+  components: ComponentRegistryEntry[],
+): DeepNestingEntry[] {
+  if (!ng?.getComponent) return [];
+  const results: DeepNestingEntry[] = [];
+  const seen = new Set<string>();
+  const userCompNames = new Set(
+    components.filter(c => !c.filePath?.includes('node_modules')).map(c => c.className),
+  );
+
+  try {
+    const els = document.querySelectorAll('*');
+    const limit = Math.min(els.length, MAX_SCAN_ELEMENTS);
+    for (let i = 0; i < limit; i++) {
+      const el = els[i];
+      try {
+        const inst = ng.getComponent(el);
+        if (!inst) continue;
+        const name: string = inst.constructor?.name ?? '';
+        if (!name || seen.has(name) || !userCompNames.has(name)) continue;
+
+        // Count ancestor elements that participate in Angular's rendering tree
+        let depth = 0;
+        let ancestor: Element | null = el.parentElement;
+        while (ancestor) {
+          try {
+            if ((ancestor as any).__ngContext__ != null) depth++;
+          } catch { /* ignore */ }
+          ancestor = ancestor.parentElement;
+        }
+
+        if (depth > DEEP_NESTING_THRESHOLD) {
+          seen.add(name);
+          const selector: string = inst.constructor?.ɵcmp?.selectors?.[0]?.[0] ?? '';
+          results.push({ leafClassName: name, leafSelector: selector, depth });
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  return results.sort((a, b) => b.depth - a.depth).slice(0, 10);
+}
+
+// ─── N11: Missing router preloading strategy ──────────────────────────────────
+
+/**
+ * Checks whether the router has at least one lazy route AND a preloading
+ * strategy is configured. Inspects the injector records map and the Router
+ * instance for strategy information.
+ */
+function detectPreloadingStrategy(
+  injector: any,
+  routes: RouteRegistryEntry[],
+): PreloadingStrategyInfo {
+  const hasLazy = hasLazyRoutes(routes);
+  const empty: PreloadingStrategyInfo = { hasLazyRoutes: hasLazy, hasPreloadingStrategy: false, strategyName: null };
+  if (!injector || !hasLazy) return empty;
+
+  try {
+    // Scan injector records for any PreloadingStrategy token
+    const records = getInjectorRecords(injector);
+    if (records) {
+      for (const [token] of records) {
+        const name: string = token?.name ?? token?.description ?? '';
+        if (name.includes('PreloadingStrategy') || name.includes('Preload')) {
+          return { hasLazyRoutes: hasLazy, hasPreloadingStrategy: true, strategyName: name };
+        }
+        // PreloadAllModules / NoPreloading are class names, not descriptions
+        if (name === 'PreloadAllModules' || name === 'NoPreloading') {
+          return { hasLazyRoutes: hasLazy, hasPreloadingStrategy: true, strategyName: name };
+        }
+      }
+    }
+
+    // Walk up the injector chain
+    let cur: any = (injector as any)._parent ?? (injector as any).parent ?? null;
+    for (let depth = 0; cur && depth < 5; depth++) {
+      const map = getInjectorMap(cur);
+      if (map) {
+        for (const [k] of map) {
+          const n: string = k?.name ?? k?.description ?? '';
+          if (n.includes('Preload') || n === 'PreloadAllModules' || n === 'NoPreloading') {
+            return { hasLazyRoutes: hasLazy, hasPreloadingStrategy: true, strategyName: n };
+          }
+        }
+      }
+      cur = cur._parent ?? cur.parent ?? null;
+    }
+  } catch { /* ignore */ }
+
+  return empty;
+}
+
+function hasLazyRoutes(routes: RouteRegistryEntry[]): boolean {
+  for (const r of routes) {
+    if (r.isLazy) return true;
+    if (hasLazyRoutes(r.children)) return true;
+  }
+  return false;
+}
+
+// ─── N14: Direct DOM manipulation via ElementRef in lifecycle hooks ───────────
+
+/**
+ * Scans component prototype lifecycle hooks for direct DOM manipulation via
+ * ElementRef.nativeElement or document APIs. Angular's Renderer2 / signals
+ * are the recommended alternatives.
+ */
+function detectDirectDomManipulation(
+  components: ComponentRegistryEntry[],
+  ctorMap: Map<string, Function>,
+): DirectDomManipulationEntry[] {
+  const results: DirectDomManipulationEntry[] = [];
+  for (const comp of components) {
+    if (comp.filePath?.includes('node_modules')) continue;
+    const ctor = ctorMap.get(comp.className);
+    const proto = (ctor as any)?.prototype;
+    if (!proto) continue;
+
+    const foundPatterns = new Set<string>();
+    const foundHooks: string[] = [];
+
+    for (const hook of DOM_MANIPULATION_HOOKS) {
+      try {
+        const fn = proto[hook];
+        if (typeof fn !== 'function') continue;
+        const src = fn.toString();
+        let hookMatches = false;
+        for (const [pattern, label] of DOM_MANIPULATION_PATTERNS) {
+          if (src.includes(pattern)) {
+            foundPatterns.add(label);
+            hookMatches = true;
+          }
+        }
+        if (hookMatches) foundHooks.push(hook);
+      } catch { /* ignore */ }
+    }
+
+    if (foundPatterns.size > 0) {
+      results.push({
+        className: comp.className,
+        filePath: comp.filePath,
+        patterns: Array.from(foundPatterns),
+        inHooks: foundHooks,
+      });
+    }
+  }
+  return results;
+}
+
+// ─── N22: Services using providedIn: 'any' ────────────────────────────────────
+
+/**
+ * Detects services where `ɵprov.providedIn` is set to the string `'any'`.
+ * `providedIn: 'any'` creates a separate instance for every lazy-loaded module
+ * that injects the service, which is rarely the intended behavior.
+ */
+function detectProvidedInAny(
+  services: ServiceRegistryEntry[],
+  ctorMap: Map<string, Function>,
+): ProvidedInAnyEntry[] {
+  const results: ProvidedInAnyEntry[] = [];
+  for (const svc of services) {
+    if (svc.filePath?.includes('node_modules')) continue;
+    // Check the live ɵprov metadata first (most accurate)
+    const ctor = ctorMap.get(svc.className);
+    if (ctor) {
+      try {
+        const prov = (ctor as any).ɵprov;
+        if (prov?.providedIn === 'any') {
+          results.push({ className: svc.className, filePath: svc.filePath });
+          continue;
+        }
+      } catch { /* ignore */ }
+    }
+    // Fallback: use the value already stored in the registry entry
+    if (svc.providedIn === 'any') {
+      results.push({ className: svc.className, filePath: svc.filePath });
+    }
+  }
+  return results;
 }

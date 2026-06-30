@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
-import type { ServiceRegistryEntry, DuplicateServiceEntry } from '../../../../../../types/app-structure';
+import type { ServiceRegistryEntry, DuplicateServiceEntry, ProvidedInAnyEntry } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
 @Component({
@@ -33,4 +33,11 @@ export class ServicesTabComponent {
   });
 
   readonly appInitInfo = computed(() => this.data()?.performanceDetections?.appInitializerInfo ?? null);
+
+  /** N22 — Services using providedIn: 'any' */
+  readonly providedInAny = computed<ProvidedInAnyEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.data()?.performanceDetections?.providedInAny ?? [];
+    return q ? items.filter(i => i.className.toLowerCase().includes(q)) : items;
+  });
 }

@@ -99,4 +99,36 @@
       </div>
     }
   }
+
+  <!-- N11: Missing Preloading Strategy -->
+  @if (preloadingStrategy(); as ps) {
+    @if (ps.hasLazyRoutes) {
+      <div class="section-title -mx-2 mb-1 mt-3">
+        @if (!ps.hasPreloadingStrategy) {
+          ⚠ No Router Preloading Strategy Configured
+        } @else {
+          ✓ Router Preloading Strategy
+        }
+      </div>
+      <div class="flex items-start gap-3 px-2 py-2 rounded border text-xs"
+           [ngClass]="ps.hasPreloadingStrategy ? 'bg-green-950/40 border-green-800/60' : 'bg-amber-950/40 border-amber-800/60'">
+        <span class="text-lg leading-none">{{ ps.hasPreloadingStrategy ? '✓' : '⚠' }}</span>
+        <div class="flex-1 min-w-0">
+          @if (ps.hasPreloadingStrategy) {
+            <p class="text-green-300 font-medium">Preloading is configured</p>
+            @if (ps.strategyName) {
+              <p class="text-gray-400 mt-0.5">Strategy: <span class="font-mono text-sky-300">{{ ps.strategyName }}</span></p>
+            }
+          } @else {
+            <p class="text-amber-300 font-medium">This app has lazy routes but no preloading strategy</p>
+            <p class="text-gray-400 mt-0.5">
+              Lazy modules are only fetched when the user navigates to that route.
+              Add <span class="font-mono text-sky-300">withPreloading(PreloadAllModules)</span> or a
+              custom strategy to prefetch bundles in the background after initial load.
+            </p>
+          }
+        </div>
+      </div>
+    }
+  }
 </div>

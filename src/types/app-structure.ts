@@ -394,7 +394,66 @@ export interface AppInitializerInfoEntry {
   hasAsyncInitializers: boolean;
 }
 
-/** Aggregate of all 18 performance detection results */
+// ─── New Performance Detections (N1–N22) ─────────────────────────────────────
+
+/** N1 — Component method/function called directly in a template binding expression */
+export interface TemplateFunctionCallEntry {
+  className: string;
+  selector: string;
+  filePath: string | null;
+  /** Method names found in binding expressions — re-execute on every CD cycle */
+  calledMethods: string[];
+}
+
+/** N2 — *ngFor / @for iterable without a custom trackBy function */
+export interface NgForWithoutTrackByEntry {
+  className: string;
+  selector: string;
+  filePath: string | null;
+}
+
+/** N5 — Component with .subscribe() in lifecycle hooks and no detected cleanup */
+export interface SubscriptionLeakEntry {
+  className: string;
+  filePath: string | null;
+  /** Lifecycle hooks where unmanaged subscribe() was found */
+  inHooks: string[];
+  /** True if ngOnDestroy is present (may still leak without an actual unsubscribe call) */
+  hasDestroyHook: boolean;
+}
+
+/** N8 — Angular component branch whose DOM depth exceeds the nesting threshold */
+export interface DeepNestingEntry {
+  leafClassName: string;
+  leafSelector: string;
+  /** Number of ancestor elements that carry __ngContext__ (Angular elements) */
+  depth: number;
+}
+
+/** N11 — Router has lazy routes but no preloading strategy is configured */
+export interface PreloadingStrategyInfo {
+  hasLazyRoutes: boolean;
+  hasPreloadingStrategy: boolean;
+  strategyName: string | null;
+}
+
+/** N14 — Component reading/writing ElementRef.nativeElement directly in lifecycle hooks */
+export interface DirectDomManipulationEntry {
+  className: string;
+  filePath: string | null;
+  /** DOM access patterns found, e.g. ['nativeElement.style', 'document.querySelector'] */
+  patterns: string[];
+  /** Lifecycle hooks where the access was detected */
+  inHooks: string[];
+}
+
+/** N22 — Service using providedIn: 'any' — creates one instance per lazy-loaded NgModule */
+export interface ProvidedInAnyEntry {
+  className: string;
+  filePath: string | null;
+}
+
+/** Aggregate of all performance detection results */
 export interface PerformanceDetections {
   impurePipes: ImpurePipeEntry[];                           // #1
   hostListenerIssues: HostListenerIssue[];                  // #2 + #15 (combined)
@@ -413,6 +472,14 @@ export interface PerformanceDetections {
   importBloat: ImportBloatEntry[];                          // #16
   animationIssues: AnimationIssueEntry[];                   // #17
   appInitializerInfo: AppInitializerInfoEntry;              // #18
+  // ── New detections (N1–N22) ──
+  templateFunctionCalls: TemplateFunctionCallEntry[];       // N1
+  ngForWithoutTrackBy: NgForWithoutTrackByEntry[];          // N2
+  subscriptionLeaks: SubscriptionLeakEntry[];               // N5
+  deepNesting: DeepNestingEntry[];                          // N8
+  preloadingStrategy: PreloadingStrategyInfo;               // N11
+  directDomManipulation: DirectDomManipulationEntry[];      // N14
+  providedInAny: ProvidedInAnyEntry[];                      // N22
 }
 
 // ─── Root Data Object ─────────────────────────────────────────────────────────
