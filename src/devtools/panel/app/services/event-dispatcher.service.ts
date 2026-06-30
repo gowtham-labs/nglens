@@ -2,7 +2,7 @@ import { Injectable, Injector, inject } from '@angular/core';
 import { PanelState } from '../state/panel.state';
 import { DevtoolsPortService } from './devtools-port.service';
 import type { PortMessage } from '../../../../types/port-messages';
-import type { RenderEvent } from '../../../../types/render-events';
+import type { RenderEvent, FlowEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
 import type { ZonePollutionEvent } from '../../../../types/zone-pollution-events';
@@ -42,6 +42,9 @@ export class EventDispatcherService {
       case 'ZONE_POLLUTION_EVENT':
         this.handleZonePollutionEvent(message.payload as ZonePollutionEvent);
         break;
+      case 'FLOW_EVENT_BATCH':
+        this.handleFlowEventBatch(message.payload as { events: FlowEvent[] });
+        break;
       case 'DEGRADED_MODE':
         this.state.degradedMode.set(true);
         break;
@@ -56,9 +59,7 @@ export class EventDispatcherService {
         this.handleError(message.payload as { message?: string; error?: string });
         break;
       case 'ROUTE_CHANGED':
-        if (this.state.clearOnRouteChange()) {
-          this.state.clearActivity();
-        }
+        this.handleRouteChanged(message.payload as { timestamp: number });
         break;
       case 'TAB_NAVIGATED':
         this.handleTabNavigated();
@@ -103,12 +104,36 @@ export class EventDispatcherService {
   }
 
   private handleError(payload: { message?: string; error?: string }): void {
+    const message = payload.message ?? payload.error ?? '';
+    // Non-fatal errors: overlay element not found, etc. — don't stop tracking.
+    if (message.startsWith('Element not found')) return;
+
     this.state.setTrackingError(
-      payload.message ?? payload.error ?? 'ngLens could not start tracking this page.'
+      message || 'ngLens could not start tracking this page.'
     );
   }
 
   private handleZonePollutionEvent(payload: ZonePollutionEvent): void {
     this.state.zonePollutionSources.set(payload.sources);
+  }
+
+  private handleFlowEventBatch(payload: { events: FlowEvent[] }): void {
+    this.state.flowEvents.update(current => [...current, ...payload.events]);
+  }
+
+  private handleRouteChanged(payload: { timestamp: number }): void {
+    // Add a flow event for the route change so it appears in the Render Inspector timeline
+    this.state.flowEvents.update(current => [...current, {
+      id: `route-${Date.now()}`,
+      type: 'route-change' as const,
+      timestamp: Date.now(),
+      label: 'Route changed',
+      detail: 'Navigation detected via router-outlet',
+    }]);
+
+    // Optionally clear activity on route change
+    if (this.state.clearOnRouteChange()) {
+      this.state.clearActivity();
+    }
   }
 }

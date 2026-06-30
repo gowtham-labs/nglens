@@ -2,7 +2,6 @@ import { Component, OnDestroy, OnInit, inject, signal, effect } from '@angular/c
 import { RouterOutlet } from '@angular/router';
 import { ToolbarComponent } from './layout/toolbar/toolbar.component';
 import { IssuesExplorerComponent } from './layout/issues-explorer/issues-explorer.component';
-import { TimelinePanelComponent } from './layout/timeline-panel/timeline-panel.component';
 import { WhyPanelComponent } from './layout/why-panel/why-panel.component';
 import { DevtoolsPortService } from './services/devtools-port.service';
 import { PanelState } from './state/panel.state';
@@ -21,7 +20,7 @@ import { displayName } from './utils/display-name';
         <!-- Issues Explorer: 320px fixed -->
         <app-issues-explorer class="w-80 flex-shrink-0 border-r border-gray-700" />
 
-        <!-- Right area: Page content + WhyPanel + Timeline stacked -->
+        <!-- Right area: Page content + WhyPanel stacked -->
         <div class="flex-1 flex flex-col overflow-hidden">
           <!-- Routed page content: flexible -->
           <div class="flex-1 overflow-auto">
@@ -45,26 +44,11 @@ import { displayName } from './utils/display-name';
               }
             </div>
           }
-
-          <!-- Resizable Activity Panel -->
-          <div
-            class="relative flex-shrink-0 border-t border-gray-700"
-            [style.height.px]="activityPanelHeight()"
-          >
-            <div
-              class="absolute -top-1 left-0 right-0 h-2 cursor-row-resize z-10 group touch-none"
-              title="Drag to resize activity panel"
-              (pointerdown)="startActivityResize($event)"
-            >
-              <div class="mx-auto mt-0.5 h-1 w-12 rounded bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </div>
-            <app-timeline-panel class="block h-full" />
-          </div>
         </div>
       </div>
     </div>
   `,
-  imports: [RouterOutlet, ToolbarComponent, IssuesExplorerComponent, TimelinePanelComponent, WhyPanelComponent],
+  imports: [RouterOutlet, ToolbarComponent, IssuesExplorerComponent, WhyPanelComponent],
 })
 export class AppComponent implements OnInit, OnDestroy {
   private readonly portService = inject(DevtoolsPortService);
@@ -72,14 +56,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly selectedComponent = this.state.selectedComponent;
   readonly whyPanelExpanded = signal(false);
-  readonly activityPanelHeight = signal(192);
   readonly getDisplayName = displayName;
-
-  private readonly minActivityPanelHeight = 36;
-  private readonly maxActivityPanelHeight = 420;
-  private resizeStartY = 0;
-  private resizeStartHeight = 0;
-  private isResizingActivity = false;
 
   constructor() {
     // Open the explanation panel when a component is selected from Overview,
@@ -93,42 +70,9 @@ export class AppComponent implements OnInit, OnDestroy {
     this.portService.connect();
   }
 
-  ngOnDestroy(): void {
-    this.stopActivityResize();
-  }
+  ngOnDestroy(): void {}
 
   toggleWhyPanel(): void {
     this.whyPanelExpanded.update(v => !v);
-  }
-
-  startActivityResize(event: PointerEvent): void {
-    event.preventDefault();
-    this.isResizingActivity = true;
-    this.resizeStartY = event.clientY;
-    this.resizeStartHeight = this.activityPanelHeight();
-    window.addEventListener('pointermove', this.resizeActivityPanel);
-    window.addEventListener('pointerup', this.stopActivityResize, { once: true });
-    window.addEventListener('pointercancel', this.stopActivityResize, { once: true });
-  }
-
-  private readonly resizeActivityPanel = (event: PointerEvent): void => {
-    if (!this.isResizingActivity) return;
-    const dragDelta = event.clientY - this.resizeStartY;
-    const nextHeight = this.resizeStartHeight - dragDelta;
-    this.activityPanelHeight.set(this.clampActivityPanelHeight(nextHeight));
-  };
-
-  private readonly stopActivityResize = (): void => {
-    this.isResizingActivity = false;
-    window.removeEventListener('pointermove', this.resizeActivityPanel);
-    window.removeEventListener('pointerup', this.stopActivityResize);
-    window.removeEventListener('pointercancel', this.stopActivityResize);
-  };
-
-  private clampActivityPanelHeight(height: number): number {
-    return Math.min(
-      this.maxActivityPanelHeight,
-      Math.max(this.minActivityPanelHeight, Math.round(height))
-    );
   }
 }

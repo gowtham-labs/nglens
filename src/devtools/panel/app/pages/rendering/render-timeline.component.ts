@@ -85,10 +85,18 @@ export class RenderTimelineComponent {
   readonly zoomLevel = signal<number>(5);
 
   readonly timelineEvents = computed(() => {
-    const events = this.state.renderEvents().slice(0, 100); // Last 100 events
+    const events = this.state.renderEvents();
     const zoom = this.zoomLevel();
-    // Group events by zoom level if needed
-    return events;
+
+    // Filter events to the selected time window
+    const now = events.length > 0 ? events[events.length - 1].timestamp : 0;
+    const windowMs = zoom * 60 * 1000; // Convert minutes to milliseconds
+    const cutoff = now - windowMs;
+
+    const filtered = events.filter(e => e.timestamp >= cutoff);
+
+    // Return last 100 events within the time window
+    return filtered.slice(-100);
   });
 
   readonly stats = computed(() => {

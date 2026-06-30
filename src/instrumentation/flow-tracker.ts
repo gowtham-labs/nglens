@@ -1,0 +1,540 @@
+/**
+ * Flow Tracker — intercepts reactive state changes (RxJS subjects, signals, HTTP, routes)
+ * to show developers the complete data flow that triggers re-renders.
+ *
+ * Captures:
+ * - Subject.next() / BehaviorSubject.next() calls
+ * - Signal .set() / .update() calls
+ * - HTTP responses (fetch/XHR completions)
+ * - Router navigation events
+ */
+
+import type { FlowEvent, FlowEventBatch } from '../types/render-events';
+
+const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
+
+export class FlowTracker {
+  private static instance: FlowTracker | null = null;
+  private readonly buffer: FlowEvent[] = [];
+  private isRunning = false;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
+  private eventId = 0;
+
+  // Original prototypes for cleanup
+  private originalSubjectNext: Function | null = null;
+  private patchedSubjectProto: any = null;
+  private originalFetch: typeof fetch | null = null;
+  private originalXhrOpen: Function | null = null;
+  private originalXhrSend: Function | null = null;
+  private routerSubscription: any = null;
+  // Track which signal instances we've already patched (avoid double-patching)
+  private readonly patchedSignals = new WeakSet<object>();
+  // Track which component initiated the latest API call
+  private lastApiInitiator: string | null = null;
+
+  private constructor() {}
+
+  static getInstance(): FlowTracker {
+    if (!FlowTracker.instance) {
+      FlowTracker.instance = new FlowTracker();
+    }
+    return FlowTracker.instance;
+  }
+
+  start(): void {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.hookRxJSSubjects();
+    this.hookSignals();
+    this.hookFetch();
+    this.hookXHR();
+    this.hookRouter();
+    this.startBatching();
+  }
+
+  stop(): void {
+    if (!this.isRunning) return;
+    this.flush();
+    this.unhookRxJSSubjects();
+    this.unhookFetch();
+    this.unhookXHR();
+    this.unhookRouter();
+    this.stopBatching();
+    this.buffer.length = 0;
+    this.patchedSignals.clear();
+    this.isRunning = false;
+  }
+
+  clear(): void {
+    this.buffer.length = 0;
+  }
+
+  // ═══ RxJS Subject Interception ═══════════════════════════════════════════════
+
+  private hookRxJSSubjects(): void {
+    // Find Subject prototype — try multiple locations
+    const subjectProto = this.findSubjectPrototype();
+    if (!subjectProto || typeof subjectProto.next !== 'function') return;
+
+    this.originalSubjectNext = subjectProto.next;
+    this.patchedSubjectProto = subjectProto;
+    const tracker = this;
+    const originalNext = this.originalSubjectNext;
+
+    subjectProto.next = function(this: any, value: any): void {
+      if (tracker.isRunning) {
+        const ownerInfo = tracker.inferSubjectOwner(this);
+        tracker.buffer.push({
+          id: `flow-${++tracker.eventId}`,
+          type: 'subject-emit',
+          timestamp: Date.now(),
+          label: ownerInfo
+            ? `${ownerInfo.className}.${ownerInfo.propName}.next()`
+            : 'Subject.next()',
+          ownerClass: ownerInfo?.className,
+          propertyName: ownerInfo?.propName,
+          detail: tracker.summarizeValue(value),
+        });
+      }
+      return originalNext.call(this, value);
+    };
+  }
+
+  private unhookRxJSSubjects(): void {
+    if (this.patchedSubjectProto && this.originalSubjectNext) {
+      this.patchedSubjectProto.next = this.originalSubjectNext;
+    }
+    this.originalSubjectNext = null;
+    this.patchedSubjectProto = null;
+  }
+
+  private findSubjectPrototype(): any {
+    // Strategy 1: globalThis.rxjs
+    const rxjs = (globalThis as any).rxjs;
+    if (rxjs?.Subject?.prototype) return rxjs.Subject.prototype;
+
+    // Strategy 2: Look for a Subject instance via Angular's injector
+    try {
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (ng?.getInjector && rootEl) {
+        const injector = ng.getInjector(rootEl);
+        const records = injector?._records ?? injector?.records;
+        if (records instanceof Map) {
+          for (const [token, record] of records) {
+            try {
+              // Try record.value first (already instantiated)
+              let inst = record?.value;
+
+              // If not instantiated, try injector.get() for class tokens
+              // (only for function tokens — safe to instantiate services)
+              if (!inst && typeof token === 'function' && token.name && token.name.length > 2) {
+                try {
+                  inst = injector.get(token, null, { optional: true } as any);
+                } catch { continue; }
+              }
+
+              if (!inst || typeof inst !== 'object') continue;
+
+              for (const key of Object.getOwnPropertyNames(inst)) {
+                try {
+                  const val = inst[key];
+                  if (val && typeof val === 'object' &&
+                      typeof val.next === 'function' &&
+                      typeof val.subscribe === 'function' &&
+                      typeof val.asObservable === 'function') {
+                    // Found a Subject instance — get its prototype
+                    const proto = Object.getPrototypeOf(val);
+                    if (proto && typeof proto.next === 'function') return proto;
+                  }
+                } catch { /* skip property */ }
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    // Strategy 3: Check component instances on the page
+    try {
+      const ng = (globalThis as any).ng;
+      if (ng?.getComponent) {
+        const elements = document.querySelectorAll('*');
+        const limit = Math.min(elements.length, 500);
+        for (let i = 0; i < limit; i++) {
+          try {
+            const comp = ng.getComponent(elements[i]);
+            if (!comp) continue;
+            for (const key of Object.getOwnPropertyNames(comp)) {
+              try {
+                const val = comp[key];
+                if (val && typeof val === 'object' &&
+                    typeof val.next === 'function' &&
+                    typeof val.subscribe === 'function' &&
+                    typeof val.asObservable === 'function') {
+                  const proto = Object.getPrototypeOf(val);
+                  if (proto && typeof proto.next === 'function') return proto;
+                }
+              } catch { /* skip */ }
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* ignore */ }
+
+    return null;
+  }
+
+  /**
+   * Tries to figure out which service/class owns this Subject instance
+   * by walking Angular's injector and matching object references.
+   */
+  private inferSubjectOwner(subject: any): { className: string; propName: string } | null {
+    try {
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (!ng?.getInjector || !rootEl) return null;
+
+      const injector = ng.getInjector(rootEl);
+      const records = injector?._records ?? injector?.records;
+      if (!(records instanceof Map)) return null;
+
+      for (const [token, record] of records) {
+        try {
+          const inst = record?.value;
+          if (!inst || typeof inst !== 'object') continue;
+          const className = inst.constructor?.name;
+          if (!className || className === 'Object') continue;
+
+          for (const key of Object.getOwnPropertyNames(inst)) {
+            if (inst[key] === subject) {
+              return { className, propName: key };
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    return null;
+  }
+
+  // ═══ Fetch Interception ═════════════════════════════════════════════════════
+
+  private hookFetch(): void {
+    if (typeof globalThis.fetch !== 'function') return;
+    this.originalFetch = globalThis.fetch;
+    const tracker = this;
+    const originalFetch = this.originalFetch;
+
+    (globalThis as any).fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const method = init?.method ?? 'GET';
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+      const shortUrl = tracker.shortenUrl(url);
+      // Capture initiator at CALL time (which component is most likely the caller)
+      const initiator = tracker.detectCurrentComponent();
+
+      return originalFetch.call(globalThis, input, init).then((response: Response) => {
+        if (tracker.isRunning) {
+          tracker.buffer.push({
+            id: `flow-${++tracker.eventId}`,
+            type: 'http-response',
+            timestamp: Date.now(),
+            label: `${method} ${shortUrl} → ${response.status}`,
+            detail: `${method} ${shortUrl} (${response.status} ${response.statusText})`,
+            ownerClass: initiator ?? undefined,
+          });
+        }
+        return response;
+      });
+    };
+  }
+
+  private unhookFetch(): void {
+    if (this.originalFetch) {
+      (globalThis as any).fetch = this.originalFetch;
+      this.originalFetch = null;
+    }
+  }
+
+  // ═══ XHR Interception ══════════════════════════════════════════════════════
+
+  private hookXHR(): void {
+    const XHR = globalThis.XMLHttpRequest?.prototype;
+    if (!XHR) return;
+
+    this.originalXhrOpen = XHR.open;
+    this.originalXhrSend = XHR.send;
+    const tracker = this;
+
+    XHR.open = function(this: any, method: string, url: string, ...args: any[]) {
+      this.__nglens_method = method;
+      this.__nglens_url = url;
+      return (tracker.originalXhrOpen as Function).apply(this, [method, url, ...args]);
+    };
+
+    XHR.send = function(this: any, ...args: any[]) {
+      const xhr = this;
+      xhr.addEventListener('load', () => {
+        if (tracker.isRunning) {
+          const shortUrl = tracker.shortenUrl(xhr.__nglens_url ?? '');
+          tracker.buffer.push({
+            id: `flow-${++tracker.eventId}`,
+            type: 'http-response',
+            timestamp: Date.now(),
+            label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
+            detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
+          });
+        }
+      }, { once: true });
+      return (tracker.originalXhrSend as Function).apply(this, args);
+    };
+  }
+
+  private unhookXHR(): void {
+    const XHR = globalThis.XMLHttpRequest?.prototype;
+    if (!XHR) return;
+    if (this.originalXhrOpen) { XHR.open = this.originalXhrOpen as any; this.originalXhrOpen = null; }
+    if (this.originalXhrSend) { XHR.send = this.originalXhrSend as any; this.originalXhrSend = null; }
+  }
+
+  // ═══ Angular Signal Interception ═════════════════════════════════════════════
+
+  /**
+   * Walks components and services to find writable signals and patch their
+   * .set() and .update() methods to emit FlowEvents.
+   */
+  private hookSignals(): void {
+    try {
+      // Patch signals on services via injector
+      this.patchInjectorSignals();
+      // Patch signals on rendered components
+      this.patchComponentSignals();
+      // Re-scan periodically for lazy-loaded components/services
+      globalThis.setTimeout(() => {
+        if (this.isRunning) {
+          this.patchInjectorSignals();
+          this.patchComponentSignals();
+        }
+      }, 3000);
+    } catch { /* ignore */ }
+  }
+
+  private patchInjectorSignals(): void {
+    try {
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (!ng?.getInjector || !rootEl) return;
+
+      const injector = ng.getInjector(rootEl);
+      const records = injector?._records ?? injector?.records;
+      if (!(records instanceof Map)) return;
+
+      for (const [token] of records) {
+        if (typeof token !== 'function') continue;
+        const className = token.name;
+        if (!className || className.length <= 2) continue;
+
+        try {
+          const inst = injector.get(token, null, { optional: true } as any);
+          if (!inst || typeof inst !== 'object') continue;
+          this.patchInstanceSignals(inst, className);
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  private patchComponentSignals(): void {
+    const ng = (globalThis as any).ng;
+    if (!ng?.getComponent) return;
+
+    const elements = document.querySelectorAll('*');
+    const limit = Math.min(elements.length, 1000);
+
+    for (let i = 0; i < limit; i++) {
+      try {
+        const component = ng.getComponent(elements[i]);
+        if (!component) continue;
+        const name = component.constructor?.name ?? '';
+        if (name.length > 2) {
+          this.patchInstanceSignals(component, name);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * For a given object instance, find all writable signal properties
+   * and wrap .set() / .update() to emit flow events.
+   */
+  private patchInstanceSignals(inst: any, className: string): void {
+    if (!inst || typeof inst !== 'object') return;
+
+    let keys: string[];
+    try {
+      keys = Object.getOwnPropertyNames(inst);
+    } catch { return; }
+
+    for (const key of keys) {
+      if (key.startsWith('_') || key.startsWith('ɵ')) continue;
+      try {
+        const val = inst[key];
+        if (!this.isWritableSignal(val)) continue;
+        if (this.patchedSignals.has(val)) continue;
+        this.patchedSignals.add(val);
+
+        this.wrapSignalMethod(val, 'set', className, key);
+        this.wrapSignalMethod(val, 'update', className, key);
+      } catch { /* ignore */ }
+    }
+  }
+
+  private wrapSignalMethod(signal: any, method: 'set' | 'update', className: string, propName: string): void {
+    const original = signal[method];
+    if (typeof original !== 'function') return;
+
+    const tracker = this;
+    signal[method] = function(this: any, ...args: any[]) {
+      if (tracker.isRunning) {
+        const value = method === 'set' ? args[0] : '(updater fn)';
+        tracker.buffer.push({
+          id: `flow-${++tracker.eventId}`,
+          type: 'signal-write',
+          timestamp: Date.now(),
+          label: `${className}.${propName}.${method}()`,
+          ownerClass: className,
+          propertyName: propName,
+          detail: tracker.summarizeValue(value),
+        });
+      }
+      return original.apply(this, args);
+    };
+  }
+
+  private isWritableSignal(value: any): boolean {
+    if (typeof value !== 'function') return false;
+    if (typeof value.set !== 'function') return false;
+    // Check for SIGNAL brand symbol
+    try {
+      const syms = Object.getOwnPropertySymbols(value);
+      if (syms.some(s => String(s).toLowerCase().includes('signal'))) return true;
+      // Fallback: has both .set() and .update() — very likely a signal
+      if (typeof value.update === 'function') return true;
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  // ═══ Router Navigation Tracking ═════════════════════════════════════════════
+
+  private hookRouter(): void {
+    try {
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (!ng?.getInjector || !rootEl) return;
+
+      const injector = ng.getInjector(rootEl);
+      const records = injector?._records ?? injector?.records;
+      if (!(records instanceof Map)) return;
+
+      // Find the Router instance
+      for (const [token] of records) {
+        if (typeof token === 'function' && token.name === 'Router') {
+          try {
+            const router = injector.get(token, null, { optional: true });
+            if (router && typeof router.events?.subscribe === 'function') {
+              let lastUrl = router.url ?? '/';
+              this.routerSubscription = router.events.subscribe((event: any) => {
+                if (!this.isRunning) return;
+                // NavigationEnd event
+                if (event.constructor?.name === 'NavigationEnd' || event.type === 1) {
+                  const toUrl = event.urlAfterRedirects ?? event.url ?? '';
+                  this.buffer.push({
+                    id: `flow-${++this.eventId}`,
+                    type: 'route-change',
+                    timestamp: Date.now(),
+                    label: `Navigate: ${lastUrl} → ${toUrl}`,
+                    fromRoute: lastUrl,
+                    toRoute: toUrl,
+                  });
+                  lastUrl = toUrl;
+                }
+              });
+              break;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  private unhookRouter(): void {
+    if (this.routerSubscription && typeof this.routerSubscription.unsubscribe === 'function') {
+      this.routerSubscription.unsubscribe();
+    }
+    this.routerSubscription = null;
+  }
+
+  // ═══ Helpers ════════════════════════════════════════════════════════════════
+
+  private summarizeValue(value: any): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'string') return value.length > 30 ? `"${value.slice(0, 30)}…"` : `"${value}"`;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) return `Array(${value.length})`;
+    if (typeof value === 'object') {
+      const name = value.constructor?.name;
+      if (name && name !== 'Object') return name;
+      const keys = Object.keys(value);
+      return keys.length <= 3 ? `{${keys.join(', ')}}` : `{${keys.slice(0, 3).join(', ')}, …}`;
+    }
+    return typeof value;
+  }
+
+  /**
+   * Detects which component is most likely the initiator of the current call.
+   * Uses the RenderTracker's last interaction (if recent) or the most recently rendered component.
+   */
+  private detectCurrentComponent(): string | null {
+    try {
+      // Check RenderTracker's last interaction — if a click just happened, that component is the initiator
+      const renderTracker = (globalThis as any).__nglens_render_tracker_ref;
+      if (renderTracker?.lastInteraction) {
+        const interaction = renderTracker.lastInteraction;
+        if (Date.now() - interaction.timestamp < 1000) {
+          return interaction.ownerComponent;
+        }
+      }
+
+      // Fallback: check the most recently discovered component from recent render events
+      // Use a simple heuristic — the component that rendered most recently is likely the caller
+      return null;
+    } catch { return null; }
+  }
+
+  private shortenUrl(url: string): string {
+    try {
+      const u = new URL(url, globalThis.location?.origin);
+      return u.pathname + (u.search ? '?' + u.searchParams.toString().slice(0, 30) : '');
+    } catch {
+      return url.slice(0, 50);
+    }
+  }
+
+  // ═══ Batching ══════════════════════════════════════════════════════════════
+
+  private startBatching(): void {
+    this.flushInterval = globalThis.setInterval(() => this.flush(), 150);
+  }
+
+  private stopBatching(): void {
+    if (this.flushInterval !== null) { clearInterval(this.flushInterval); this.flushInterval = null; }
+  }
+
+  private flush(): void {
+    if (this.buffer.length === 0) return;
+    const events = this.buffer.splice(0);
+    const batch: FlowEventBatch = { events, batchTimestamp: performance.now() };
+    globalThis.dispatchEvent(new CustomEvent(PAGE_TO_CONTENT_EVENT, {
+      detail: { eventId: `flow-${Date.now()}`, type: 'FLOW_EVENT_BATCH', payload: batch },
+    }));
+  }
+}

@@ -54,6 +54,7 @@ const MESSAGE_TYPES: ReadonlySet<string> = new Set([
   'DEGRADED_MODE',
   'ZONE_POLLUTION_EVENT',
   'ROUTE_CHANGED',
+  'FLOW_EVENT_BATCH',
 ]);
 
 const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
@@ -67,6 +68,7 @@ const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
   'TRACKING_STOPPED',
   'ERROR',
   'ZONE_POLLUTION_EVENT',
+  'FLOW_EVENT_BATCH',
 ]);
 
 // --- Panel Port Connection Handling ---

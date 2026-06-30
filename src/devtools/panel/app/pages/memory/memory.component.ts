@@ -1,415 +1,365 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import type { LeakEvent } from '../../../../../types/leak-events';
 
 type LeakType = LeakEvent['leakType'];
+type ViewMode = 'live' | 'destroyed';
 
-interface ComponentLeakGroup {
-  componentName: string;
+interface LiveComponent {
+  name: string;
   displayName: string;
-  totalCount: number;
-  subscriptions: LeakEvent[];
-  timers: LeakEvent[];
-  eventListeners: LeakEvent[];
-  hasCritical: boolean;
+  subscriptions: number;
+  timers: number;
+  listeners: number;
+  total: number;
+  status: 'healthy' | 'at-risk';
+  riskReason: string | null;
+}
+
+interface DestroyedComponent {
+  name: string;
+  displayName: string;
+  leaked: LeakEvent[];
+  leakedCount: number;
+  cleanedCount: number;
+  severity: 'CRITICAL' | 'WARNING';
 }
 
 @Component({
   selector: 'app-memory',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgClass],
   template: `
-    <div class="h-full overflow-auto p-4 space-y-4">
-      <!-- Summary -->
-      <section class="border border-gray-800 rounded bg-gray-900 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold text-gray-100">Memory Cleanup Risks</h2>
-            <p class="text-xs text-gray-400 mt-1">
-              Grouped by component. Expand to see specific resources without detected cleanup.
-            </p>
-          </div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[360px]">
-            <div class="summary-cell">
-              <span>Components</span>
-              <strong>{{ componentGroups().length }}</strong>
-            </div>
-            <div class="summary-cell">
-              <span>Total risks</span>
-              <strong>{{ state.leakEvents().length }}</strong>
-            </div>
-            <div class="summary-cell">
-              <span>Subscriptions</span>
-              <strong>{{ subscriptionCount() }}</strong>
-            </div>
-            <div class="summary-cell">
-              <span>Timers/Listeners</span>
-              <strong>{{ timerListenerCount() }}</strong>
-            </div>
+    <div class="h-full overflow-auto">
+
+      <!-- Status Bar -->
+      <div class="sticky top-0 z-20 px-4 py-2.5 bg-gray-900/95 backdrop-blur border-b border-gray-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h2 class="text-sm font-semibold text-gray-100">Memory</h2>
+          <div class="flex items-center gap-2 text-[11px]">
+            <span class="text-gray-500">{{ liveComponents().length }} active</span>
+            <span class="text-gray-700">·</span>
+            <span [ngClass]="destroyedWithLeaks().length > 0 ? 'text-red-400' : 'text-green-400'">
+              {{ destroyedWithLeaks().length }} leaked
+            </span>
           </div>
         </div>
-      </section>
-
-      <!-- Type filter tabs -->
-      <div class="flex gap-1.5 flex-wrap">
-        <button
-          (click)="activeFilter.set('all')"
-          class="filter-btn"
-          [ngClass]="activeFilter() === 'all' ? 'filter-btn-active' : 'filter-btn-inactive'">
-          All ({{ state.leakEvents().length }})
-        </button>
-        <button
-          (click)="activeFilter.set('subscription')"
-          class="filter-btn"
-          [ngClass]="activeFilter() === 'subscription' ? 'filter-btn-active' : 'filter-btn-inactive'">
-          Subscriptions ({{ subscriptionCount() }})
-        </button>
-        <button
-          (click)="activeFilter.set('timer')"
-          class="filter-btn"
-          [ngClass]="activeFilter() === 'timer' ? 'filter-btn-active' : 'filter-btn-inactive'">
-          Timers ({{ timerCount() }})
-        </button>
-        <button
-          (click)="activeFilter.set('event-listener')"
-          class="filter-btn"
-          [ngClass]="activeFilter() === 'event-listener' ? 'filter-btn-active' : 'filter-btn-inactive'">
-          Listeners ({{ listenerCount() }})
-        </button>
+        <div class="flex gap-1">
+          <button (click)="viewMode.set('live')"
+            class="text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors"
+            [ngClass]="viewMode() === 'live'
+              ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+              : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'">
+            Live View
+          </button>
+          <button (click)="viewMode.set('destroyed')"
+            class="text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors"
+            [ngClass]="viewMode() === 'destroyed'
+              ? 'bg-red-500/15 text-red-400 border-red-500/30'
+              : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'">
+            Leak Report
+          </button>
+        </div>
       </div>
 
-      @if (filteredGroups().length === 0) {
-        <div class="border border-green-800/50 rounded p-8 bg-green-900/15 text-center">
-          <div class="text-green-300 font-semibold mb-1">No cleanup risks observed</div>
-          <div class="text-xs text-gray-400">
-            No surviving subscription, timer, or listener signals have been captured.
-          </div>
-        </div>
-      } @else {
-        <!-- Component groups -->
-        <div class="space-y-2">
-          @for (group of filteredGroups(); track group.componentName) {
-            <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
-              <!-- Component header -->
-              <button
-                type="button"
-                class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
-                (click)="toggleGroup(group.componentName)"
-              >
-                <span class="text-[10px] text-gray-500">
-                  {{ isExpanded(group.componentName) ? '▼' : '▶' }}
-                </span>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                      {{ group.totalCount }} {{ group.totalCount === 1 ? 'risk' : 'risks' }}
-                    </span>
-                    @if (group.hasCritical) {
-                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">
-                        Critical
-                      </span>
-                    }
-                  </div>
-                  <div class="flex gap-2 mt-1 text-[10px] text-gray-500">
-                    @if (group.subscriptions.length > 0) {
-                      <span>{{ group.subscriptions.length }} subscription{{ group.subscriptions.length > 1 ? 's' : '' }}</span>
-                    }
-                    @if (group.timers.length > 0) {
-                      <span>{{ group.timers.length }} timer{{ group.timers.length > 1 ? 's' : '' }}</span>
-                    }
-                    @if (group.eventListeners.length > 0) {
-                      <span>{{ group.eventListeners.length }} listener{{ group.eventListeners.length > 1 ? 's' : '' }}</span>
-                    }
-                  </div>
-                </div>
-              </button>
+      <!-- ═══ LIVE VIEW: What's running right now ═══ -->
+      @if (viewMode() === 'live') {
+        <div class="p-4 space-y-3">
 
-              <!-- Expanded: deduplicated leak sources -->
-              @if (isExpanded(group.componentName)) {
-                <div class="border-t border-gray-800 divide-y divide-gray-800/50">
-                  @for (item of getFilteredEvents(group); track item.source + item.type) {
-                    <div class="px-4 py-2.5 pl-10 flex items-center gap-3">
-                      <span
-                        class="text-[10px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap"
-                        [ngClass]="typeClass(item.type)"
-                      >
-                        {{ typeLabel(item.type) }}
-                      </span>
-                      <div class="flex-1 min-w-0">
-                        <span class="text-xs text-gray-200 font-medium">{{ item.source }}</span>
-                        @if (item.count > 1) {
-                          <span class="text-[10px] text-gray-500 ml-2">x{{ item.count }}</span>
-                        }
-                      </div>
-                      <span class="text-[10px] text-gray-500">{{ item.timing }}</span>
-                      <span
-                        class="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap"
-                        [ngClass]="severityClass(item.severity)"
-                      >
-                        {{ item.severity }}
-                      </span>
-                    </div>
+          <!-- Health summary -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
+              <div class="text-[9px] text-gray-500 uppercase tracking-wide">Active Resources</div>
+              <div class="text-xl font-bold text-gray-100 mt-1">{{ totalActiveResources() }}</div>
+              <div class="text-[9px] text-gray-500 mt-0.5">subscriptions + timers + listeners</div>
+            </div>
+            <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
+              <div class="text-[9px] text-gray-500 uppercase tracking-wide">Components at Risk</div>
+              <div class="text-xl font-bold mt-1"
+                   [ngClass]="atRiskCount() > 0 ? 'text-amber-400' : 'text-green-400'">
+                {{ atRiskCount() }}
+              </div>
+              <div class="text-[9px] text-gray-500 mt-0.5">high resource count without cleanup</div>
+            </div>
+            <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
+              <div class="text-[9px] text-gray-500 uppercase tracking-wide">Confirmed Leaks</div>
+              <div class="text-xl font-bold mt-1"
+                   [ngClass]="destroyedWithLeaks().length > 0 ? 'text-red-400' : 'text-green-400'">
+                {{ destroyedWithLeaks().length }}
+              </div>
+              <div class="text-[9px] text-gray-500 mt-0.5">components destroyed without cleanup</div>
+            </div>
+          </div>
+
+          <!-- What Junior sees: simple list of what's running -->
+          <!-- What Senior sees: risk indicators per component -->
+          <!-- What Architect sees: systemic patterns -->
+
+          @if (liveComponents().length === 0) {
+            <div class="rounded-lg border border-gray-700 p-6 text-center">
+              <div class="text-2xl opacity-20 mb-2">🧹</div>
+              <p class="text-sm text-gray-400">No active resources tracked yet.</p>
+              <p class="text-[10px] text-gray-600 mt-1">Start recording and interact with the page to see live resources.</p>
+            </div>
+          } @else {
+            <div class="space-y-1">
+              @for (comp of liveComponents(); track comp.name) {
+                <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg border transition-colors"
+                     [ngClass]="comp.status === 'at-risk'
+                       ? 'border-amber-800/40 bg-amber-950/20 hover:bg-amber-950/30'
+                       : 'border-gray-800 bg-gray-800/30 hover:bg-gray-800/50'">
+                  <!-- Status dot -->
+                  <span class="w-2 h-2 rounded-full flex-shrink-0"
+                        [ngClass]="comp.status === 'at-risk' ? 'bg-amber-500' : 'bg-green-500'"></span>
+                  <!-- Component name -->
+                  <span class="text-xs font-mono text-gray-200 flex-1 min-w-0 truncate">{{ comp.displayName }}</span>
+                  <!-- Resource counts -->
+                  @if (comp.subscriptions > 0) {
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/30">
+                      {{ comp.subscriptions }} sub{{ comp.subscriptions > 1 ? 's' : '' }}
+                    </span>
+                  }
+                  @if (comp.timers > 0) {
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/30">
+                      {{ comp.timers }} timer{{ comp.timers > 1 ? 's' : '' }}
+                    </span>
+                  }
+                  @if (comp.listeners > 0) {
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/30">
+                      {{ comp.listeners }} listener{{ comp.listeners > 1 ? 's' : '' }}
+                    </span>
+                  }
+                  <!-- Risk warning -->
+                  @if (comp.riskReason) {
+                    <span class="text-[9px] text-amber-400 flex-shrink-0">{{ comp.riskReason }}</span>
                   }
                 </div>
               }
-            </section>
+            </div>
+
+            <!-- Architect insight: systemic pattern -->
+            @if (systemicPattern()) {
+              <div class="mt-3 px-4 py-3 rounded-lg border border-indigo-800/40 bg-indigo-950/20">
+                <div class="flex items-start gap-2">
+                  <span class="text-[10px] mt-0.5">🏗️</span>
+                  <div>
+                    <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold">Architecture Insight</div>
+                    <p class="text-[11px] text-indigo-300 mt-0.5">{{ systemicPattern() }}</p>
+                  </div>
+                </div>
+              </div>
+            }
           }
         </div>
+      }
 
-        <!-- Fix patterns -->
-        <section class="border border-gray-800 rounded bg-gray-900 p-4">
-          <h3 class="text-xs font-semibold text-gray-300 mb-3 uppercase">Cleanup Patterns</h3>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-300">
-            <div class="pattern-cell">
-              <strong>Subscriptions</strong>
-              <p>Use <code>takeUntilDestroyed()</code> or <code>AsyncPipe</code></p>
+      <!-- ═══ LEAK REPORT: What leaked after navigation ═══ -->
+      @if (viewMode() === 'destroyed') {
+        <div class="p-4 space-y-3">
+
+          @if (destroyedWithLeaks().length === 0) {
+            <div class="rounded-lg border border-green-800/40 p-6 text-center bg-green-950/10">
+              <div class="text-2xl opacity-30 mb-2">✓</div>
+              <p class="text-sm text-green-300">No leaks detected</p>
+              <p class="text-[10px] text-gray-500 mt-1">
+                Navigate between pages while recording. Components that fail to clean up their resources will appear here.
+              </p>
             </div>
-            <div class="pattern-cell">
-              <strong>Timers</strong>
-              <p>Store handle, call <code>clearTimeout</code>/<code>clearInterval</code> on destroy</p>
+          } @else {
+            <!-- Leak explanation for junior developers -->
+            <div class="px-3 py-2.5 rounded border border-gray-700 bg-gray-800/40 text-[10px] text-gray-400">
+              <strong class="text-gray-300">What is a memory leak?</strong>
+              A component was destroyed (navigated away) but its subscriptions or timers are still running in the background, consuming memory and CPU.
             </div>
-            <div class="pattern-cell">
-              <strong>Event Listeners</strong>
-              <p>Use <code>Renderer2</code> or store ref for <code>removeEventListener</code></p>
-            </div>
-          </div>
-        </section>
+
+            @for (comp of destroyedWithLeaks(); track comp.name) {
+              <div class="rounded-lg border overflow-hidden"
+                   [ngClass]="comp.severity === 'CRITICAL' ? 'border-red-800/50 bg-red-950/10' : 'border-amber-800/40 bg-amber-950/10'">
+                <!-- Header -->
+                <div class="px-4 py-3 flex items-center gap-3">
+                  <span class="text-sm"
+                        [ngClass]="comp.severity === 'CRITICAL' ? 'text-red-400' : 'text-amber-400'">⚠</span>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-xs font-semibold text-gray-100">{{ comp.displayName }}</span>
+                    <span class="text-[9px] text-gray-500 ml-2">destroyed but resources still active</span>
+                  </div>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                        [ngClass]="comp.severity === 'CRITICAL'
+                          ? 'bg-red-500/15 text-red-300 border border-red-500/30'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'">
+                    {{ comp.leakedCount }} leaked
+                  </span>
+                </div>
+                <!-- Leaked resources — grouped and collapsible -->
+                <div class="border-t border-gray-800/50">
+                  <button
+                    class="w-full px-4 py-2 pl-10 flex items-center gap-2 text-[10px] hover:bg-gray-800/30 select-none"
+                    (click)="toggleGroup(comp.name)">
+                    <span class="text-gray-400">{{ isExpanded(comp.name) ? '▾' : '▸' }}</span>
+                    <span class="text-gray-400">{{ comp.leakedCount }} resource{{ comp.leakedCount > 1 ? 's' : '' }} — click to expand</span>
+                  </button>
+                  @if (isExpanded(comp.name)) {
+                    <div class="divide-y divide-gray-800/30">
+                      @for (group of groupLeakEvents(comp.leaked); track group.key) {
+                        <div class="px-4 py-2 pl-14 flex items-center gap-2 text-[10px]"
+                             [title]="group.type + ': ' + group.source + ' (×' + group.count + ')'">
+                          <span class="px-1.5 py-0.5 rounded font-medium border"
+                                [ngClass]="group.type === 'subscription' ? 'text-purple-300 bg-purple-900/40 border-purple-700/30'
+                                          : group.type === 'timer' ? 'text-amber-300 bg-amber-900/40 border-amber-700/30'
+                                          : 'text-blue-300 bg-blue-900/40 border-blue-700/30'">
+                            {{ group.type === 'subscription' ? 'Sub' : group.type === 'timer' ? 'Timer' : 'Listener' }}
+                          </span>
+                          <span class="text-gray-200 font-mono flex-1 truncate">{{ group.source }}</span>
+                          @if (group.count > 1) {
+                            <span class="text-gray-300 flex-shrink-0">×{{ group.count }}</span>
+                          }
+                          <span class="text-red-400 flex-shrink-0">still running</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          }
+        </div>
       }
     </div>
   `,
   styles: [`
-    .summary-cell {
-      background: rgb(31 41 55 / 0.45);
-      border: 1px solid rgb(55 65 81 / 0.55);
-      border-radius: 4px;
-      padding: 8px;
-      min-width: 0;
-    }
-
-    .summary-cell span {
-      display: block;
-      color: #9ca3af;
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-
-    .summary-cell strong {
-      display: block;
-      color: #f3f4f6;
-      font-size: 18px;
-      margin-top: 2px;
-    }
-
-    .filter-btn {
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: 4px;
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .filter-btn-active {
-      background: rgb(59 130 246 / 0.2);
-      border-color: rgb(59 130 246 / 0.5);
-      color: #93c5fd;
-    }
-
-    .filter-btn-inactive {
-      background: rgb(31 41 55 / 0.45);
-      border-color: rgb(55 65 81 / 0.55);
-      color: #9ca3af;
-    }
-
-    .filter-btn-inactive:hover {
-      color: #d1d5db;
-      border-color: rgb(75 85 99 / 0.7);
-    }
-
-    .pattern-cell {
-      background: rgb(31 41 55 / 0.45);
-      border: 1px solid rgb(55 65 81 / 0.55);
-      border-radius: 4px;
-      padding: 8px;
-    }
-
-    .pattern-cell strong {
-      display: block;
-      color: #dbeafe;
-      font-size: 12px;
-      margin-bottom: 4px;
-    }
-
-    .pattern-cell p {
-      color: #9ca3af;
-      line-height: 1.45;
-      margin: 0;
-    }
-
+    :host { display: block; height: 100%; }
     code {
       font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 11px;
+      font-size: 10px;
       color: #bfdbfe;
       background: rgb(17 24 39 / 0.75);
-      border-radius: 4px;
+      border-radius: 3px;
       padding: 1px 4px;
     }
   `],
 })
 export class MemoryComponent {
   readonly state = inject(PanelState);
+  readonly viewMode = signal<ViewMode>('destroyed');
 
-  readonly activeFilter = signal<'all' | LeakType>('all');
-  readonly expandedComponents = signal<Set<string>>(new Set());
+  // ── Live View: components currently active with their resource counts ──
 
-  readonly subscriptionCount = computed(() =>
-    this.state.leakEvents().filter(e => e.leakType === 'subscription').length
-  );
-  readonly timerCount = computed(() =>
-    this.state.leakEvents().filter(e => e.leakType === 'timer').length
-  );
-  readonly listenerCount = computed(() =>
-    this.state.leakEvents().filter(e => e.leakType === 'event-listener').length
-  );
-  readonly timerListenerCount = computed(() => this.timerCount() + this.listenerCount());
+  readonly liveComponents = computed<LiveComponent[]>(() => {
+    const events = this.state.leakEvents();
+    // Show all components with resources (both active and destroyed)
+    const map = new Map<string, { subs: number; timers: number; listeners: number; hasDestroyed: boolean }>();
 
-  readonly componentGroups = computed<ComponentLeakGroup[]>(() => {
+    for (const event of events) {
+      const existing = map.get(event.componentName) ?? { subs: 0, timers: 0, listeners: 0, hasDestroyed: false };
+      if (event.leakType === 'subscription') existing.subs++;
+      else if (event.leakType === 'timer') existing.timers++;
+      else existing.listeners++;
+      if (event.lifecycleState === 'destroyed') existing.hasDestroyed = true;
+      map.set(event.componentName, existing);
+    }
+
+    return Array.from(map.entries())
+      .filter(([, counts]) => !counts.hasDestroyed) // Only show non-destroyed (still alive)
+      .map(([name, counts]) => {
+        const total = counts.subs + counts.timers + counts.listeners;
+        const atRisk = total >= 5;
+        return {
+          name,
+          displayName: displayName(name),
+          subscriptions: counts.subs,
+          timers: counts.timers,
+          listeners: counts.listeners,
+          total,
+          status: atRisk ? 'at-risk' as const : 'healthy' as const,
+          riskReason: atRisk ? `${total} resources — will leak if not cleaned on destroy` : null,
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  });
+
+  readonly totalActiveResources = computed(() =>
+    this.liveComponents().reduce((s, c) => s + c.total, 0)
+  );
+
+  readonly atRiskCount = computed(() =>
+    this.liveComponents().filter(c => c.status === 'at-risk').length
+  );
+
+  // ── Leak Report: components that were destroyed without cleanup ──
+
+  readonly destroyedWithLeaks = computed<DestroyedComponent[]>(() => {
+    const events = this.state.leakEvents();
+    const destroyed = events.filter(e => e.lifecycleState === 'destroyed');
+
     const map = new Map<string, LeakEvent[]>();
-    for (const event of this.state.leakEvents()) {
+    for (const event of destroyed) {
       const existing = map.get(event.componentName) ?? [];
       existing.push(event);
       map.set(event.componentName, existing);
     }
 
-    const groups: ComponentLeakGroup[] = [];
-    for (const [componentName, events] of map) {
-      groups.push({
-        componentName,
-        displayName: displayName(componentName),
-        totalCount: events.length,
-        subscriptions: events.filter(e => e.leakType === 'subscription'),
-        timers: events.filter(e => e.leakType === 'timer'),
-        eventListeners: events.filter(e => e.leakType === 'event-listener'),
-        hasCritical: events.some(e => e.severity === 'CRITICAL'),
+    return Array.from(map.entries())
+      .map(([name, leaked]) => ({
+        name,
+        displayName: displayName(name),
+        leaked,
+        leakedCount: leaked.length,
+        cleanedCount: 0,
+        severity: leaked.some(e => e.severity === 'CRITICAL') ? 'CRITICAL' as const : 'WARNING' as const,
+      }))
+      .sort((a, b) => {
+        if (a.severity !== b.severity) return a.severity === 'CRITICAL' ? -1 : 1;
+        return b.leakedCount - a.leakedCount;
       });
-    }
-
-    return groups.sort((a, b) => {
-      if (a.hasCritical !== b.hasCritical) return a.hasCritical ? -1 : 1;
-      return b.totalCount - a.totalCount;
-    });
   });
 
-  readonly filteredGroups = computed<ComponentLeakGroup[]>(() => {
-    const filter = this.activeFilter();
-    if (filter === 'all') return this.componentGroups();
+  // ── Expand/collapse for leak details ──
 
-    return this.componentGroups()
-      .map(group => {
-        const filtered = this.filterEventsByType(group, filter);
-        return { ...group, totalCount: filtered.length };
-      })
-      .filter(group => group.totalCount > 0);
+  readonly expandedGroups = signal(new Set<string>());
+
+  toggleGroup(name: string): void {
+    const next = new Set(this.expandedGroups());
+    if (next.has(name)) { next.delete(name); } else { next.add(name); }
+    this.expandedGroups.set(next);
+  }
+
+  isExpanded(name: string): boolean {
+    return this.expandedGroups().has(name);
+  }
+
+  groupLeakEvents(events: LeakEvent[]): Array<{ key: string; type: LeakType; source: string; count: number }> {
+    const map = new Map<string, { type: LeakType; source: string; count: number }>();
+    for (const e of events) {
+      const key = `${e.leakType}::${e.source}`;
+      const existing = map.get(key);
+      if (existing) { existing.count++; }
+      else { map.set(key, { type: e.leakType, source: e.source, count: 1 }); }
+    }
+    return Array.from(map.entries())
+      .map(([key, data]) => ({ key, ...data }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // ── Architect insight: detect systemic patterns ──
+
+  readonly systemicPattern = computed<string | null>(() => {
+    const live = this.liveComponents();
+    const totalTimers = live.reduce((s, c) => s + c.timers, 0);
+    const totalSubs = live.reduce((s, c) => s + c.subscriptions, 0);
+    const atRisk = this.atRiskCount();
+
+    if (totalTimers > 10 && atRisk > 2) {
+      return `${totalTimers} active timers across ${atRisk} components. Consider a centralized polling service with automatic cleanup, instead of per-component setInterval calls.`;
+    }
+    if (totalSubs > 15) {
+      return `${totalSubs} active subscriptions. Consider using takeUntilDestroyed() as a project-wide pattern, or migrate to signals to eliminate manual subscription management.`;
+    }
+    if (live.length > 5 && atRisk > Math.floor(live.length / 2)) {
+      return `More than half of active components have high resource counts. This suggests missing cleanup patterns at the architecture level — consider a base component class with automatic teardown.`;
+    }
+    return null;
   });
-
-  toggleGroup(componentName: string): void {
-    this.expandedComponents.update(set => {
-      const next = new Set(set);
-      if (next.has(componentName)) {
-        next.delete(componentName);
-      } else {
-        next.add(componentName);
-      }
-      return next;
-    });
-  }
-
-  isExpanded(componentName: string): boolean {
-    return this.expandedComponents().has(componentName);
-  }
-
-  getFilteredEvents(group: ComponentLeakGroup): { source: string; type: LeakType; count: number; severity: string; timing: string }[] {
-    const filter = this.activeFilter();
-    let events: LeakEvent[];
-    if (filter === 'all') {
-      events = [...group.subscriptions, ...group.timers, ...group.eventListeners];
-    } else {
-      events = this.filterEventsByType(group, filter);
-    }
-
-    // Deduplicate: group by source + leakType
-    const deduped = new Map<string, { source: string; type: LeakType; count: number; severity: string; latestDetected: number; createdAt: number }>();
-    for (const event of events) {
-      const key = `${event.source}::${event.leakType}`;
-      const existing = deduped.get(key);
-      if (existing) {
-        existing.count++;
-        if (event.severity === 'CRITICAL') existing.severity = 'CRITICAL';
-        if (event.detectedAt > existing.latestDetected) existing.latestDetected = event.detectedAt;
-      } else {
-        deduped.set(key, {
-          source: event.source,
-          type: event.leakType,
-          count: 1,
-          severity: event.severity,
-          latestDetected: event.detectedAt,
-          createdAt: event.createdAt,
-        });
-      }
-    }
-
-    return Array.from(deduped.values()).map(d => ({
-      source: d.source,
-      type: d.type,
-      count: d.count,
-      severity: d.severity,
-      timing: `Detected ${this.formatElapsed(d.latestDetected)}`,
-    }));
-  }
-
-  typeLabel(type: LeakType): string {
-    switch (type) {
-      case 'subscription': return 'Sub';
-      case 'timer': return 'Timer';
-      case 'event-listener': return 'Listener';
-    }
-  }
-
-  typeClass(type: LeakType): string {
-    switch (type) {
-      case 'subscription': return 'text-purple-300 bg-purple-500/15 border-purple-500/30';
-      case 'timer': return 'text-amber-300 bg-amber-500/15 border-amber-500/30';
-      case 'event-listener': return 'text-blue-300 bg-blue-500/15 border-blue-500/30';
-    }
-  }
-
-  severityClass(severity: string): string {
-    switch (severity) {
-      case 'CRITICAL': return 'text-red-300 bg-red-500/15 border-red-500/30';
-      case 'WARNING': return 'text-amber-300 bg-amber-500/15 border-amber-500/30';
-      default: return 'text-gray-300 bg-gray-700/50 border-gray-600/50';
-    }
-  }
-
-  formatDuration(ms: number): string {
-    if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-
-  formatElapsed(timestamp: number): string {
-    return `${(timestamp / 1000).toFixed(1)}s into session`;
-  }
-
-  private filterEventsByType(group: ComponentLeakGroup, type: LeakType): LeakEvent[] {
-    switch (type) {
-      case 'subscription': return group.subscriptions;
-      case 'timer': return group.timers;
-      case 'event-listener': return group.eventListeners;
-    }
-  }
 }

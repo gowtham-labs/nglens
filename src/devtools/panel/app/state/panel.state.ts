@@ -1,5 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
-import type { RenderEvent, RenderCause } from '../../../../types/render-events';
+import type { RenderEvent, RenderCause, FlowEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
 import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
@@ -30,6 +30,7 @@ export class PanelState {
 
   // Data
   readonly renderEvents = signal<RenderEvent[]>([]);
+  readonly flowEvents = signal<FlowEvent[]>([]);
   readonly leakEvents = signal<LeakEvent[]>([]);
   readonly trackByIssues = signal<TrackByIssue[]>([]);
   readonly onPushRecommendations = signal<OnPushScore[]>([]);
@@ -60,11 +61,126 @@ export class PanelState {
     this.zonePollutionSources().filter(s => s.severity === 'critical').length
   );
 
+  // ── Render Environment Profile (live, continuously updated) ────────────────
+
+  /** Idle CD rate: renders per second with no user interaction (last 30s rolling window) */
+  readonly idleCdRate = computed<number>(() => {
+    const events = this.renderEvents();
+    if (events.length < 2) return 0;
+    // Count renders that have NO interaction attached (idle/timer-triggered)
+    const idleEvents = events.filter(e => !e.interactionComponent);
+    if (idleEvents.length < 2) return 0;
+    const first = idleEvents[0].timestamp;
+    const last = idleEvents[idleEvents.length - 1].timestamp;
+    const spanSeconds = Math.max((last - first) / 1000, 1);
+    return idleEvents.length / spanSeconds;
+  });
+
+  /** Component count by change detection strategy */
+  readonly cdStrategyBreakdown = computed(() => {
+    // Derive from component stats (available from render tracking)
+    const total = this.componentStats().length;
+    // We can't detect OnPush vs Default from render events alone in this context
+    // Show total components discovered; the OnPush/Default breakdown requires App Map scan
+    return { onPush: 0, default: 0, total, unknown: true };
+  });
+
+  /** Active zone pollution sources (from ZonePollutionDetector) */
+  readonly activeZoneSources = computed(() => {
+    return this.zonePollutionSources()
+      .filter(s => s.severity !== 'low')
+      .map(s => ({
+        name: s.source,
+        rate: s.cdCyclesPerMinute,
+        severity: s.severity,
+        fix: s.fixSuggestion ?? null,
+      }));
+  });
+
+  /** Active reactive streams (subjects/signals emitting) from flow events */
+  readonly activeStreams = computed(() => {
+    const flows = this.flowEvents();
+    const streamCounts = new Map<string, { count: number; lastTs: number; type: string }>();
+    for (const f of flows) {
+      if (f.type === 'subject-emit' || f.type === 'signal-write') {
+        const key = f.label;
+        const existing = streamCounts.get(key);
+        if (existing) {
+          existing.count++;
+          existing.lastTs = f.timestamp;
+        } else {
+          streamCounts.set(key, { count: 1, lastTs: f.timestamp, type: f.type });
+        }
+      }
+    }
+    return Array.from(streamCounts.entries())
+      .map(([label, data]) => ({ label, ...data }))
+      .filter(s => s.count >= 2) // Only show streams that emitted 2+ times
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  });
+
+  /** Recommendation for new component strategy based on environment */
+  readonly environmentRecommendation = computed<string>(() => {
+    const idleRate = this.idleCdRate();
+    const zoneSources = this.activeZoneSources();
+    const cdBreakdown = this.cdStrategyBreakdown();
+
+    if (idleRate > 3 || zoneSources.length > 2) {
+      return 'Use OnPush + Signals. This page has high idle change detection activity — Default CD components will re-render unnecessarily.';
+    }
+    if (cdBreakdown.default > cdBreakdown.onPush && cdBreakdown.total > 5) {
+      return 'Use OnPush. Most components on this page use Default CD — adding another Default CD component increases cascade risk.';
+    }
+    if (zoneSources.some(s => s.name.includes('setInterval') || s.name.includes('WebSocket'))) {
+      return 'Use OnPush + Signals + runOutsideAngular for timers. This page has periodic zone pollution that triggers global CD.';
+    }
+    if (idleRate <= 1 && zoneSources.length === 0) {
+      return 'Environment is clean. OnPush + Signals is still recommended as best practice, but Default CD won\'t cause immediate issues here.';
+    }
+    return 'Use OnPush + Signals for optimal performance in this environment.';
+  });
+
   readonly zonePollutionIssues = computed<Issue[]>(() =>
     this.zonePollutionSources()
       .filter(s => s.severity !== 'low')
       .map(s => this.pollutionSourceToIssue(s))
   );
+
+  /** Render diagnostics: components re-rendering excessively, surfaced in Recommendations */
+  readonly renderDiagnostics = computed<Issue[]>(() => {
+    const stats = this.componentStats();
+    const issues: Issue[] = [];
+    for (const stat of stats) {
+      if (stat.renderCount < 3) continue;
+      const cause = this.getTopCauseType(stat.causesBreakdown);
+
+      if (cause === 'parent' && stat.renderCount >= 3) {
+        issues.push({
+          id: `render-diag-${stat.componentName}-parent`,
+          type: 'render-hot',
+          componentName: stat.componentName,
+          severity: stat.renderCount >= 6 ? 'CRITICAL' : 'WARNING',
+          title: `${stat.componentName} rendered ${stat.renderCount}× from parent cascade`,
+          description: `This component re-renders every time its parent does. Add ChangeDetectionStrategy.OnPush so it only re-renders when its inputs change.`,
+          timestamp: stat.lastSeen,
+        });
+      } else if (stat.renderCount >= 4) {
+        issues.push({
+          id: `render-diag-${stat.componentName}-excessive`,
+          type: 'render-hot',
+          componentName: stat.componentName,
+          severity: stat.renderCount >= 8 ? 'CRITICAL' : 'WARNING',
+          title: `${stat.componentName} rendered ${stat.renderCount}× in this session`,
+          description: cause === 'zone'
+            ? `Timers or async operations trigger excessive re-renders. Use OnPush + Signals, or run timers outside Angular zone.`
+            : `This component re-renders too frequently. Use OnPush and ensure inputs use immutable references.`,
+          timestamp: stat.lastSeen,
+        });
+      }
+    }
+    return issues;
+  });
 
   // Computed: per-component render count derived from cumulative render events
   readonly renderCountMap = computed<Map<string, number>>(() => {
@@ -111,6 +227,7 @@ export class PanelState {
 
   clearActivity(): void {
     this.renderEvents.set([]);
+    this.flowEvents.set([]);
     this.leakEvents.set([]);
     this.trackByIssues.set([]);
     this.onPushRecommendations.set([]);
@@ -224,7 +341,7 @@ export class PanelState {
       this.componentHotspots().filter(h => h.score >= 70),
       hotspot => this.hotspotToIssue(hotspot)
     );
-    return [...leaks, ...trackby, ...hot, ...hotspots, ...this.zonePollutionIssues()];
+    return [...leaks, ...trackby, ...hot, ...hotspots, ...this.zonePollutionIssues(), ...this.renderDiagnostics()];
   }
 
   private compareSnapshots(snapshots: PerformanceSnapshot[]): SnapshotComparison | null {
@@ -258,6 +375,15 @@ export class PanelState {
 
   private mapToIssues<T>(items: T[], mapper: (item: T) => Issue): Issue[] {
     return items.map(mapper);
+  }
+
+  private getTopCauseType(breakdown: Record<RenderCause['type'], number>): RenderCause['type'] {
+    let winner: RenderCause['type'] = 'zone';
+    let max = 0;
+    for (const [type, count] of Object.entries(breakdown) as [RenderCause['type'], number][]) {
+      if (count > max) { winner = type; max = count; }
+    }
+    return winner;
   }
 
   private rankHotspots(stats: ComponentStats[]): ComponentHotspot[] {

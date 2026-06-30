@@ -20,6 +20,7 @@ import { SelectiveAnalyzer } from './selective-analyzer';
 import { TemplateExpressionTracker } from './template-expression-tracker';
 import { FreezeDetector } from './freeze-detector';
 import { ZonePollutionDetector } from './zone-pollution-detector';
+import { FlowTracker } from './flow-tracker';
 import { checkAngularVersion } from './version-check';
 
 /** Event name used by the content script to dispatch commands to the page script */
@@ -37,6 +38,7 @@ const selectiveAnalyzer = new SelectiveAnalyzer();
 const templateExpressionTracker = new TemplateExpressionTracker(null);
 const freezeDetector = new FreezeDetector();
 const zonePollutionDetector = ZonePollutionDetector.getInstance();
+const flowTracker = FlowTracker.getInstance();
 
 type InstrumentationStartCandidate = {
   component: string;
@@ -152,6 +154,7 @@ function handleStartTracking(): void {
   safeInvoke(() => performanceGuard.start());
   safeInvoke(() => freezeDetector.start());
   safeInvoke(() => zonePollutionDetector.start());
+  safeInvoke(() => flowTracker.start());
 
   // Instrument components for template expression tracking
   safeInvoke(() => {
@@ -199,6 +202,7 @@ function handleStopTracking(): void {
   performanceGuard.stop();
   freezeDetector.stop();
   zonePollutionDetector.stop();
+  flowTracker.stop();
   templateExpressionTracker.setEnabled(false);
   dispatchToContent('TRACKING_STOPPED', {
     timestamp: performance.now(),
@@ -231,6 +235,7 @@ function handleSelectComponent(payload: { name: string } | null): void {
 function handleClearData(): void {
   renderTracker.clearBuffer();
   zonePollutionDetector.clear();
+  flowTracker.clear();
   // LeakDetector doesn't expose a buffer clear — it tracks live components
   // TrackByDetector and OnPushEngine are on-demand analyzers, no persistent buffer
 }

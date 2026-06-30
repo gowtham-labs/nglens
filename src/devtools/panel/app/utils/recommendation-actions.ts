@@ -1,5 +1,5 @@
 import type { LeakEvent } from '../../../../types/leak-events';
-import type { ComponentHotspot } from '../../../../types/panel';
+import type { ComponentHotspot, ComponentStats } from '../../../../types/panel';
 import type { OnPushScore, TrackByIssue } from '../../../../types/recommendation-events';
 import type { RenderCause } from '../../../../types/render-events';
 import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
@@ -30,6 +30,7 @@ export interface RecommendationActionInput {
   hotspots: ComponentHotspot[];
   zonePollutionSources: PollutionSourceMetrics[];
   leakEvents: LeakEvent[];
+  componentStats?: ComponentStats[];
 }
 
 export function buildRecommendationActions(input: RecommendationActionInput): RecommendationAction[] {
@@ -45,6 +46,7 @@ export function buildRecommendationActions(input: RecommendationActionInput): Re
       .filter((hotspot) => hotspot.score >= 40)
       .map(hotspotAction),
     ...groupedMemoryActions(input.leakEvents),
+    ...renderDiagnosticActions(input.componentStats ?? []),
   ].sort((a, b) => {
     if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
     return kindPriority(a.kind) - kindPriority(b.kind);
@@ -291,4 +293,71 @@ function leakFix(type: LeakEvent['leakType']): string {
     case 'event-listener':
       return 'Remove the listener in the component cleanup path or use Renderer2/listener helpers that return cleanup functions.';
   }
+}
+
+function renderDiagnosticActions(stats: ComponentStats[]): RecommendationAction[] {
+  const actions: RecommendationAction[] = [];
+
+  for (const stat of stats) {
+    if (stat.renderCount < 3) continue;
+
+    const topCause = getTopCauseFromBreakdown(stat.causesBreakdown);
+
+    if (topCause === 'parent' && stat.renderCount >= 3) {
+      actions.push({
+        id: `render-cascade-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× from parent cascade`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 6 ? 'High' : 'Medium',
+        evidence: `This component re-renders every time its parent does, even when its own inputs haven't changed.`,
+        difficulty: 'Easy',
+        expectedGain: stat.renderCount >= 6 ? 'Large' : 'Medium',
+        suggestedFix: 'Add ChangeDetectionStrategy.OnPush to this component. It will only re-render when its @Input() references change or a signal it reads is written.',
+        rankScore: 75 + Math.min(stat.renderCount, 20),
+        snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
+      });
+    } else if (topCause === 'zone' && stat.renderCount >= 4) {
+      actions.push({
+        id: `render-zone-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× from async/timers`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 6 ? 'High' : 'Medium',
+        evidence: `Each setTimeout/setInterval/HTTP callback triggers a Zone.js change detection cycle that re-renders this component.`,
+        difficulty: 'Medium',
+        expectedGain: stat.renderCount >= 8 ? 'Large' : 'Medium',
+        suggestedFix: 'Use OnPush + Signals, or move timer/async logic outside Angular zone with NgZone.runOutsideAngular().',
+        rankScore: 70 + Math.min(stat.renderCount, 20),
+        snippet: `this.ngZone.runOutsideAngular(() => {\n  setInterval(() => {\n    // update state\n    this.ngZone.run(() => this.signal.set(newValue));\n  }, 5000);\n});`,
+      });
+    } else if (stat.renderCount >= 5) {
+      actions.push({
+        id: `render-excessive-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× excessively`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 8 ? 'High' : 'Heuristic',
+        evidence: `This component re-renders too frequently. Each re-render recalculates the template and diffs the DOM.`,
+        difficulty: 'Medium',
+        expectedGain: 'Medium',
+        suggestedFix: 'Use ChangeDetectionStrategy.OnPush and convert state to signals so Angular only marks this component dirty when its dependencies actually change.',
+        rankScore: 60 + Math.min(stat.renderCount, 20),
+      });
+    }
+  }
+
+  return actions;
+}
+
+function getTopCauseFromBreakdown(breakdown: Record<string, number>): string {
+  let winner = 'zone';
+  let max = 0;
+  for (const [type, count] of Object.entries(breakdown)) {
+    if (count > max) { winner = type; max = count; }
+  }
+  return winner;
 }

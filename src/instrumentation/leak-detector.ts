@@ -716,6 +716,9 @@ export class LeakDetector {
       if (this.isAlreadyTracked(element)) return;
 
       const componentName = component.constructor?.name ?? 'UnknownComponent';
+      // Skip minified/internal names — they produce useless leak reports
+      if (componentName.length <= 2 || componentName === 'UnknownComponent') return;
+
       const componentId = generateComponentId(componentName);
 
       // Mark element as tracked
@@ -751,6 +754,9 @@ export class LeakDetector {
       if (this.isAlreadyTracked(element)) return;
 
       const componentName = instance.constructor?.name ?? 'UnknownComponent';
+      // Skip minified/internal names
+      if (componentName.length <= 2 || componentName === 'UnknownComponent') return;
+
       const componentId = generateComponentId(componentName);
 
       this.markAsTracked(element, componentId);

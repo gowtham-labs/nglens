@@ -7,6 +7,7 @@ import {
   confidenceClass,
   difficultyClass,
   gainClass,
+  type ActionConfidence,
   type ActionKind,
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
@@ -17,7 +18,7 @@ interface ComponentGroup {
   actions: RecommendationAction[];
   topKind: ActionKind;
   totalCount: number;
-  highestConfidence: string;
+  highestConfidence: ActionConfidence;
 }
 
 @Component({
@@ -248,6 +249,7 @@ export class RecommendationsComponent {
     hotspots: this.state.componentHotspots(),
     zonePollutionSources: this.state.zonePollutionSources(),
     leakEvents: this.state.leakEvents(),
+    componentStats: this.state.componentStats(),
   }));
 
   readonly highConfidenceCount = computed(() =>
