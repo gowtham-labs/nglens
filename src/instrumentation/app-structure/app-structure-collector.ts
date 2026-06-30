@@ -46,6 +46,7 @@ import {
   detectPlainClasses,
   detectBootstrapConfig,
 } from './infrastructure';
+import { collectPerformanceDetections } from './performance-detections';
 export function collectAppStructure(): AppStructureData {
   const ng = (globalThis as any).ng;
 
@@ -123,6 +124,17 @@ export function collectAppStructure(): AppStructureData {
   const plainClasses = injector ? detectPlainClasses(injector, knownClassNames) : [];
   const bootstrapConfig = detectBootstrapConfig(injector, ng, rootEl, services, tokens);
 
+  // ── Phase 6: performance anti-pattern detections (all 18 items) ───────────
+  const performanceDetections = collectPerformanceDetections(
+    ng,
+    components,
+    directives,
+    pipes,
+    injector,
+    routes,
+    signalStateMap,
+  );
+
   // ── Post-processing: fill in package names for library entities ────────────
   // Entities extracted before their declaring module was walked have filePath=null.
   // _classNameToSource was populated during walkModuleDeclarations; use it now.
@@ -166,6 +178,7 @@ export function collectAppStructure(): AppStructureData {
       default: components.filter(c => c.changeDetection === 'Default').length,
       total: components.length,
     },
+    performanceDetections,
     collectedAt: Date.now(),
     angularVersion: document.querySelector('[ng-version]')?.getAttribute('ng-version') ?? null,
   };

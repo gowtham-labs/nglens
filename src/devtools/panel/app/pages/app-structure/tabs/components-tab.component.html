@@ -95,4 +95,255 @@
       </div>
     }
   }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Change Detection Performance                                          -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- CD Strategy Mismatches #8 -->
+  @if (cdMismatches().length) {
+    <div class="section-title mt-2">
+      ⚠ CD Strategy Mismatch
+      <span class="normal-case font-normal ml-1 text-gray-500">— OnPush child under Default parent; OnPush gains nothing</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Child (OnPush)</span>
+      <span class="col-hdr w-44">Parent (Default)</span>
+      <span class="col-hdr w-32">Child selector</span>
+      <span class="col-hdr flex-1">Parent selector</span>
+    </div>
+    @for (m of cdMismatches(); track m.childClassName) {
+      <div class="row">
+        <span class="w-44 font-mono text-green-300 truncate" [title]="m.childClassName">{{ m.childClassName }}</span>
+        <span class="w-44 font-mono text-gray-300 truncate" [title]="m.parentClassName">{{ m.parentClassName }}</span>
+        <span class="w-32 cell-dim font-mono truncate">{{ m.childSelector || '—' }}</span>
+        <span class="flex-1 cell-dim font-mono truncate">{{ m.parentSelector || '—' }}</span>
+      </div>
+    }
+  }
+
+  <!-- CD Ref Abuse #7 -->
+  @if (cdRefAbuse().length) {
+    <div class="section-title mt-2">
+      ⚠ detectChanges / markForCheck in Lifecycle Hooks
+      <span class="normal-case font-normal ml-1 text-gray-500">— causes redundant CD cycles on every hook call</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-28">CD method</span>
+      <span class="col-hdr flex-1">Called in hooks</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (a of cdRefAbuse(); track (a.className + a.method)) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="a.className">{{ a.className }}</span>
+        <span class="w-28"><span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ a.method }}()</span></span>
+        <span class="flex-1 chips">
+          @for (h of a.inHooks; track h) { <span class="chip text-amber-300">{{ h }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="a.filePath ?? ''">{{ shortPath(a.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- Heavy Lifecycle Hooks #4 -->
+  @if (heavyHooks().length) {
+    <div class="section-title mt-2">
+      ⚠ Heavy ngDoCheck / ngAfterViewChecked / ngAfterContentChecked
+      <span class="normal-case font-normal ml-1 text-gray-500">— run on every CD cycle</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">Hooks (body size)</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (h of heavyHooks(); track h.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="h.className">{{ h.className }}</span>
+        <span class="flex-1 chips">
+          @for (hook of h.hooks; track hook.name) {
+            <span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50" [title]="hook.name + ': ' + hook.bodyLength + ' chars'">
+              {{ hook.name }} <span class="ml-1 opacity-60">{{ hook.bodyLength }}c</span>
+            </span>
+          }
+        </span>
+        <span class="w-32 src-path truncate" [title]="h.filePath ?? ''">{{ shortPath(h.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- OnPush Mutation Risk #9 -->
+  @if (onPushRisks().length) {
+    <div class="section-title mt-2">
+      ⚠ OnPush + Object &#64;Input() — Mutation Risk
+      <span class="normal-case font-normal ml-1 text-gray-500">— in-place mutation bypasses change detection</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Object-like &#64;Input() names</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (r of onPushRisks(); track r.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="r.className">{{ r.className }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ r.selector || '—' }}</span>
+        <span class="flex-1 chips">
+          @for (inp of r.objectInputs; track inp) { <span class="chip text-green-400">&#64;{{ inp }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="r.filePath ?? ''">{{ shortPath(r.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Template & Rendering Performance                                      -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Large Lists #3 -->
+  @if (largeLists().length) {
+    <div class="section-title mt-2">
+      ⚠ Large *ngFor / &#64;for Without Virtual Scroll
+      <span class="normal-case font-normal ml-1 text-gray-500">— consider CDK virtual scrolling</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr w-24">Items</span>
+      <span class="col-hdr flex-1">Virtual scroll</span>
+    </div>
+    @for (l of largeLists(); track l.componentName) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="l.componentName">{{ l.componentName }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ l.selector || '—' }}</span>
+        <span class="w-24"><span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50">{{ l.estimatedItemCount }}</span></span>
+        <span class="flex-1">
+          @if (l.hasVirtualScroll) {
+            <span class="badge bg-green-900/50 text-green-300 border border-green-700/50">cdk-virtual-scroll ✓</span>
+          } @else {
+            <span class="badge bg-red-900/50 text-red-300 border border-red-700/50">no virtual scroll</span>
+          }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- Import Bloat #16 -->
+  @if (importBloat().length) {
+    <div class="section-title mt-2">
+      ⚠ Standalone Components Importing Full NgModules
+      <span class="normal-case font-normal ml-1 text-gray-500">— hurts tree-shaking; prefer individual imports</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Imported NgModules</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (b of importBloat(); track b.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="b.className">{{ b.className }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ b.selector || '—' }}</span>
+        <span class="flex-1 chips">
+          @for (m of b.moduleImports; track m) { <span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ m }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="b.filePath ?? ''">{{ shortPath(b.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- Defer Opportunities #10 -->
+  @if (deferOpps().length) {
+    <div class="section-title mt-2">
+      ⚡ &#64;defer Opportunities — Large Subtrees
+      <span class="normal-case font-normal ml-1 text-gray-500">— lazy-render below the fold or on interaction</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr w-20">Nodes</span>
+      <span class="col-hdr flex-1">Reason</span>
+    </div>
+    @for (d of deferOpps(); track d.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="d.className">{{ d.className }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ d.selector || '—' }}</span>
+        <span class="w-20"><span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">{{ d.subtreeNodeCount }}</span></span>
+        <span class="flex-1 cell-dim">{{ d.reason }}</span>
+      </div>
+    }
+  }
+
+  <!-- Animation Issues #17 -->
+  @if (animationIssues().length) {
+    <div class="section-title mt-2">
+      ⚠ Animations Using Layout-Triggering CSS Properties
+      <span class="normal-case font-normal ml-1 text-gray-500">— use transform/opacity for compositor performance</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Trigger(s)</span>
+      <span class="col-hdr flex-1">Layout-triggering properties</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (a of animationIssues(); track a.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="a.className">{{ a.className }}</span>
+        <span class="w-32 chips">
+          @for (t of a.triggerNames; track t) { <span class="badge bg-fuchsia-900/50 text-fuchsia-300 border border-fuchsia-700/50">{{ t }}</span> }
+        </span>
+        <span class="flex-1 chips">
+          @for (p of a.layoutTriggeringProps; track p) { <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ p }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="a.filePath ?? ''">{{ shortPath(a.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- Forms Mixing #13 -->
+  @if (formsMixing().length) {
+    <div class="section-title mt-2">
+      ⚠ Reactive + Template-Driven Forms Mixed in One Component
+      <span class="normal-case font-normal ml-1 text-gray-500">— pick one paradigm per component</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Paradigms</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (f of formsMixing(); track f.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="f.className">{{ f.className }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ f.selector || '—' }}</span>
+        <span class="flex-1 chips">
+          @if (f.usesReactiveForms) { <span class="badge bg-lime-900/50 text-lime-300 border border-lime-700/50">ReactiveFormsModule</span> }
+          @if (f.usesTemplateForms) { <span class="badge bg-cyan-900/50 text-cyan-300 border border-cyan-700/50">NgModel / FormsModule</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="f.filePath ?? ''">{{ shortPath(f.filePath) }}</span>
+      </div>
+    }
+  }
+
+  <!-- QueryList Overuse #14 -->
+  @if (queryListOveruse().length) {
+    <div class="section-title mt-2">
+      ⚠ &#64;ViewChildren / &#64;ContentChildren QueryList Properties
+      <span class="normal-case font-normal ml-1 text-gray-500">— .changes triggers CD on every list mutation</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">QueryList properties</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (q of queryListOveruse(); track q.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="q.className">{{ q.className }}</span>
+        <span class="flex-1 chips">
+          @for (p of q.queryListProperties; track p) { <span class="chip text-sky-400">{{ p }}</span> }
+        </span>
+        <span class="w-32 src-path truncate" [title]="q.filePath ?? ''">{{ shortPath(q.filePath) }}</span>
+      </div>
+    }
+  }
 </div>

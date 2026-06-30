@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
-import type { RouteRegistryEntry } from '../../../../../../types/app-structure';
+import type { RouteRegistryEntry, EagerLoadedRouteEntry } from '../../../../../../types/app-structure';
 import type { FlatRoute } from '../app-structure.types';
 import { filterRoutes, flattenRoutes } from './tab-utils';
 
@@ -17,6 +17,17 @@ export class RoutesTabComponent {
   private readonly state = inject(PanelState);
   readonly searchQuery = input('');
   readonly data = this.state.appStructure;
+
+  readonly eagerRoutes = computed<EagerLoadedRouteEntry[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.data()?.performanceDetections?.eagerLoadedRoutes ?? [];
+    return q
+      ? items.filter(i =>
+          i.absolutePath.toLowerCase().includes(q) ||
+          i.component.toLowerCase().includes(q),
+        )
+      : items;
+  });
 
   readonly filteredFlatRoutes = computed<FlatRoute[]>(() => {
     const q = this.searchQuery().toLowerCase();

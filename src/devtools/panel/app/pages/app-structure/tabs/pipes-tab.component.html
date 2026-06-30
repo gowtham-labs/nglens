@@ -20,4 +20,24 @@
     </div>
   }
   @if (!filteredPipes().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+
+  <!-- ── Impure Pipe Performance Issues ── -->
+  @if (impurePipeIssues().length) {
+    <div class="section-title mt-2">
+      ⚠ Impure Pipe Issues
+      <span class="normal-case font-normal ml-1 text-gray-500">— re-execute on every CD cycle; prefer pure pipes or memoization</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-40">Pipe name</span>
+      <span class="col-hdr w-48">Class</span>
+      <span class="col-hdr flex-1">File / Package</span>
+    </div>
+    @for (p of impurePipeIssues(); track p.className) {
+      <div class="row">
+        <span class="w-40 font-mono text-orange-300">{{ p.name }}</span>
+        <span class="w-48 cell-primary truncate">{{ p.className }}</span>
+        <span class="flex-1 min-w-0" [title]="p.filePath ?? ''" [ngClass]="isExternalPkg(p.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(p.filePath) }}</span>
+      </div>
+    }
+  }
 </div>

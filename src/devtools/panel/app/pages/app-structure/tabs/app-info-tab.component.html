@@ -248,6 +248,62 @@
     </div>
   }
 
+  <!-- ── Zoneless Readiness #11 ── -->
+  @if (zoneless(); as z) {
+    <div class="section-title">
+      Zoneless CD Migration Readiness
+      <span class="normal-case font-normal ml-1 text-gray-500">— signal coverage across user components</span>
+    </div>
+    <div class="grid grid-cols-3 gap-0">
+      <div class="info-card">
+        <div class="info-label">Zone mode</div>
+        <div class="info-value" [ngClass]="z.isZoneless ? 'text-green-300' : 'text-yellow-300'">
+          {{ z.isZoneless ? 'Zoneless ✓' : 'Zone.js' }}
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">Signal coverage</div>
+        <div class="info-value" [ngClass]="readinessColor(z.migrationReadiness)">
+          {{ z.signalCoverage }}%
+          <span class="text-gray-500 font-normal text-[10px] ml-1">({{ z.signalComponents }}/{{ z.totalComponents }} components)</span>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-label">Migration readiness</div>
+        <div class="info-value font-semibold" [ngClass]="readinessColor(z.migrationReadiness)">
+          {{ z.migrationReadiness }}
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── ExpressionChangedAfterChecked #12 ── -->
+  @if (exprChanged(); as ec) {
+    <div class="section-title">
+      ExpressionChangedAfterItHasBeenCheckedError
+      <span class="normal-case font-normal ml-1 text-gray-500">— intercepted from console.error since page load</span>
+    </div>
+    @if (ec.count === 0) {
+      <div class="px-3 py-2 text-[10px] text-gray-600 flex items-center gap-2">
+        <span class="text-green-600">✓</span>
+        No errors intercepted
+        @if (!ec.intercepting) {
+          <span class="text-gray-600">(interceptor not yet active — run a scan first)</span>
+        }
+      </div>
+    } @else {
+      <div class="px-3 py-2 flex flex-wrap items-center gap-2">
+        <span class="badge bg-red-900/50 text-red-300 border border-red-700/50">{{ ec.count }}× caught</span>
+        @for (comp of ec.components; track comp) {
+          <span class="badge bg-red-900/50 text-red-300 border border-red-700/50">{{ comp }}</span>
+        }
+        @if (!ec.components.length) {
+          <span class="cell-dim text-[10px]">Component name not extracted from error message</span>
+        }
+      </div>
+    }
+  }
+
   <!-- Libraries block -->
   <div class="section-title">Detected Libraries</div>
   @if (data()!.libraries.length) {

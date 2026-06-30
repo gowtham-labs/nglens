@@ -23,6 +23,9 @@ export class PipesTabComponent {
     return q ? items.filter(p => p.name.toLowerCase().includes(q) || p.className.toLowerCase().includes(q)) : items;
   });
 
+  /** Subset of filteredPipes that are impure — shown in the performance issues section */
+  readonly impurePipeIssues = computed(() => this.filteredPipes().filter(p => !p.pure));
+
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
 }

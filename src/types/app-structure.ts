@@ -239,6 +239,182 @@ export interface AppProviderEntry {
   category: AppProviderCategory;
 }
 
+// ─── Performance Detections (18 anti-patterns) ────────────────────────────────
+
+/** #1 — Pipe with pure: false; re-executes on every change detection cycle */
+export interface ImpurePipeEntry {
+  name: string;
+  className: string;
+  filePath: string | null;
+}
+
+/**
+ * #2 + #15 — @HostListener (or host binding) on a high-frequency DOM event
+ * (scroll, mousemove, resize, wheel …) without debounce/throttle.
+ * Covers both @HostListener decorators and programmatic Zone.js task sources.
+ */
+export interface HostListenerIssue {
+  className: string;
+  filePath: string | null;
+  entityType: 'component' | 'directive';
+  /** Detected high-frequency events e.g. ['scroll', 'resize'] */
+  events: string[];
+  /** Heuristic: method body contains debounce / throttle / Subject / auditTime */
+  hasDebounce: boolean;
+}
+
+/** #3 — *ngFor / @for rendering a large collection without CDK virtual scrolling */
+export interface LargeListDetection {
+  componentName: string;
+  selector: string;
+  estimatedItemCount: number;
+  /** True when a <cdk-virtual-scroll-viewport> exists anywhere on the page */
+  hasVirtualScroll: boolean;
+}
+
+/** #4 — ngDoCheck / ngAfterViewChecked / ngAfterContentChecked with non-trivial body */
+export interface HeavyLifecycleHookEntry {
+  className: string;
+  filePath: string | null;
+  hooks: Array<{ name: string; bodyLength: number }>;
+}
+
+/** #5 — Same service class provided at two or more injector levels (accidental duplication) */
+export interface DuplicateServiceEntry {
+  className: string;
+  /** Number of injector levels the token appears at */
+  injectorLevels: number;
+  filePath: string | null;
+}
+
+/** #6 — Route with a real component assigned (not lazy) that could be lazy-loaded */
+export interface EagerLoadedRouteEntry {
+  path: string;
+  absolutePath: string;
+  component: string;
+  /** Total flat descendant route count */
+  childRouteCount: number;
+}
+
+/** #7 — ChangeDetectorRef.detectChanges() or markForCheck() called inside lifecycle hooks */
+export interface CdRefAbuseEntry {
+  className: string;
+  filePath: string | null;
+  method: 'detectChanges' | 'markForCheck';
+  /** Lifecycle hook names where the call was detected */
+  inHooks: string[];
+}
+
+/** #8 — OnPush child component whose direct parent uses Default CD strategy */
+export interface CdStrategyMismatchEntry {
+  childClassName: string;
+  childSelector: string;
+  parentClassName: string;
+  parentSelector: string;
+}
+
+/** #9 — OnPush component with non-primitive @Input() that may be mutated in place */
+export interface OnPushInputMutationRisk {
+  className: string;
+  filePath: string | null;
+  selector: string;
+  /** Traditional (non-signal) inputs whose names suggest an object or array */
+  objectInputs: string[];
+}
+
+/** #10 — Large component subtree that could benefit from @defer (Angular 17+) */
+export interface DeferOpportunityEntry {
+  className: string;
+  selector: string;
+  filePath: string | null;
+  subtreeNodeCount: number;
+  reason: string;
+}
+
+/** #11 — Zoneless change detection migration readiness */
+export interface ZonelessReadinessEntry {
+  isZoneless: boolean;
+  /** Percentage (0–100) of user components that already use Signals */
+  signalCoverage: number;
+  totalComponents: number;
+  signalComponents: number;
+  migrationReadiness: 'ready' | 'partial' | 'not-ready';
+}
+
+/** #12 — ExpressionChangedAfterItHasBeenCheckedError captured at runtime */
+export interface ExpressionChangedErrorEntry {
+  count: number;
+  /** Component names extracted from Angular error messages */
+  components: string[];
+  /** Whether the console.error interceptor is currently active */
+  intercepting: boolean;
+}
+
+/** #13 — Component that mixes ReactiveFormsModule and template-driven NgModel in one view */
+export interface FormsMixingEntry {
+  className: string;
+  filePath: string | null;
+  selector: string;
+  usesReactiveForms: boolean;
+  usesTemplateForms: boolean;
+}
+
+/** #14 — Component with @ViewChildren / @ContentChildren QueryList properties */
+export interface QueryListOveruseEntry {
+  className: string;
+  filePath: string | null;
+  queryListProperties: string[];
+}
+
+/** #16 — Standalone component importing full NgModules instead of individual components */
+export interface ImportBloatEntry {
+  className: string;
+  filePath: string | null;
+  selector: string;
+  /** NgModule class names imported (should be individual standalone components instead) */
+  moduleImports: string[];
+}
+
+/** #17 — Angular animation trigger animating layout-causing CSS properties */
+export interface AnimationIssueEntry {
+  className: string;
+  filePath: string | null;
+  selector: string;
+  /** e.g. ['width', 'height', 'margin'] */
+  layoutTriggeringProps: string[];
+  triggerNames: string[];
+}
+
+/** #18 — APP_INITIALIZER registration summary */
+export interface AppInitializerInfoEntry {
+  count: number;
+  /** Function names extracted from registered initializers */
+  names: string[];
+  /** True when any initializer returns a Promise or Observable */
+  hasAsyncInitializers: boolean;
+}
+
+/** Aggregate of all 18 performance detection results */
+export interface PerformanceDetections {
+  impurePipes: ImpurePipeEntry[];                           // #1
+  hostListenerIssues: HostListenerIssue[];                  // #2 + #15 (combined)
+  largeListDetections: LargeListDetection[];                // #3
+  heavyLifecycleHooks: HeavyLifecycleHookEntry[];           // #4
+  duplicateServices: DuplicateServiceEntry[];               // #5
+  eagerLoadedRoutes: EagerLoadedRouteEntry[];               // #6
+  cdRefAbuse: CdRefAbuseEntry[];                           // #7
+  cdStrategyMismatches: CdStrategyMismatchEntry[];          // #8
+  onPushInputMutationRisks: OnPushInputMutationRisk[];      // #9
+  deferOpportunities: DeferOpportunityEntry[];              // #10
+  zonelessReadiness: ZonelessReadinessEntry;                // #11
+  expressionChangedErrors: ExpressionChangedErrorEntry;     // #12
+  formsMixing: FormsMixingEntry[];                          // #13
+  queryListOveruse: QueryListOveruseEntry[];                // #14
+  importBloat: ImportBloatEntry[];                          // #16
+  animationIssues: AnimationIssueEntry[];                   // #17
+  appInitializerInfo: AppInitializerInfoEntry;              // #18
+}
+
 // ─── Root Data Object ─────────────────────────────────────────────────────────
 
 export interface AppStructureData {
@@ -266,6 +442,8 @@ export interface AppStructureData {
   routerInfo: RouterInfo | null;
   /** Quick breakdown of change detection strategies across all components */
   changeDetectionSummary: { onPush: number; default: number; total: number };
+  /** All 18 performance anti-pattern detections */
+  performanceDetections: PerformanceDetections;
   collectedAt: number;
   angularVersion: string | null;
 }

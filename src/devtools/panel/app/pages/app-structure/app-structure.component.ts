@@ -56,19 +56,19 @@ export class AppStructureComponent implements OnInit {
   readonly searchQuery = signal('');
 
   readonly tabs: Array<{ id: RegistryTab; label: string; icon: string; count: () => number }> = [
-    { id: 'app',          label: 'App Info',    icon: '🏠', count: computed(() => 0) },
-    { id: 'components',   label: 'Components',  icon: '◈',  count: computed(() => this.data()?.components.length   ?? 0) },
-    { id: 'directives',   label: 'Directives',  icon: '◇',  count: computed(() => this.data()?.directives.length   ?? 0) },
-    { id: 'pipes',        label: 'Pipes',        icon: '|>', count: computed(() => this.data()?.pipes.length        ?? 0) },
-    { id: 'services',     label: 'Services',     icon: '⬡',  count: computed(() => this.data()?.services.length    ?? 0) },
-    { id: 'modules',      label: 'Modules',      icon: '⬢',  count: computed(() => this.data()?.modules.length     ?? 0) },
-    { id: 'routes',       label: 'Routes',       icon: '↗',  count: computed(() => this.countRoutes(this.data()?.routes ?? [])) },
-    { id: 'guards',       label: 'Guards',       icon: '🛡', count: computed(() => this.data()?.guards.length       ?? 0) },
-    { id: 'interceptors', label: 'Interceptors', icon: '⟳', count: computed(() => this.data()?.interceptors.length ?? 0) },
-    { id: 'resolvers',    label: 'Resolvers',    icon: '↺', count: computed(() => this.data()?.resolvers.length    ?? 0) },
-    { id: 'classes',      label: 'Classes',      icon: '📦', count: computed(() => this.data()?.plainClasses.length ?? 0) },
-    { id: 'tokens',       label: 'Tokens',       icon: '🔑', count: computed(() => this.data()?.tokens.length      ?? 0) },
-    { id: 'app-config',   label: 'App Config',   icon: '⚙️',  count: computed(() => this.data()?.appProviders.length ?? 0) },
+    { id: 'app',          label: 'App Info',     icon: '🏠', count: computed(() => 0) },
+    { id: 'components',   label: 'Components',   icon: '◈',  count: computed(() => this.data()?.components.length    ?? 0) },
+    { id: 'directives',   label: 'Directives',   icon: '◇',  count: computed(() => this.data()?.directives.length    ?? 0) },
+    { id: 'pipes',        label: 'Pipes',         icon: '|>', count: computed(() => this.data()?.pipes.length         ?? 0) },
+    { id: 'services',     label: 'Services',      icon: '⬡',  count: computed(() => this.data()?.services.length     ?? 0) },
+    { id: 'modules',      label: 'Modules',       icon: '⬢',  count: computed(() => this.data()?.modules.length      ?? 0) },
+    { id: 'routes',       label: 'Routes',        icon: '↗',  count: computed(() => this.countRoutes(this.data()?.routes ?? [])) },
+    { id: 'guards',       label: 'Guards',        icon: '🛡', count: computed(() => this.data()?.guards.length        ?? 0) },
+    { id: 'interceptors', label: 'Interceptors',  icon: '⟳', count: computed(() => this.data()?.interceptors.length  ?? 0) },
+    { id: 'resolvers',    label: 'Resolvers',     icon: '↺', count: computed(() => this.data()?.resolvers.length     ?? 0) },
+    { id: 'classes',      label: 'Classes',       icon: '📦', count: computed(() => this.data()?.plainClasses.length  ?? 0) },
+    { id: 'tokens',       label: 'Tokens',        icon: '🔑', count: computed(() => this.data()?.tokens.length        ?? 0) },
+    { id: 'app-config',   label: 'App Config',    icon: '⚙️',  count: computed(() => this.data()?.appProviders.length  ?? 0) },
   ];
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────

@@ -79,4 +79,24 @@
       </div>
     }
   }
+
+  <!-- ── Eager Routes That Could Be Lazy #6 ── -->
+  @if (eagerRoutes().length) {
+    <div class="section-title -mx-2 mb-1 mt-3">
+      ⚠ Eagerly Loaded Routes
+      <span class="normal-case font-normal ml-1 text-gray-500">— consider loadComponent / loadChildren for lazy loading</span>
+    </div>
+    <div class="flex gap-2 px-1 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr flex-1">Absolute path</span>
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-24">Child routes</span>
+    </div>
+    @for (r of eagerRoutes(); track r.absolutePath) {
+      <div class="flex items-center gap-2 px-1 py-1.5 border-b border-gray-800/50 text-xs">
+        <span class="flex-1 route-path truncate" [title]="r.absolutePath">{{ r.absolutePath }}</span>
+        <span class="w-48 font-mono text-gray-300 truncate" [title]="r.component">{{ r.component }}</span>
+        <span class="w-24"><span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ r.childRouteCount }} children</span></span>
+      </div>
+    }
+  }
 </div>

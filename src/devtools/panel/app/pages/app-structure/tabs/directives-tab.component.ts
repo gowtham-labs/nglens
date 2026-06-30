@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
-import type { DirectiveRegistryEntry } from '../../../../../../types/app-structure';
+import type { DirectiveRegistryEntry, HostListenerIssue } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
 @Component({
@@ -25,4 +25,16 @@ export class DirectivesTabComponent {
 
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
+
+  /** High-frequency &#64;HostListener issues for components AND directives */
+  readonly hostListeners = computed<HostListenerIssue[]>(() => {
+    const q = this.searchQuery().toLowerCase();
+    const items = this.data()?.performanceDetections?.hostListenerIssues ?? [];
+    return q
+      ? items.filter(i =>
+          i.className.toLowerCase().includes(q) ||
+          i.events.some(e => e.includes(q)),
+        )
+      : items;
+  });
 }
