@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
+import { CommandService } from '../../../services/command.service';
 import type { PlainClassEntry } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
@@ -14,6 +15,7 @@ import { isExternalPkg, shortPath } from './tab-utils';
 })
 export class ClassesTabComponent {
   private readonly state = inject(PanelState);
+  private readonly cmd = inject(CommandService);
   readonly searchQuery = input('');
   readonly data = this.state.appStructure;
 
@@ -31,4 +33,8 @@ export class ClassesTabComponent {
 
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
+
+  openFile(className: string, filePath: string | null): void {
+    this.cmd.openClassFileInSources(className, filePath, 'class');
+  }
 }

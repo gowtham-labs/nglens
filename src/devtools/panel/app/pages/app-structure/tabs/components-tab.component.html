@@ -45,10 +45,22 @@
         @if (c.signalInputs.length || c.modelInputs.length) {
           <div class="chips mt-0.5">
             @if (c.signalInputs.length) {
-              <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" [title]="'input(): ' + c.signalInputs.join(', ')">↩{{ c.signalInputs.length }}</span>
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
+                  [title]="'input(): ' + c.signalInputs.join(', ')"
+                  (click)="openFile(c.filePath, c.className)">↩{{ c.signalInputs.length }}</button>
+              } @else {
+                <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" [title]="'input(): ' + c.signalInputs.join(', ')">↩{{ c.signalInputs.length }}</span>
+              }
             }
             @if (c.modelInputs.length) {
-              <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" [title]="'model(): ' + c.modelInputs.join(', ')">⇄{{ c.modelInputs.length }}</span>
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
+                  [title]="'model(): ' + c.modelInputs.join(', ')"
+                  (click)="openFile(c.filePath, c.className)">⇄{{ c.modelInputs.length }}</button>
+              } @else {
+                <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" [title]="'model(): ' + c.modelInputs.join(', ')">⇄{{ c.modelInputs.length }}</span>
+              }
             }
           </div>
         }
@@ -59,15 +71,40 @@
       <span class="flex-1 min-w-0">
         @if (c.inputs.length || c.outputs.length) {
           <div class="chips">
-            @for (inp of c.inputs.slice(0, 5); track inp) { <span class="chip text-green-400">&#64;{{ inp }}</span> }
-            @for (out of c.outputs.slice(0, 4); track out) { <span class="chip text-amber-400">{{ out }}</span> }
+            @for (inp of c.inputs.slice(0, 5); track inp) {
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="chip text-green-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Jump to @Input ' + inp + ' in Sources'"
+                  (click)="openProperty(c.filePath, inp, c.className)">&#64;{{ inp }}</button>
+              } @else {
+                <span class="chip text-green-400">&#64;{{ inp }}</span>
+              }
+            }
+            @for (out of c.outputs.slice(0, 4); track out) {
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="chip text-amber-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Jump to @Output ' + out + ' in Sources'"
+                  (click)="openProperty(c.filePath, out, c.className)">{{ out }}</button>
+              } @else {
+                <span class="chip text-amber-400">{{ out }}</span>
+              }
+            }
             @if (c.inputs.length + c.outputs.length > 9) {
               <span class="cell-dim">+{{ c.inputs.length + c.outputs.length - 9 }}</span>
             }
           </div>
         } @else { <span class="cell-dim">—</span> }
       </span>
-      <span class="w-32 flex-shrink-0 min-w-0" [title]="c.filePath ?? ''" [ngClass]="isExternalPkg(c.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(c.filePath) }}</span>
+      <span class="w-32 flex-shrink-0 min-w-0">
+        @if (c.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(c.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors text-left truncate block max-w-full'"
+            [title]="'Open in Sources: ' + c.filePath"
+            (click)="openFile(c.filePath, c.className)">{{ shortPath(c.filePath) }}</button>
+        } @else {
+          <span class="cell-dim">—</span>
+        }
+      </span>
     </div>
   }
   @if (!filteredComponents().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
@@ -88,7 +125,13 @@
         <div class="flex-1 min-w-0">
           <div class="chips">
             @for (m of c.modelInputs; track m) {
-              <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" title="model()">⇄ {{ m }}</span>
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
+                  [title]="'Jump to model() property ' + m + ' in Sources'"
+                  (click)="openProperty(c.filePath, m, c.className)">⇄ {{ m }}</button>
+              } @else {
+                <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50">⇄ {{ m }}</span>
+              }
             }
           </div>
         </div>
@@ -141,7 +184,14 @@
         <span class="flex-1 chips">
           @for (h of a.inHooks; track h) { <span class="chip text-amber-300">{{ h }}</span> }
         </span>
-        <span class="w-32 src-path truncate" [title]="a.filePath ?? ''">{{ shortPath(a.filePath) }}</span>
+        @if (a.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(a.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + a.filePath"
+            (click)="openFile(a.filePath, a.className)">{{ shortPath(a.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -167,7 +217,14 @@
             </span>
           }
         </span>
-        <span class="w-32 src-path truncate" [title]="h.filePath ?? ''">{{ shortPath(h.filePath) }}</span>
+        @if (h.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(h.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + h.filePath"
+            (click)="openFile(h.filePath, h.className)">{{ shortPath(h.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -189,9 +246,20 @@
         <span class="w-48 cell-primary truncate" [title]="r.className">{{ r.className }}</span>
         <span class="w-32 font-mono text-gray-400 truncate">{{ r.selector || '—' }}</span>
         <span class="flex-1 chips">
-          @for (inp of r.objectInputs; track inp) { <span class="chip text-green-400">&#64;{{ inp }}</span> }
+          @for (inp of r.objectInputs; track inp) {
+            <button type="button" class="chip text-green-400 hover:text-indigo-400 transition-colors"
+              [title]="'Jump to @Input ' + inp"
+              (click)="openProperty(r.filePath, inp, r.className)">&#64;{{ inp }}</button>
+          }
         </span>
-        <span class="w-32 src-path truncate" [title]="r.filePath ?? ''">{{ shortPath(r.filePath) }}</span>
+        @if (r.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(r.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + r.filePath"
+            (click)="openFile(r.filePath, r.className)">{{ shortPath(r.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -247,7 +315,14 @@
         <span class="flex-1 chips">
           @for (m of b.moduleImports; track m) { <span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ m }}</span> }
         </span>
-        <span class="w-32 src-path truncate" [title]="b.filePath ?? ''">{{ shortPath(b.filePath) }}</span>
+        @if (b.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(b.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + b.filePath"
+            (click)="openFile(b.filePath, b.className)">{{ shortPath(b.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -295,7 +370,14 @@
         <span class="flex-1 chips">
           @for (p of a.layoutTriggeringProps; track p) { <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ p }}</span> }
         </span>
-        <span class="w-32 src-path truncate" [title]="a.filePath ?? ''">{{ shortPath(a.filePath) }}</span>
+        @if (a.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(a.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + a.filePath"
+            (click)="openFile(a.filePath, a.className)">{{ shortPath(a.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -320,7 +402,14 @@
           @if (f.usesReactiveForms) { <span class="badge bg-lime-900/50 text-lime-300 border border-lime-700/50">ReactiveFormsModule</span> }
           @if (f.usesTemplateForms) { <span class="badge bg-cyan-900/50 text-cyan-300 border border-cyan-700/50">NgModel / FormsModule</span> }
         </span>
-        <span class="w-32 src-path truncate" [title]="f.filePath ?? ''">{{ shortPath(f.filePath) }}</span>
+        @if (f.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(f.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + f.filePath"
+            (click)="openFile(f.filePath, f.className)">{{ shortPath(f.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -340,9 +429,20 @@
       <div class="row">
         <span class="w-52 cell-primary truncate" [title]="q.className">{{ q.className }}</span>
         <span class="flex-1 chips">
-          @for (p of q.queryListProperties; track p) { <span class="chip text-sky-400">{{ p }}</span> }
+          @for (p of q.queryListProperties; track p) {
+            <button type="button" class="chip text-sky-400 hover:text-indigo-400 transition-colors"
+              [title]="'Jump to QueryList property ' + p"
+              (click)="openProperty(q.filePath, p, q.className)">{{ p }}</button>
+          }
         </span>
-        <span class="w-32 src-path truncate" [title]="q.filePath ?? ''">{{ shortPath(q.filePath) }}</span>
+        @if (q.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(q.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + q.filePath"
+            (click)="openFile(q.filePath, q.className)">{{ shortPath(q.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -364,9 +464,20 @@
         <span class="w-44 cell-primary truncate" [title]="t.className">{{ t.className }}</span>
         <span class="w-28 text-xs text-gray-400 truncate" [title]="t.selector">{{ t.selector }}</span>
         <span class="flex-1 chips">
-          @for (m of t.calledMethods; track m) { <span class="chip text-amber-400">{{ m }}()</span> }
+          @for (m of t.calledMethods; track m) {
+            <button type="button" class="chip text-amber-400 hover:text-indigo-400 transition-colors"
+              [title]="'Jump to method ' + m"
+              (click)="openProperty(t.filePath, m, t.className)">{{ m }}()</button>
+          }
         </span>
-        <span class="w-32 src-path truncate" [title]="t.filePath ?? ''">{{ shortPath(t.filePath) }}</span>
+        @if (t.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(t.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + t.filePath"
+            (click)="openFile(t.filePath, t.className)">{{ shortPath(t.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -386,7 +497,14 @@
       <div class="row">
         <span class="w-52 cell-primary truncate" [title]="n.className">{{ n.className }}</span>
         <span class="w-36 text-xs text-gray-400 truncate" [title]="n.selector">{{ n.selector }}</span>
-        <span class="flex-1 src-path truncate" [title]="n.filePath ?? ''">{{ shortPath(n.filePath) }}</span>
+        @if (n.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(n.filePath) ? 'flex-1 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'flex-1 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + n.filePath"
+            (click)="openFile(n.filePath, n.className)">{{ shortPath(n.filePath) }}</button>
+        } @else {
+          <span class="flex-1 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -416,7 +534,14 @@
             <span class="badge-error">missing</span>
           }
         </span>
-        <span class="flex-1 src-path truncate" [title]="s.filePath ?? ''">{{ shortPath(s.filePath) }}</span>
+        @if (s.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(s.filePath) ? 'flex-1 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'flex-1 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + s.filePath"
+            (click)="openFile(s.filePath, s.className)">{{ shortPath(s.filePath) }}</button>
+        } @else {
+          <span class="flex-1 cell-dim">—</span>
+        }
       </div>
     }
   }
@@ -464,7 +589,14 @@
         <span class="flex-1 chips">
           @for (p of d.patterns; track p) { <span class="chip text-orange-400">{{ p }}</span> }
         </span>
-        <span class="w-32 src-path truncate" [title]="d.filePath ?? ''">{{ shortPath(d.filePath) }}</span>
+        @if (d.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(d.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + d.filePath"
+            (click)="openFile(d.filePath, d.className)">{{ shortPath(d.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
       </div>
     }
   }

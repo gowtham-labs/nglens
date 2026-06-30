@@ -20,7 +20,16 @@
           </div>
         } @else { <span class="cell-dim">—</span> }
       </span>
-      <span class="w-32 flex-shrink-0 min-w-0" [title]="d.filePath ?? ''" [ngClass]="isExternalPkg(d.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(d.filePath) }}</span>
+      <span class="w-32 flex-shrink-0 min-w-0">
+        @if (d.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(d.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+            [title]="'Open in Sources: ' + d.filePath"
+            (click)="openFile(d.className, d.filePath)">{{ shortPath(d.filePath) }}</button>
+        } @else {
+          <span class="cell-dim">—</span>
+        }
+      </span>
     </div>
   }
   @if (!filteredDirectives().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }

@@ -4,8 +4,21 @@ import type { FlatRoute } from '../app-structure.types';
 export function isExternalPkg(path: string | null): boolean {
   if (!path) return false;
   if (path.includes('node_modules/')) return true;
-  return !path.startsWith('/') && !path.startsWith('./') &&
-         !path.includes('.ts') && !path.includes('.js') && !path.includes('.mjs');
+  // Scoped npm package paths, e.g. @angular/material/button/button.component.ts
+  if (path.startsWith('@')) return true;
+  // Bare package name or unscoped package path (no leading /, ./, or Windows drive letter)
+  return !path.startsWith('/') && !path.startsWith('./') && !/^[A-Za-z]:[/\\]/.test(path);
+}
+
+/**
+ * True when `path` is a bare npm package name (no file extension), e.g. `'@angular/core'`
+ * or `'rxjs'`. Returns false for null (unknown origin) and for any path that carries a
+ * file extension — including node_modules absolute paths — because those can potentially
+ * be opened in DevTools Sources.
+ */
+export function isPackageOnly(path: string | null): boolean {
+  if (!path) return false;
+  return !path.includes('.ts') && !path.includes('.js') && !path.includes('.mjs');
 }
 
 export function shortPath(path: string | null): string {

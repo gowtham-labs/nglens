@@ -16,7 +16,16 @@
             @if (g.functional) { <span class="badge bg-gray-700 text-gray-300 border border-gray-600">fn</span> }
           </div>
         </span>
-        <span class="w-32 flex-shrink-0 min-w-0" [title]="g.filePath ?? ''" [ngClass]="isExternalPkg(g.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(g.filePath) }}</span>
+        <span class="w-32 flex-shrink-0 min-w-0">
+          @if (g.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(g.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + g.filePath"
+              (click)="openFile(g.className, g.filePath)">{{ shortPath(g.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
         <span class="flex-1 min-w-0">
           <div class="chips">
             @for (r of g.routes.slice(0, 6); track r) { <span class="chip route-path text-blue-300">{{ r }}</span> }

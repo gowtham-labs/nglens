@@ -24,7 +24,16 @@
           @if (s.roles.includes('resolver'))    { <span class="tag-resolver">resolver</span> }
         </div>
       </span>
-      <span class="flex-1 min-w-0" [title]="s.filePath ?? ''" [ngClass]="isExternalPkg(s.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(s.filePath) }}</span>
+      <span class="flex-1 min-w-0">
+        @if (s.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(s.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+            [title]="'Open in Sources: ' + s.filePath"
+            (click)="openFile(s.className, s.filePath)">{{ shortPath(s.filePath) }}</button>
+        } @else {
+          <span class="cell-dim">—</span>
+        }
+      </span>
     </div>
   }
   @if (!filteredServices().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
@@ -44,7 +53,16 @@
       <div class="row">
         <span class="flex-1 cell-primary truncate" [title]="s.className">{{ s.className }}</span>
         <span class="w-32"><span class="badge bg-red-900/50 text-red-300 border border-red-700/50">{{ s.injectorLevels }} levels</span></span>
-        <span class="w-32 src-path truncate" [title]="s.filePath ?? ''" [ngClass]="isExternalPkg(s.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(s.filePath) }}</span>
+        <span class="w-32">
+          @if (s.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(s.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + s.filePath"
+              (click)="openFile(s.className, s.filePath)">{{ shortPath(s.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
       </div>
     }
   }
@@ -84,7 +102,16 @@
     @for (s of providedInAny(); track s.className) {
       <div class="row">
         <span class="flex-1 cell-primary truncate" [title]="s.className">{{ s.className }}</span>
-        <span class="w-48 src-path truncate" [title]="s.filePath ?? ''">{{ shortPath(s.filePath) }}</span>
+        <span class="w-48">
+          @if (s.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(s.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + s.filePath"
+              (click)="openFile(s.className, s.filePath)">{{ shortPath(s.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
       </div>
     }
   }

@@ -22,12 +22,10 @@
           }
         </span>
         <span class="flex-1 min-w-0">
-          @if (isExternalPkg(i.filePath)) {
-            <span [title]="i.filePath ?? ''" class="pkg-badge">{{ shortPath(i.filePath) }}</span>
-          } @else if (i.filePath) {
+          @if (i.filePath) {
             <button
-              class="src-path hover:text-indigo-400 transition-colors text-left truncate max-w-full block"
-              [title]="'Open ' + i.filePath + ' in Sources'"
+              [class]="isExternalPkg(i.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 transition-colors text-left truncate block w-full'"
+              [title]="'Open in Sources: ' + i.filePath"
               (click)="openInSources(i)">
               {{ shortPath(i.filePath) }}
             </button>

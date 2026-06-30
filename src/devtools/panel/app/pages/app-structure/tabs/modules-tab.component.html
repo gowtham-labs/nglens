@@ -4,7 +4,16 @@
       <span class="tag-module">NgModule</span>
       <span class="text-xs font-mono font-medium text-gray-100">{{ m.className }}</span>
       @if (m.filePath) {
-        <span class="max-w-xs min-w-0" [title]="m.filePath" [ngClass]="isExternalPkg(m.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(m.filePath) }}</span>
+        <span class="max-w-xs min-w-0">
+          @if (m.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(m.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + m.filePath"
+              (click)="openFile(m.className, m.filePath)">{{ shortPath(m.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
       }
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">

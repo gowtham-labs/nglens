@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
+import { CommandService } from '../../../services/command.service';
 import type { ServiceRegistryEntry, DuplicateServiceEntry, ProvidedInAnyEntry } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
@@ -14,6 +15,7 @@ import { isExternalPkg, shortPath } from './tab-utils';
 })
 export class ServicesTabComponent {
   private readonly state = inject(PanelState);
+  private readonly cmd = inject(CommandService);
   readonly searchQuery = input('');
   readonly data = this.state.appStructure;
 
@@ -25,6 +27,10 @@ export class ServicesTabComponent {
 
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
+
+  openFile(className: string, filePath: string | null): void {
+    this.cmd.openClassFileInSources(className, filePath, 'service');
+  }
 
   readonly duplicateServices = computed<DuplicateServiceEntry[]>(() => {
     const q = this.searchQuery().toLowerCase();

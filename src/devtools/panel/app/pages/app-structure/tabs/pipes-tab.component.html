@@ -16,7 +16,16 @@
         @if (p.pure) { <span class="tag-pure">pure</span> }
         @else { <span class="tag-impure">impure</span> }
       </span>
-      <span class="flex-1 min-w-0" [title]="p.filePath ?? ''" [ngClass]="isExternalPkg(p.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(p.filePath) }}</span>
+      <span class="flex-1 min-w-0">
+        @if (p.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(p.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+            [title]="'Open in Sources: ' + p.filePath"
+            (click)="openFile(p.className, p.filePath)">{{ shortPath(p.filePath) }}</button>
+        } @else {
+          <span class="cell-dim">—</span>
+        }
+      </span>
     </div>
   }
   @if (!filteredPipes().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
@@ -36,7 +45,16 @@
       <div class="row">
         <span class="w-40 font-mono text-orange-300">{{ p.name }}</span>
         <span class="w-48 cell-primary truncate">{{ p.className }}</span>
-        <span class="flex-1 min-w-0" [title]="p.filePath ?? ''" [ngClass]="isExternalPkg(p.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(p.filePath) }}</span>
+        <span class="flex-1 min-w-0">
+          @if (p.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(p.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + p.filePath"
+              (click)="openFile(p.className, p.filePath)">{{ shortPath(p.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
       </div>
     }
   }

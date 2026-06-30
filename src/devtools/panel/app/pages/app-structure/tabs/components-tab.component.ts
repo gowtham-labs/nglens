@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
+import { CommandService } from '../../../services/command.service';
 import type {
   ComponentRegistryEntry, SignalStateEntry,
   CdStrategyMismatchEntry, CdRefAbuseEntry, HeavyLifecycleHookEntry, OnPushInputMutationRisk,
@@ -9,7 +10,7 @@ import type {
   TemplateFunctionCallEntry, NgForWithoutTrackByEntry, SubscriptionLeakEntry,
   DeepNestingEntry, DirectDomManipulationEntry,
 } from '../../../../../../types/app-structure';
-import { isExternalPkg, shortPath } from './tab-utils';
+import { isExternalPkg, isPackageOnly, shortPath } from './tab-utils';
 
 @Component({
   selector: 'app-components-tab',
@@ -21,6 +22,7 @@ import { isExternalPkg, shortPath } from './tab-utils';
 })
 export class ComponentsTabComponent {
   private readonly state = inject(PanelState);
+  private readonly cmd = inject(CommandService);
   readonly searchQuery = input('');
 
   readonly data = this.state.appStructure;
@@ -49,6 +51,7 @@ export class ComponentsTabComponent {
   });
 
   readonly isExternalPkg = isExternalPkg;
+  readonly isPackageOnly = isPackageOnly;
   readonly shortPath = shortPath;
 
   /** Shared accessor for performance detections */
@@ -150,6 +153,19 @@ export class ComponentsTabComponent {
     const items = this.pd()?.directDomManipulation ?? [];
     return q ? items.filter(i => i.className.toLowerCase().includes(q)) : items;
   });
+
+  /** Opens the component source file in the DevTools Sources panel. */
+  openFile(filePath: string | null, className: string): void {
+    this.cmd.openClassFileInSources(className, filePath, 'component');
+  }
+
+  /**
+   * Opens the source file at the line where `propName` is first declared.
+   * Falls back to the file top when the property cannot be located.
+   */
+  openProperty(filePath: string | null, propName: string, className: string): void {
+    this.cmd.openPropertyInSources(filePath, propName, className);
+  }
 
   /** Formats signal property names for a tooltip, labelling underscore-prefixed ones as private. */
   signalTooltip(names: string[]): string {

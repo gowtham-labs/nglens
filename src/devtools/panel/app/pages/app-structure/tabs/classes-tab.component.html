@@ -16,7 +16,16 @@
             {{ c.source }}
           </span>
         </span>
-        <span class="flex-1 min-w-0" [title]="c.filePath ?? ''" [ngClass]="isExternalPkg(c.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(c.filePath) }}</span>
+        <span class="flex-1 min-w-0">
+          @if (c.filePath) {
+            <button type="button"
+              [class]="isExternalPkg(c.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
+              [title]="'Open in Sources: ' + c.filePath"
+              (click)="openFile(c.className, c.filePath)">{{ shortPath(c.filePath) }}</button>
+          } @else {
+            <span class="cell-dim">—</span>
+          }
+        </span>
       </div>
     }
   } @else {

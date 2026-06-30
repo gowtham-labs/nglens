@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
-import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
+import { CommandService } from '../../../services/command.service';
 import type { PipeRegistryEntry } from '../../../../../../types/app-structure';
 import { isExternalPkg, shortPath } from './tab-utils';
 
@@ -8,12 +8,13 @@ import { isExternalPkg, shortPath } from './tab-utils';
   selector: 'app-pipes-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
+  imports: [],
   templateUrl: './pipes-tab.component.html',
   styleUrl: '../app-structure.component.css',
 })
 export class PipesTabComponent {
   private readonly state = inject(PanelState);
+  private readonly cmd = inject(CommandService);
   readonly searchQuery = input('');
   readonly data = this.state.appStructure;
 
@@ -28,4 +29,8 @@ export class PipesTabComponent {
 
   readonly isExternalPkg = isExternalPkg;
   readonly shortPath = shortPath;
+
+  openFile(className: string, filePath: string | null): void {
+    this.cmd.openClassFileInSources(className, filePath, 'pipe');
+  }
 }
