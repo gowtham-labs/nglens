@@ -248,8 +248,8 @@ export class RenderTracker {
         try {
           const component = ng.getComponent(el);
           if (component) {
-            const name = component.constructor?.name ?? '';
-            if (!isInternalName(name)) {
+            const name = this.resolveComponentName(component, el);
+            if (name && !isInternalName(name)) {
               this.componentElements.set(el, name);
             }
             continue;
@@ -272,8 +272,8 @@ export class RenderTracker {
       try {
         const component = ng.getComponent(el);
         if (component) {
-          const name = component.constructor?.name ?? '';
-          if (!isInternalName(name)) {
+          const name = this.resolveComponentName(component, el);
+          if (name && !isInternalName(name)) {
             this.componentElements.set(el, name);
           }
           return;
@@ -281,6 +281,38 @@ export class RenderTracker {
       } catch { /* not a component */ }
     }
     this.tryDiscoverViaLView(el);
+  }
+
+  /**
+   * Resolves a meaningful component name. Prefers constructor.name if it's not
+   * minified (>2 chars). Falls back to deriving from element tag name.
+   */
+  private resolveComponentName(component: any, el: Element): string {
+    const ctorName = component.constructor?.name ?? '';
+    // If constructor name looks valid (not minified), use it
+    if (ctorName.length > 2 && !isInternalName(ctorName)) {
+      return ctorName;
+    }
+    // Fallback: derive from element's tag name (e.g. app-sidebar-nav → AppSidebarNav)
+    return this.nameFromTagName(el);
+  }
+
+  /**
+   * Converts element tag name to PascalCase component name.
+   * e.g. "app-sidebar-nav" → "AppSidebarNav"
+   * Returns empty string for standard HTML elements (no hyphen = not a custom element).
+   */
+  private nameFromTagName(el: Element): string {
+    const tag = el.tagName.toLowerCase();
+    // Only custom elements (with hyphen) are Angular component hosts
+    if (tag.includes('-')) {
+      return tag
+        .split('-')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
+    }
+    // Standard HTML elements (div, button, span, etc.) are NOT components
+    return '';
   }
 
   private tryDiscoverViaLView(el: Element): void {
@@ -296,13 +328,17 @@ export class RenderTracker {
         const tView = ngCtx[1];
         if (tView?.type && typeof tView.type === 'function') {
           const typeName = tView.type.name ?? null;
-          // Only accept names that look like components (typically end with Component/Directive/etc)
-          if (typeName && typeName.length > 3) {
+          // Only accept names that look like components (>2 chars, not minified)
+          if (typeName && typeName.length > 2) {
             name = typeName;
           }
         }
       }
-      // Don't try to extract from plain objects — too error-prone (picks up LContext)
+
+      // If no valid name from LView, fall back to tag name
+      if (!name || name.length <= 2) {
+        name = this.nameFromTagName(el);
+      }
 
       if (name && !isInternalName(name)) {
         this.componentElements.set(el, name);
@@ -525,8 +561,8 @@ export class RenderTracker {
         if (hasDevApi && !this.componentElements.has(current)) {
           const component = ng.getComponent(current);
           if (component) {
-            const cName = component.constructor?.name ?? '';
-            if (!isInternalName(cName)) {
+            const cName = this.resolveComponentName(component, current);
+            if (cName && !isInternalName(cName)) {
               this.componentElements.set(current, cName);
               return { element: current, name: cName };
             }

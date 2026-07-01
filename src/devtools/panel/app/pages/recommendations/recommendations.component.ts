@@ -26,17 +26,15 @@ interface ComponentGroup {
   standalone: true,
   imports: [NgClass],
   template: `
-    <div class="h-full overflow-auto p-4 space-y-4">
+    <div class="h-full overflow-auto p-4 space-y-3">
       <!-- Summary -->
-      <section class="border border-gray-800 rounded bg-gray-900 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
+      <section class="border border-gray-800 rounded bg-gray-900 px-4 py-2.5">
+        <div class="flex items-center justify-between gap-3">
           <div>
-            <h2 class="text-sm font-semibold text-gray-100">Action Center</h2>
-            <p class="text-xs text-gray-400 mt-1">
-              Grouped by component. Expand to see specific issues and sources.
-            </p>
+            <h2 class="text-xs font-semibold text-gray-100">Action Center</h2>
+            <p class="text-[10px] text-gray-500">Grouped by component. Expand to see issues.</p>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[360px]">
+          <div class="flex gap-3">
             <div class="summary-cell">
               <span>Components</span>
               <strong>{{ componentGroups().length }}</strong>
@@ -160,14 +158,15 @@ interface ComponentGroup {
       background: rgb(31 41 55 / 0.45);
       border: 1px solid rgb(55 65 81 / 0.55);
       border-radius: 4px;
-      padding: 8px;
+      padding: 4px 10px;
       min-width: 0;
+      text-align: center;
     }
 
     .summary-cell span {
       display: block;
       color: #9ca3af;
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
       font-weight: 700;
     }
@@ -175,8 +174,8 @@ interface ComponentGroup {
     .summary-cell strong {
       display: block;
       color: #f3f4f6;
-      font-size: 18px;
-      margin-top: 2px;
+      font-size: 14px;
+      margin-top: 1px;
     }
 
     .badge,
