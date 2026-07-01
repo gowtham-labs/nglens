@@ -6,12 +6,14 @@
     <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
       <span class="col-hdr w-52">Class</span>
       <span class="col-hdr w-20">Style</span>
-      <span class="col-hdr w-40">Source File</span>
       <span class="col-hdr flex-1">Routes</span>
     </div>
     @for (r of filteredResolvers(); track r.className) {
       <div class="row">
-        <span class="w-52 cell-primary truncate" [title]="r.className">{{ r.className }}</span>
+        <span class="w-52 cell-primary truncate" [title]="r.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openInSources(r)">{{ r.className }}</button>
+        </span>
         <span class="w-20 flex-shrink-0">
           @if (r.functional) {
             <span class="badge bg-gray-700 text-gray-300 border border-gray-600">functional</span>
@@ -19,22 +21,16 @@
             <span class="tag-resolver">class</span>
           }
         </span>
-        <span class="w-40 flex-shrink-0 min-w-0">
-          @if (r.filePath) {
-            <button
-              [class]="isExternalPkg(r.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 transition-colors text-left truncate block w-full'"
-              [title]="'Open in Sources: ' + r.filePath"
-              (click)="openInSources(r)">
-              {{ shortPath(r.filePath) }}
-            </button>
-          } @else {
-            <span class="cell-dim">—</span>
-          }
-        </span>
         <span class="flex-1 min-w-0">
-          <div class="chips">
+          <div class="chips font-mono">
             @for (path of r.routes.slice(0, 6); track path) {
-              <span class="chip route-path text-blue-300">{{ path }}</span>
+              @if (r.filePath && !isPackageOnly(r.filePath)) {
+                <button type="button" class="chip route-path text-blue-300 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
+                  [title]="'Jump to Route ' + path"
+                  (click)="openProperty(r.filePath, path, r.className)">{{ path }}</button>
+              } @else {
+                <span class="chip route-path text-blue-300">{{ path }}</span>
+              }
             }
             @if (r.routes.length > 6) { <span class="cell-dim">+{{ r.routes.length - 6 }}</span> }
             @if (!r.routes.length) { <span class="cell-dim">—</span> }

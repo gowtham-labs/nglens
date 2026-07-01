@@ -28,17 +28,137 @@ export class CommandService {
   }
 
   /**
+   * Opens the source file of an Angular class in the DevTools Sources panel
+   * using Chrome's built-in `inspect(constructor)` Command Line API.
+   *
+   * The eval expression is SELF-CONTAINED — it does not require `ngLensInspection`
+   * to be pre-initialized. It runs three strategies in priority order:
+   *
+   *   1. Cache from Ivy metadata scan  — O(1); covers ALL registered classes
+   *      including external packages (e.g. @angular/material) that are never in DOM.
+   *   2. window.ng.getComponent() + getDirectives()  — live dev-mode scan; covers
+   *      attribute-selector components (MatButton on <button mat-button>), pipes,
+   *      and any class not yet in the cache.
+   *   3. el.__ngContext__ (LView)  — Angular DevTools LTreeStrategy; TView.type is
+   *      the component constructor. Works even without window.ng (production mode).
+   *
+   * On success: Chrome DevTools Sources navigates to the constructor definition.
+   * Works for user code AND external packages through V8 source-map resolution.
+   * On failure (class not found): calls `onNotFound()` for URL-based fallback.
+   *
+   * Pattern mirrors Angular DevTools chrome-application-operations.ts:
+   *   `inspect(inspectedApplication.findConstructorByPosition(pos, idx))`
+   * All lookup logic lives in window.ngLensInspection (the page-side backend)
+   * so this eval stays minimal — exactly 1 logical step.
+   */
+  private tryOpenViaConstructorInspect(className: string, onNotFound: () => void): void {
+    // JSON.stringify gives a properly-escaped JS string literal safe against injection.
+    const safeClassName = JSON.stringify(className);
+
+    // Minimal eval — implements the two-path strategy from the Blueprint article:
+    //   • Local code  → inspect(ctor) with source maps navigates to TypeScript
+    //   • External pkg → openResource(runtimeUrl) opens the .mjs/.ts file directly,
+    //                    inspect(ctor) runs as automatic backup
+    //
+    // Step 1 (in eval): find constructor, call inspect(ctor), return metadata JSON.
+    // Step 2 (in callback): if external package URL captured → also openResource(url).
+    //
+    // The runtime URL in `entry.url` comes from extractSourceUrlFromStack() called
+    // inside hookAngularProfilerSafely's onChangeDetectionStart — the call stack
+    // at that moment shows the actual HTTP URL of the file executing the component.
+    const expression = `
+(function() {
+  var ns = window.ngLensInspection;
+  if (!ns) return false;
+  var ctor = ns.findConstructorByName(${safeClassName});
+  if (typeof ctor !== 'function') return false;
+  if (typeof inspect !== 'function') return false;
+  var fp = null;
+  try {
+    var d = ctor.ɵcmp || ctor.ɵdir || ctor.ɵpipe || ctor.ɵmod || ctor.ɵprov;
+    fp = (d && d.debugInfo && typeof d.debugInfo.filePath === 'string')
+      ? d.debugInfo.filePath : null;
+  } catch(e) {}
+  var entry = ns.getSourceEntry ? ns.getSourceEntry(${safeClassName}) : null;
+  inspect(ctor);
+  return JSON.stringify({ fp: fp, url: entry ? entry.url : null, isExternal: !!(entry && entry.isExternal) });
+})()
+    `.trim();
+
+    chrome.devtools.inspectedWindow.eval(
+      expression,
+      (rawResult, exceptionInfo) => {
+        const result = rawResult as unknown;
+        if (exceptionInfo?.isException || exceptionInfo?.isError || !result) {
+          // Constructor not found, or inspect() itself threw — fall back to URL approach.
+          onNotFound();
+          return;
+        }
+        // inspect(ctor) was already called — Chrome is navigating via source maps.
+        // Parse the returned metadata to decide whether to ALSO call openResource.
+        if (typeof result === 'string') {
+          try {
+            const info = JSON.parse(result) as { fp?: string | null; url?: string | null; isExternal?: boolean };
+            if (info.url && info.isExternal) {
+              // External package (.mjs, node_modules): also open the captured runtime
+              // URL directly — more reliable than source-map resolution for libraries
+              // that ship without TypeScript source maps.
+              chrome.devtools.panels.openResource(info.url, 0, () => { /* opened */ });
+            } else if (info.fp) {
+              // Local code with debugInfo.filePath: secondary openResource attempt
+              // for webpack-based builds where the .ts file is a separate resource.
+              this.tryOpenByRuntimeFilePath(info.fp);
+            }
+          } catch { /* ignore JSON parse errors */ }
+        }
+      }
+    );
+  }
+
+  /**
+   * Secondary source-navigation path: uses the runtime debugInfo.filePath returned
+   * from the eval to search Chrome's resource list for a matching URL.
+   *
+   * This is supplementary — inspect(constructor) was already called.  For webpack
+   * builds this opens the TypeScript source precisely; for Vite builds where the
+   * TypeScript file is embedded in sourcesContent rather than served as a separate
+   * resource, it is a no-op (inspect() already handled navigation).
+   */
+  private tryOpenByRuntimeFilePath(runtimeFilePath: string): void {
+    const norm = runtimeFilePath.replace(/\\/g, '/');
+    const segments = norm.split('/').filter(s => s.length > 0 && s !== '.' && s !== '..');
+
+    chrome.devtools.inspectedWindow.getResources(resources => {
+      // Progressive suffix match: 3 segments → 2 → 1.
+      // e.g. '@angular/material/button/button.ts' → try 'button/button.ts', then 'button.ts'
+      // The build-machine path 'darwin_arm64/…/button/button.ts' → try 'button/button.ts' → found.
+      for (let n = Math.min(segments.length, 3); n >= 1; n--) {
+        const suffix = segments.slice(-n).join('/');
+        const match = resources.find(r => r.url.replace(/\\/g, '/').endsWith(suffix));
+        if (match) {
+          chrome.devtools.panels.openResource(match.url, 0, () => { /* opened */ });
+          return;
+        }
+      }
+      // No match — inspect() already navigated; this is a no-op.
+    });
+  }
+
+  /**
    * Opens the source file of the given Angular component in the DevTools Sources panel.
    *
-   * Uses `chrome.devtools.inspectedWindow.getResources()` to enumerate all resources
-   * loaded in the inspected window and matches by the kebab-case file name derived
-   * from the component class name (e.g. `HeroListComponent` → `hero-list.component`).
-   *
-   * TypeScript files (served by Vite/webpack dev-servers with source maps) are
-   * preferred over compiled JavaScript. Once the URL is found, it is opened via
-   * `chrome.devtools.panels.openResource()`.
+   * Strategy 0 (preferred): `inspect(constructor)` via `window.ngLensInspection` —
+   * works for all packages including `@angular/*`, requires Angular dev-mode.
+   * Strategy 1 (fallback): `chrome.devtools.panels.openResource()` by file URL —
+   * matches by kebab-case file name derived from the component class name.
    */
   openInSources(componentName: string): void {
+    this.tryOpenViaConstructorInspect(componentName, () => {
+      this.openInSourcesFallback(componentName);
+    });
+  }
+
+  private openInSourcesFallback(componentName: string): void {
     const fileName = this.toComponentFileName(componentName);
 
     chrome.devtools.inspectedWindow.getResources((resources) => {
@@ -72,17 +192,22 @@ export class CommandService {
    * Opens the source file of a given Angular class (interceptor, resolver, guard, etc.)
    * in the DevTools Sources panel.
    *
-   * Strategy:
-   * 1. If a `filePath` is available and is a local source file (has a .ts/.js extension and is
-   *    not an npm package), match resources by the file's base name.
-   * 2. Fall back to deriving the file name from the class name and the provided `suffix`
-   *    (e.g. `MyAuthInterceptor` + `'interceptor'` → `my-auth.interceptor.ts`).
+   * Strategy 0 (preferred): `inspect(constructor)` via `window.ngLensInspection` —
+   * works for user code AND external packages, requires Angular dev-mode.
+   * Strategy 1: match resources by the stored `filePath` base name / 2-segment suffix.
+   * Strategy 2: derive file name from class name + suffix convention.
    *
    * @param className  The Angular class name (e.g. `AuthInterceptor`, `UserDataResolver`).
    * @param filePath   The file path stored in the registry (may be null or an npm package name).
    * @param suffix     Conventional file suffix without dot (e.g. `'interceptor'`, `'resolver'`, `'guard'`).
    */
   openClassFileInSources(className: string, filePath: string | null, suffix: string): void {
+    this.tryOpenViaConstructorInspect(className, () => {
+      this.openClassFileInSourcesFallback(className, filePath, suffix);
+    });
+  }
+
+  private openClassFileInSourcesFallback(className: string, filePath: string | null, suffix: string): void {
     chrome.devtools.inspectedWindow.getResources((resources) => {
       // Strategy 1: base-name match against any stored filePath that carries a file extension.
       // This works for every path format Chrome DevTools may have as a webpack:// or HTTP resource:
@@ -116,21 +241,66 @@ export class CommandService {
       }
 
       // Strategy 2: derive file name from class name + suffix convention
-      // e.g. MyAuthInterceptor → strip "Interceptor" → my-auth → my-auth.interceptor
+      // e.g. MyAuthInterceptor → strip "Interceptor" → my-auth → MyAuth / my-auth.interceptor
+      // Or functional guard: authGuard (keeps name raw if it's already lowercase camelCase or matches suffix patterns)
       const suffixCapitalized = suffix.charAt(0).toUpperCase() + suffix.slice(1);
       const cleaned = className
         .replace(/^_+/, '')
-        .replace(new RegExp(`${suffixCapitalized}$`), '');
+        .replace(new RegExp(`${suffixCapitalized}$`, 'i'), ''); // Case-insensitive suffix strip
       const kebab = cleaned.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
       const fileBase = `${kebab}.${suffix}`;
 
-      const tsMatch = resources.find(r => r.url.includes(fileBase) && r.url.endsWith('.ts'));
-      const jsMatch = resources.find(r => r.url.includes(fileBase) && r.url.endsWith('.js'));
-      const match = tsMatch ?? jsMatch;
+      // Loose matching list to tolerate functional naming, e.g., 'authGuard' matching 'auth.guard.ts' or 'auth-guard.ts'
+      const looseFileBases = [
+        fileBase,
+        `${kebab}-${suffix}`,
+        `${kebab}_${suffix}`,
+        kebab,
+        cleaned.toLowerCase(),
+        className.toLowerCase()
+      ];
+
+      let match: chrome.devtools.inspectedWindow.Resource | undefined;
+      for (const base of looseFileBases) {
+        match = resources.find(r => r.url.toLowerCase().includes(base) && (r.url.endsWith('.ts') || r.url.endsWith('.js') || r.url.endsWith('.mjs')));
+        if (match) break;
+      }
 
       if (match) {
         chrome.devtools.panels.openResource(match.url, 0, () => { /* opened */ });
         return;
+      }
+
+      // Strategy 3: bare package name — search resources for any file URL that contains
+      // BOTH the package name AND the class's kebab-case base name.
+      // Handles e.g. filePath = '@angular/material', className = 'MatButton':
+      //   • kebabBase = 'mat-button'
+      //   • matches 'webpack:///./node_modules/@angular/material/button/mat-button.component.ts'
+      //   • also matches 'http://localhost:4200/node_modules/@angular/material/fesm2022/button.mjs'
+      //     when kebabBase appears inside it (may not always match; best-effort).
+      if (filePath && !filePath.includes('/') && !filePath.includes('.')) {
+        // pure bare name like 'rxjs', 'lodash'
+        const pkgMatch = resources.find(r =>
+          r.url.includes(filePath) && r.url.includes(kebab) &&
+          (r.url.endsWith('.ts') || r.url.endsWith('.js') || r.url.endsWith('.mjs'))
+        );
+        if (pkgMatch) {
+          chrome.devtools.panels.openResource(pkgMatch.url, 0, () => { /* opened */ });
+          return;
+        }
+      } else if (filePath && (filePath.startsWith('@') || !filePath.includes('.'))) {
+        // scoped or unscoped package path without file extension: '@angular/material', '@coreui/angular'
+        const pkgSegments = filePath.split('/').slice(0, filePath.startsWith('@') ? 2 : 1);
+        const pkgName = pkgSegments.join('/'); // e.g. '@angular/material'
+        const pkgMatch = resources.find(r => {
+          const url = r.url.replace(/\\/g, '/');
+          return url.includes(pkgName.replace('@', '')) &&
+            (url.endsWith('.ts') || url.endsWith('.js') || url.endsWith('.mjs'));
+        });
+        if (pkgMatch) {
+          chrome.devtools.panels.openResource(pkgMatch.url, 0, () => { /* opened */ });
+          return;
+        }
       }
 
       console.warn(`[ngLens] Source file not found for ${suffix}: ${className}`);

@@ -12,9 +12,20 @@
   </div>
   @for (t of filteredTokens(); track t.name) {
     <div class="row">
-      <span class="flex-1 font-mono text-violet-300 truncate" [title]="t.name">{{ t.name }}</span>
+      <span class="flex-1 font-mono text-violet-300 truncate" [title]="t.name">
+        <button type="button" class="font-mono text-violet-300 hover:text-violet-400 cursor-pointer transition-colors text-left"
+          (click)="openFile(t.name, t.filePath)" title="Open in Sources">{{ t.name }}</button>
+      </span>
       <span class="w-16 flex-shrink-0">
-        @if (t.multi) { <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50">multi</span> }
+        @if (t.multi) {
+          @if (t.filePath && !isPackageOnly(t.filePath)) {
+            <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
+              title="Jump to InjectionToken multi property"
+              (click)="openProperty(t.filePath, 'multi', t.name)">multi</button>
+          } @else {
+            <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50">multi</span>
+          }
+        }
       </span>
     </div>
   }

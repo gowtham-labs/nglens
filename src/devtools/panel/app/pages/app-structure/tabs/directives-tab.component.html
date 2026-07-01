@@ -3,34 +3,72 @@
     <span class="col-hdr w-48">Selector</span>
     <span class="col-hdr w-48">Class</span>
     <span class="col-hdr flex-1">Inputs / Outputs</span>
-    <span class="col-hdr w-32">File / Package</span>
   </div>
   @for (d of filteredDirectives(); track d.className) {
     <div class="row">
       <span class="w-48 cell-primary truncate">{{ d.selector || '—' }}</span>
       <span class="w-48 flex items-center gap-1">
-        <span class="cell-primary truncate">{{ d.className }}</span>
+        <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(d.className, d.filePath)">{{ d.className }}</button>
         @if (d.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
       </span>
       <span class="flex-1 min-w-0">
         @if (d.inputs.length || d.outputs.length) {
           <div class="chips">
-            @for (inp of d.inputs.slice(0, 5); track inp) { <span class="chip text-green-400">&#64;{{ inp }}</span> }
-            @for (out of d.outputs.slice(0, 4); track out) { <span class="chip text-amber-400">{{ out }}</span> }
+            @for (inp of d.inputs.slice(0, 5); track inp) {
+              @if (d.filePath && !isPackageOnly(d.filePath)) {
+                <button type="button" class="chip text-green-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Jump to @Input ' + inp + ' in Sources'"
+                  (click)="openProperty(d.filePath, inp, d.className)">&#64;{{ inp }}</button>
+              } @else {
+                <span class="chip text-green-400">&#64;{{ inp }}</span>
+              }
+            }
+            @for (out of d.outputs.slice(0, 4); track out) {
+              @if (d.filePath && !isPackageOnly(d.filePath)) {
+                <button type="button" class="chip text-amber-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Jump to @Output ' + out + ' in Sources'"
+                  (click)="openProperty(d.filePath, out, d.className)">{{ out }}</button>
+              } @else {
+                <span class="chip text-amber-400">{{ out }}</span>
+              }
+            }
           </div>
         } @else { <span class="cell-dim">—</span> }
       </span>
-      <span class="w-32 flex-shrink-0 min-w-0">
-        @if (d.filePath) {
-          <button type="button"
-            [class]="isExternalPkg(d.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
-            [title]="'Open in Sources: ' + d.filePath"
-            (click)="openFile(d.className, d.filePath)">{{ shortPath(d.filePath) }}</button>
-        } @else {
-          <span class="cell-dim">—</span>
-        }
-      </span>
     </div>
+    <!-- Dependencies & Transitive Dependencies Sub-row (Direct + Transitive) -->
+    @if (d.dependencies.length > 0 || getTransitiveDependencies(d.className).length > d.dependencies.length) {
+      <div class="row bg-gray-950/20 -mt-1 border-t border-gray-800/10 text-[10px] pl-6 flex flex-col gap-1 py-1 text-gray-500">
+        @if (d.dependencies.length > 0) {
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-400">Direct Dependent Components / Directives / Pipes:</span>
+            <div class="chips">
+              @for (dep of d.dependencies; track dep) {
+                <button type="button" class="chip text-indigo-300 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
+                  [title]="'Open ' + dep + ' in Sources'"
+                  (click)="openInSources(dep)">{{ dep }}</button>
+              }
+            </div>
+          </div>
+        }
+        @if (getTransitiveDependencies(d.className).length > d.dependencies.length) {
+          @let trans = getTransitiveDependencies(d.className);
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-400">Transitive Dependent Components / Directives / Pipes:</span>
+            <div class="chips">
+              @for (dep of trans; track dep) {
+                @if (!d.dependencies.includes(dep)) {
+                  <button type="button" class="chip text-violet-300 hover:text-violet-400 cursor-pointer transition-colors font-mono"
+                    [title]="'Open ' + dep + ' in Sources'"
+                    (click)="openInSources(dep)">{{ dep }}</button>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
   }
   @if (!filteredDirectives().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
 
@@ -44,30 +82,31 @@
       <span class="col-hdr w-48">Class</span>
       <span class="col-hdr w-20">Type</span>
       <span class="col-hdr w-36">Events</span>
-      <span class="col-hdr w-24">Debounce?</span>
-      <span class="col-hdr flex-1">File</span>
+      <span class="col-hdr flex-1">Debounce?</span>
     </div>
     @for (h of hostListeners(); track h.className) {
       <div class="row">
-        <span class="w-48 cell-primary truncate" [title]="h.className">{{ h.className }}</span>
-        <span class="w-20">
+        <span class="w-48 cell-primary truncate" [title]="h.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(h.className, h.filePath)">{{ h.className }}</button>
+        </span>
+        <span class="w-20 font-mono">
           @if (h.entityType === 'component') {
-            <span class="badge bg-blue-900/50 text-blue-300 border border-blue-700/50">component</span>
+            <span class="badge bg-blue-900/50 text-blue-300 border border-blue-700/50 font-sans">component</span>
           } @else {
-            <span class="badge bg-purple-900/50 text-purple-300 border border-purple-700/50">directive</span>
+            <span class="badge bg-purple-900/50 text-purple-300 border border-purple-700/50 font-sans">directive</span>
           }
         </span>
-        <span class="w-36 chips">
+        <span class="w-36 chips font-mono">
           @for (evt of h.events; track evt) { <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ evt }}</span> }
         </span>
-        <span class="w-24">
+        <span class="flex-1">
           @if (h.hasDebounce) {
-            <span class="badge bg-green-900/50 text-green-300 border border-green-700/50">debounced ✓</span>
+            <span class="badge bg-green-900/50 text-green-300 border border-green-700/50 font-sans">debounced ✓</span>
           } @else {
-            <span class="badge bg-red-900/50 text-red-300 border border-red-700/50">no debounce</span>
+            <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-sans">no debounce</span>
           }
         </span>
-        <span class="flex-1 src-path truncate" [title]="h.filePath ?? ''" [ngClass]="isExternalPkg(h.filePath) ? 'pkg-badge' : 'src-path'">{{ shortPath(h.filePath) }}</span>
       </div>
     }
   }

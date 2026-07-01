@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
 import { PanelState } from '../../../state/panel.state';
+import { CommandService } from '../../../services/command.service';
 import type { AppProviderEntry } from '../../../../../../types/app-structure';
 
 @Component({
@@ -11,6 +12,7 @@ import type { AppProviderEntry } from '../../../../../../types/app-structure';
 })
 export class AppConfigTabComponent {
   private readonly state = inject(PanelState);
+  private readonly cmd = inject(CommandService);
   readonly searchQuery = input('');
   readonly data = this.state.appStructure;
 
@@ -33,4 +35,15 @@ export class AppConfigTabComponent {
     }
     return [...groups.entries()].map(([label, providers]) => ({ label, providers }));
   });
+
+  openInSources(providerName: string, kind: 'class' | 'token' | 'multi'): void {
+    // If it's a class or token, we have a providerName which is the class/token constructor name.
+    // We can open it in Sources.
+    const suffix = kind === 'class' ? 'service' : 'token';
+    this.cmd.openClassFileInSources(providerName, null, suffix);
+  }
+
+  openProperty(filePath: string | null, propName: string, className: string): void {
+    this.cmd.openPropertyInSources(filePath, propName, className);
+  }
 }

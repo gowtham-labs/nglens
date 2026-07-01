@@ -180,4 +180,40 @@ export class ComponentsTabComponent {
   privateCount(names: string[]): number {
     return names.filter(n => n.startsWith('_')).length;
   }
+
+  /**
+   * Resolves the full transitive dependent components/directives hierarchy for a given component.
+   * Walks component dependencies recursively to build a complete dependency graph.
+   */
+  getTransitiveDependencies(className: string): string[] {
+    const allComps = this.data()?.components ?? [];
+    const compMap = new Map<string, typeof allComps[0]>();
+    for (const c of allComps) {
+      compMap.set(c.className, c);
+    }
+
+    const visited = new Set<string>();
+    const queue = [...(compMap.get(className)?.dependencies ?? [])];
+
+    for (const d of queue) {
+      if (!visited.has(d)) {
+        visited.add(d);
+        const childObj = compMap.get(d);
+        if (childObj?.dependencies) {
+          for (const cd of childObj.dependencies) {
+            if (!visited.has(cd)) queue.push(cd);
+          }
+        }
+      }
+    }
+
+    return Array.from(visited);
+  }
+
+  /**
+   * Opens the source code of any class or component in the Sources panel.
+   */
+  openInSources(className: string): void {
+    this.cmd.openInSources(className);
+  }
 }

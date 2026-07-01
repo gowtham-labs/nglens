@@ -35,7 +35,10 @@
               <span class="badge bg-gray-700 text-gray-400 border border-gray-600">[{{ ar.outlet }}]</span>
             }
             <span class="text-gray-600 flex-1">→</span>
-            <span class="chip font-mono flex-shrink-0">{{ ar.component }}</span>
+            <button type="button"
+              class="chip font-mono flex-shrink-0 hover:text-indigo-400 cursor-pointer transition-colors"
+              [title]="'Open in Sources: ' + ar.component"
+              (click)="openComponent(ar.component)">{{ ar.component }}</button>
           </div>
         }
       </div>
@@ -69,12 +72,21 @@
             } @else if (r.isLazy) {
               <span class="tag-lazy">lazy</span>
             }
-            @for (g of r.guards; track g) { <span class="tag-guard">{{ g }}</span> }
-            @for (res of r.resolvers; track res) { <span class="tag-resolver">{{ res }}</span> }
+            @for (g of r.guards; track g) {
+              <button type="button" class="tag-guard cursor-pointer hover:opacity-75 transition-opacity"
+                [title]="'Open in Sources: ' + g" (click)="openGuard(g)">{{ g }}</button>
+            }
+            @for (res of r.resolvers; track res) {
+              <button type="button" class="tag-resolver cursor-pointer hover:opacity-75 transition-opacity"
+                [title]="'Open in Sources: ' + res" (click)="openResolver(res)">{{ res }}</button>
+            }
           </div>
         </span>
         @if (r.component) {
-          <span class="chip flex-shrink-0 max-w-[10rem] truncate font-mono" [title]="r.component">{{ r.component }}</span>
+          <button type="button"
+            class="chip flex-shrink-0 max-w-[10rem] truncate font-mono hover:text-indigo-400 cursor-pointer transition-colors"
+            [title]="'Open in Sources: ' + r.component"
+            (click)="openComponent(r.component)">{{ r.component }}</button>
         }
       </div>
     }
@@ -94,7 +106,10 @@
     @for (r of eagerRoutes(); track r.absolutePath) {
       <div class="flex items-center gap-2 px-1 py-1.5 border-b border-gray-800/50 text-xs">
         <span class="flex-1 route-path truncate" [title]="r.absolutePath">{{ r.absolutePath }}</span>
-        <span class="w-48 font-mono text-gray-300 truncate" [title]="r.component">{{ r.component }}</span>
+        <button type="button"
+          class="w-48 font-mono text-gray-300 truncate text-left hover:text-indigo-400 cursor-pointer transition-colors"
+          [title]="'Open in Sources: ' + r.component"
+          (click)="openComponent(r.component)">{{ r.component }}</button>
         <span class="w-24"><span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ r.childRouteCount }} children</span></span>
       </div>
     }

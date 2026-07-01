@@ -12,7 +12,10 @@
     </div>
     @for (p of group.providers; track p.name) {
       <div class="row">
-        <span class="flex-1 cell-primary font-mono truncate" [title]="p.name">{{ p.name }}</span>
+        <span class="flex-1 cell-primary font-mono truncate" [title]="p.name">
+          <button type="button" class="cell-primary font-mono hover:text-indigo-400 cursor-pointer transition-colors text-left"
+            title="Open in Sources" (click)="openInSources(p.name, p.kind)">{{ p.name }}</button>
+        </span>
         <span class="flex-shrink-0">
           @if (p.kind === 'class') {
             <span class="badge bg-violet-900/40 text-violet-300 border border-violet-700/40">class</span>

@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, computed, inject, input } from '@an
 import { PanelState } from '../../../state/panel.state';
 import { CommandService } from '../../../services/command.service';
 import type { ResolverRegistryEntry } from '../../../../../../types/app-structure';
-import { isExternalPkg, shortPath } from './tab-utils';
+import { isExternalPkg, isPackageOnly, shortPath } from './tab-utils';
 
 @Component({
   selector: 'app-resolvers-tab',
@@ -24,9 +24,14 @@ export class ResolversTabComponent {
   });
 
   readonly isExternalPkg = isExternalPkg;
+  readonly isPackageOnly = isPackageOnly;
   readonly shortPath = shortPath;
 
   openInSources(resolver: ResolverRegistryEntry): void {
     this.cmd.openClassFileInSources(resolver.className, resolver.filePath, 'resolver');
+  }
+
+  openProperty(filePath: string | null, propName: string, className: string): void {
+    this.cmd.openPropertyInSources(filePath, propName, className);
   }
 }

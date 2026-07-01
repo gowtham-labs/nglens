@@ -218,6 +218,26 @@ function extractSignalInputsFromMetadata(
   return { signalInputs, modelInputs };
 }
 
+function getDirectDependencies(def: any): string[] {
+  const result: string[] = [];
+  try {
+    let deps: any[] = [];
+    if (typeof def.dependencies === 'function') {
+      deps = def.dependencies() ?? [];
+    } else if (Array.isArray(def.dependencies)) {
+      deps = def.dependencies;
+    } else if (typeof def.directives === 'function') {
+      deps = def.directives() ?? [];
+    }
+    for (const dep of deps) {
+      if (typeof dep === 'function' && dep.name) {
+        result.push(dep.name);
+      }
+    }
+  } catch { /* ignore */ }
+  return result;
+}
+
 function extractComponent(ctor: any, cmp: any): ComponentRegistryEntry {
   const { signalInputs, modelInputs } = extractSignalInputsFromMetadata(cmp);
   return {
@@ -232,6 +252,7 @@ function extractComponent(ctor: any, cmp: any): ComponentRegistryEntry {
     standalone: cmp.standalone ?? false,
     signalInputs,
     modelInputs,
+    dependencies: getDirectDependencies(cmp),
   };
 }
 
@@ -245,6 +266,7 @@ function extractDirective(ctor: any, dir: any): DirectiveRegistryEntry {
     inputs: Object.keys(dir.inputs ?? {}),
     outputs: Object.keys(dir.outputs ?? {}),
     standalone: dir.standalone ?? false,
+    dependencies: getDirectDependencies(dir),
   };
 }
 

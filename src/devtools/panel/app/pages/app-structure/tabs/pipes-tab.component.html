@@ -2,29 +2,22 @@
   <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
     <span class="col-hdr w-40">Pipe name</span>
     <span class="col-hdr w-48">Class</span>
-    <span class="col-hdr w-20">Purity</span>
-    <span class="col-hdr flex-1">File / Package</span>
+    <span class="col-hdr flex-1">Purity</span>
   </div>
   @for (p of filteredPipes(); track p.className) {
     <div class="row">
-      <span class="w-40 font-mono text-yellow-300">{{ p.name }}</span>
+      <span class="w-40 font-mono text-yellow-300">
+        <button type="button" class="font-mono text-yellow-300 hover:text-yellow-400 cursor-pointer transition-colors text-left"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.name }}</button>
+      </span>
       <span class="w-48 flex items-center gap-1">
-        <span class="cell-primary truncate">{{ p.className }}</span>
+        <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.className }}</button>
         @if (p.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
       </span>
-      <span class="w-20 flex-shrink-0">
+      <span class="flex-1 min-w-0">
         @if (p.pure) { <span class="tag-pure">pure</span> }
         @else { <span class="tag-impure">impure</span> }
-      </span>
-      <span class="flex-1 min-w-0">
-        @if (p.filePath) {
-          <button type="button"
-            [class]="isExternalPkg(p.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
-            [title]="'Open in Sources: ' + p.filePath"
-            (click)="openFile(p.className, p.filePath)">{{ shortPath(p.filePath) }}</button>
-        } @else {
-          <span class="cell-dim">—</span>
-        }
       </span>
     </div>
   }
@@ -38,23 +31,16 @@
     </div>
     <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
       <span class="col-hdr w-40">Pipe name</span>
-      <span class="col-hdr w-48">Class</span>
-      <span class="col-hdr flex-1">File / Package</span>
+      <span class="col-hdr flex-1">Class</span>
     </div>
     @for (p of impurePipeIssues(); track p.className) {
       <div class="row">
-        <span class="w-40 font-mono text-orange-300">{{ p.name }}</span>
-        <span class="w-48 cell-primary truncate">{{ p.className }}</span>
-        <span class="flex-1 min-w-0">
-          @if (p.filePath) {
-            <button type="button"
-              [class]="isExternalPkg(p.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
-              [title]="'Open in Sources: ' + p.filePath"
-              (click)="openFile(p.className, p.filePath)">{{ shortPath(p.filePath) }}</button>
-          } @else {
-            <span class="cell-dim">—</span>
-          }
+        <span class="w-40 font-mono text-orange-300">
+          <button type="button" class="font-mono text-orange-300 hover:text-orange-400 cursor-pointer transition-colors text-left"
+            title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.name }}</button>
         </span>
+        <button type="button" class="flex-1 cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.className }}</button>
       </div>
     }
   }

@@ -3,28 +3,20 @@
   @if (filteredPlainClasses().length) {
     <div class="sticky top-8 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
       <span class="col-hdr w-48">Class name</span>
-      <span class="col-hdr w-24">Found via</span>
-      <span class="col-hdr flex-1">File / Package</span>
+      <span class="col-hdr flex-1">Found via</span>
     </div>
     @for (c of filteredPlainClasses(); track c.className) {
       <div class="row">
-        <span class="w-48 cell-primary truncate">{{ c.className }}</span>
-        <span class="w-24 flex-shrink-0">
+        <span class="w-48 cell-primary truncate">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(c.className, c.filePath)">{{ c.className }}</button>
+        </span>
+        <span class="flex-1 flex-shrink-0">
           <span class="badge"
             [ngClass]="c.source === 'use-class' ? 'bg-amber-900/50 text-amber-300 border border-amber-700/50'
                      : 'bg-gray-700 text-gray-400 border border-gray-600'">
             {{ c.source }}
           </span>
-        </span>
-        <span class="flex-1 min-w-0">
-          @if (c.filePath) {
-            <button type="button"
-              [class]="isExternalPkg(c.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
-              [title]="'Open in Sources: ' + c.filePath"
-              (click)="openFile(c.className, c.filePath)">{{ shortPath(c.filePath) }}</button>
-          } @else {
-            <span class="cell-dim">—</span>
-          }
         </span>
       </div>
     }

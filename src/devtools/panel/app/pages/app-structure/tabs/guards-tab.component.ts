@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, computed, inject, input } from '@an
 import { PanelState } from '../../../state/panel.state';
 import { CommandService } from '../../../services/command.service';
 import type { GuardRegistryEntry } from '../../../../../../types/app-structure';
-import { isExternalPkg, shortPath } from './tab-utils';
+import { isExternalPkg, isPackageOnly, shortPath } from './tab-utils';
 
 @Component({
   selector: 'app-guards-tab',
@@ -25,9 +25,14 @@ export class GuardsTabComponent {
   });
 
   readonly isExternalPkg = isExternalPkg;
+  readonly isPackageOnly = isPackageOnly;
   readonly shortPath = shortPath;
 
   openFile(className: string, filePath: string | null): void {
-    this.cmd.openClassFileInSources(className, filePath, 'guard');
+    this.cmd.openClassFileInSources(className, filePath || null, 'guard');
+  }
+
+  openProperty(filePath: string | null, propName: string, className: string): void {
+    this.cmd.openPropertyInSources(filePath, propName, className);
   }
 }

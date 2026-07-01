@@ -149,6 +149,15 @@ export function collectAppStructure(): AppStructureData {
     }
   }
 
+  // Register all discovered constructors in the DevTools window extension cache.
+  // This allows the panel to call inspect(constructor) for ANY Angular class —
+  // including external package classes that may never appear in the current DOM.
+  try {
+    const ns = (globalThis as Record<string, unknown>)['ngLensInspection'] as
+      { registerConstructors?: (ctors: Set<Function>) => void } | undefined;
+    ns?.registerConstructors?.(seen);
+  } catch { /* ignore — DevTools window extension may not be available */ }
+
   return {
     application,
     bootstrapConfig,

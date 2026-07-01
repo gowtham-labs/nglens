@@ -1,20 +1,9 @@
 @for (m of filteredModules(); track m.className) {
   <div class="px-3 py-2 border-b border-gray-800">
-    <div class="flex items-center gap-2 mb-1.5">
+    <div class="flex items-center gap-2 mb-1.5 font-mono">
       <span class="tag-module">NgModule</span>
-      <span class="text-xs font-mono font-medium text-gray-100">{{ m.className }}</span>
-      @if (m.filePath) {
-        <span class="max-w-xs min-w-0">
-          @if (m.filePath) {
-            <button type="button"
-              [class]="isExternalPkg(m.filePath) ? 'pkg-badge truncate block cursor-pointer hover:opacity-75 transition-opacity text-left' : 'src-path hover:text-indigo-400 cursor-pointer transition-colors truncate block w-full text-left'"
-              [title]="'Open in Sources: ' + m.filePath"
-              (click)="openFile(m.className, m.filePath)">{{ shortPath(m.filePath) }}</button>
-          } @else {
-            <span class="cell-dim">—</span>
-          }
-        </span>
-      }
+      <button type="button" class="text-xs font-mono font-medium text-gray-100 hover:text-indigo-400 cursor-pointer transition-colors text-left"
+        title="Open in Sources" (click)="openFile(m.className, m.filePath)">{{ m.className }}</button>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
       @for (group of [
@@ -26,7 +15,10 @@
         <div>
           <span class="text-gray-500 uppercase tracking-wide">{{ group.label }}</span>
           <div class="chips mt-0.5">
-            @for (item of group.items.slice(0, 8); track item) { <span class="chip">{{ item }}</span> }
+            @for (item of group.items.slice(0, 8); track item) {
+              <button type="button" class="chip hover:text-indigo-400 cursor-pointer transition-colors text-left font-mono text-[10px]"
+                title="Open in Sources" (click)="openFile(item, null)">{{ item }}</button>
+            }
             @if (group.items.length > 8) { <span class="cell-dim">+{{ group.items.length - 8 }}</span> }
             @if (!group.items.length) { <span class="cell-dim">—</span> }
           </div>

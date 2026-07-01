@@ -14,6 +14,8 @@ export interface ComponentRegistryEntry {
   signalInputs: string[];
   /** Two-way signal bindings declared with model() (Angular 17.1+) */
   modelInputs: string[];
+  /** Direct template dependencies (components, directives, pipes class names) */
+  dependencies: string[];
 }
 
 export interface DirectiveRegistryEntry {
@@ -23,6 +25,8 @@ export interface DirectiveRegistryEntry {
   inputs: string[];
   outputs: string[];
   standalone: boolean;
+  /** Direct template dependencies (components, directives, pipes class names) */
+  dependencies: string[];
 }
 
 export interface PipeRegistryEntry {

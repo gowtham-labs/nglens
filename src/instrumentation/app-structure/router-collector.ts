@@ -369,7 +369,7 @@ function detectRoutingStrategy(injector: any | null): RoutingStrategy {
     const hash = globalThis.location?.hash ?? '';
     if (hash.startsWith('#/')) return 'hash';
     // If the URL has no hash but the page is an SPA, assume path strategy
-    if (globalThis.history?.pushState) return 'path';
+    if (typeof globalThis.history?.pushState === 'function') return 'path';
   } catch { /* ignore */ }
 
   return 'unknown';
