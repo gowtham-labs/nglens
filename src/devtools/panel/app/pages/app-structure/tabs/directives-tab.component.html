@@ -15,22 +15,22 @@
       <span class="flex-1 min-w-0">
         @if (d.inputs.length || d.outputs.length) {
           <div class="chips">
-            @for (inp of d.inputs.slice(0, 5); track inp) {
+            @for (inp of d.inputs; track inp) {
               @if (d.filePath && !isPackageOnly(d.filePath)) {
-                <button type="button" class="chip text-green-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                  [title]="'Jump to @Input ' + inp + ' in Sources'"
+                <button type="button" class="chip-input hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the directive.'"
                   (click)="openProperty(d.filePath, inp, d.className)">&#64;{{ inp }}</button>
               } @else {
-                <span class="chip text-green-400">&#64;{{ inp }}</span>
+                <span class="chip-input" [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the directive.'">&#64;{{ inp }}</span>
               }
             }
-            @for (out of d.outputs.slice(0, 4); track out) {
+            @for (out of d.outputs; track out) {
               @if (d.filePath && !isPackageOnly(d.filePath)) {
-                <button type="button" class="chip text-amber-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                  [title]="'Jump to @Output ' + out + ' in Sources'"
+                <button type="button" class="chip-output hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the directive.'"
                   (click)="openProperty(d.filePath, out, d.className)">{{ out }}</button>
               } @else {
-                <span class="chip text-amber-400">{{ out }}</span>
+                <span class="chip-output" [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the directive.'">{{ out }}</span>
               }
             }
           </div>

@@ -48,7 +48,16 @@ export class RoutesTabComponent {
 
   /** Opens the route component's source in the DevTools Sources panel. */
   openComponent(name: string | null): void {
-    if (name) this.cmd.openInSources(name);
+    if (!name) return;
+    if (name === '(lazy component)' || name === '(lazy module)') {
+      // Find the lazy import path in FlatRoute matches
+      const route = this.filteredFlatRoutes().find(r => r.component === name && r.lazyImportPath);
+      if (route && route.lazyImportPath) {
+        this.handleLazyClick(route.lazyImportPath);
+      }
+      return;
+    }
+    this.cmd.openInSources(name);
   }
 
   /** Opens a route guard class source in the DevTools Sources panel. */
@@ -59,5 +68,22 @@ export class RoutesTabComponent {
   /** Opens a route resolver class source in the DevTools Sources panel. */
   openResolver(name: string): void {
     this.cmd.openClassFileInSources(name, null, 'resolver');
+  }
+
+  /** Copies path or text to clipboard */
+  copyToClipboard(path: string): void {
+    navigator.clipboard.writeText(path).then(() => {
+      // Successfully copied
+    }).catch(err => {
+      console.error('[ngLens] Failed to copy path to clipboard:', err);
+    });
+  }
+
+  /** Opens runtime file matching the lazy bundle import pathway, and copies it */
+  handleLazyClick(path: string | null | undefined): void {
+    if (!path) return;
+    const cleanPath = path.replace(/['"`]/g, '').trim();
+    this.cmd.openClassFileInSources(cleanPath, cleanPath, '');
+    this.copyToClipboard(cleanPath);
   }
 }

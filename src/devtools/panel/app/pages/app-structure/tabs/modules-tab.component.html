@@ -7,19 +7,18 @@
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
       @for (group of [
-        { label: 'Declarations', items: m.declarations },
-        { label: 'Imports',      items: m.imports },
-        { label: 'Exports',      items: m.exports },
-        { label: 'Providers',    items: m.providers }
+        { label: 'Declarations', items: m.declarations, desc: 'Declarations: Components, Directives, and Pipes compiled in this NgModule.' },
+        { label: 'Imports',      items: m.imports,      desc: 'Imports: External NgModules whose exported components and directives are needed.' },
+        { label: 'Exports',      items: m.exports,      desc: 'Exports: Components, Directives, and Pipes visible and reusable to importing Modules.' },
+        { label: 'Providers',    items: m.providers,    desc: 'Providers: Services and InjectionTokens registered to be available in this Module\'s injector scope.' }
       ]; track group.label) {
         <div>
-          <span class="text-gray-500 uppercase tracking-wide">{{ group.label }}</span>
+          <span class="text-gray-500 uppercase tracking-wide" [title]="group.desc">{{ group.label }}</span>
           <div class="chips mt-0.5">
-            @for (item of group.items.slice(0, 8); track item) {
+            @for (item of group.items; track item) {
               <button type="button" class="chip hover:text-indigo-400 cursor-pointer transition-colors text-left font-mono text-[10px]"
-                title="Open in Sources" (click)="openFile(item, null)">{{ item }}</button>
+                [title]="group.desc + '\n' + item" (click)="openFile(item, null)">{{ item }}</button>
             }
-            @if (group.items.length > 8) { <span class="cell-dim">+{{ group.items.length - 8 }}</span> }
             @if (!group.items.length) { <span class="cell-dim">—</span> }
           </div>
         </div>

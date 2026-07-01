@@ -23,16 +23,15 @@
         </span>
         <span class="flex-1 min-w-0">
           <div class="chips font-mono">
-            @for (path of r.routes.slice(0, 6); track path) {
+            @for (path of r.routes; track path) {
               @if (r.filePath && !isPackageOnly(r.filePath)) {
                 <button type="button" class="chip route-path text-blue-300 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
-                  [title]="'Jump to Route ' + path"
+                  [title]="'Route Pathway: ' + path + '\nDynamic route path that retrieves or resolves asynchronous data using this Resolver on activation.'"
                   (click)="openProperty(r.filePath, path, r.className)">{{ path }}</button>
               } @else {
-                <span class="chip route-path text-blue-300">{{ path }}</span>
+                <span class="chip route-path text-blue-300" [title]="'Route Pathway: ' + path + '\nDynamic route path that retrieves or resolves asynchronous data using this Resolver on activation.'">{{ path }}</span>
               }
             }
-            @if (r.routes.length > 6) { <span class="cell-dim">+{{ r.routes.length - 6 }}</span> }
             @if (!r.routes.length) { <span class="cell-dim">—</span> }
           </div>
         </span>

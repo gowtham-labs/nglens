@@ -17,8 +17,7 @@
         <span class="flex-1 min-w-0">
           @if (n.features.length) {
             <div class="chips">
-              @for (f of n.features.slice(0, 8); track f) { <span class="chip">{{ f }}</span> }
-              @if (n.features.length > 8) { <span class="cell-dim">+{{ n.features.length - 8 }}</span> }
+              @for (f of n.features; track f) { <span class="chip">{{ f }}</span> }
             </div>
           } @else { <span class="cell-dim">no features detected</span> }
         </span>
@@ -38,12 +37,9 @@
           }
         </div>
         <div class="chips">
-          @for (p of s.writableSignals.slice(0, 12); track p) { <span class="chip-signal">⚡{{ p }}</span> }
-          @for (p of s.computedSignals.slice(0, 6); track p) { <span class="chip-computed">⊕{{ p }}()</span> }
-          @for (p of s.effects.slice(0, 4); track p) { <span class="badge bg-rose-900/40 text-rose-300 border border-rose-700/40">⬡{{ p }}</span> }
-          @if (s.writableSignals.length + s.computedSignals.length + s.effects.length > 22) {
-            <span class="cell-dim">+{{ s.writableSignals.length + s.computedSignals.length + s.effects.length - 22 }}</span>
-          }
+          @for (p of s.writableSignals; track p) { <span class="chip-signal" title="Writable Signal: ⚡{{ p }}&#10;Direct state value property that can be safely updated over time.">⚡{{ p }}</span> }
+          @for (p of s.computedSignals; track p) { <span class="chip-computed" title="Computed Signal: ⊕{{ p }}()&#10;Derived reactive output evaluating lazily on dependency updates.">⊕{{ p }}()</span> }
+          @for (p of s.effects; track p) { <span class="badge bg-rose-900/40 text-rose-300 border border-rose-700/40" title="Effect: ⬡{{ p }}&#10;Runs side effect actions asynchronously when read signals execute updates.">⬡{{ p }}</span> }
         </div>
         <div class="text-[10px] text-gray-500">
           {{ s.writableSignals.length }} writable · {{ s.computedSignals.length }} computed
@@ -62,8 +58,8 @@
           <span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50">{{ o.entityType }}</span>
         </div>
         <div class="chips">
-          @for (s of o.subjects.slice(0, 12); track s)      { <span class="chip-subject">{{ s }}$</span> }
-          @for (obs of o.observables.slice(0, 6); track obs) { <span class="chip-obs">{{ obs }}</span> }
+          @for (s of o.subjects; track s)      { <span class="chip-subject">{{ s }}$</span> }
+          @for (obs of o.observables; track obs) { <span class="chip-obs">{{ obs }}</span> }
         </div>
         <div class="text-[10px] text-gray-500">
           {{ o.subjects.length }} subjects · {{ o.observables.length }} observables

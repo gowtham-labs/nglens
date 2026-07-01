@@ -68,9 +68,13 @@
               <span class="badge bg-green-900/60 text-green-300 border border-green-700/60">● active</span>
             }
             @if (r.isLazy && r.loadedChildren) {
-              <span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">lazy ✓</span>
+              <button type="button" class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50 hover:border-indigo-500 cursor-pointer transition-colors"
+                [title]="r.lazyImportPath ? 'Lazy Route (Resolved): loaded children from \'' + r.lazyImportPath + '\'\nClick to open file and copy path.' : 'Lazy Route (Resolved): loaded children'"
+                (click)="handleLazyClick(r.lazyImportPath)">lazy ✓</button>
             } @else if (r.isLazy) {
-              <span class="tag-lazy">lazy</span>
+              <button type="button" class="tag-lazy hover:border-indigo-500 cursor-pointer transition-colors"
+                [title]="r.lazyImportPath ? 'Lazy Route (Pending): imports bundle path \'' + r.lazyImportPath + '\'\nClick to open file and copy path.' : 'Lazy Route (Pending)'"
+                (click)="handleLazyClick(r.lazyImportPath)">lazy</button>
             }
             @for (g of r.guards; track g) {
               <button type="button" class="tag-guard cursor-pointer hover:opacity-75 transition-opacity"

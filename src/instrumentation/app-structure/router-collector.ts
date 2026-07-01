@@ -198,6 +198,25 @@ export function parseRouteConfig(config: any[], parentPath = ''): RouteRegistryE
       (typeof route.title === 'string' ? route.title : null)
       ?? (typeof route.data?.title === 'string' ? route.data.title : null);
 
+    // Extract import statement from loadComponent or loadChildren if possible
+    let lazyImportPath: string | null = null;
+    const lazyFn = route.loadComponent ?? route.loadChildren;
+    if (lazyFn && typeof lazyFn === 'function') {
+      try {
+        const fnStr = lazyFn.toString();
+        const importMatch = fnStr.match(/import\s*\((['"`][^'"`]+['"`])\)/);
+        if (importMatch && importMatch[1]) {
+          lazyImportPath = importMatch[1].replace(/['"`]/g, '');
+        } else {
+          // Fallback if structured differently (e.g. arrow function returning object property/callback)
+          const simplerMatch = fnStr.match(/['"`]\.?\/[^'"`]+['"`]/);
+          if (simplerMatch) {
+            lazyImportPath = simplerMatch[0].replace(/['"`]/g, '');
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
     return {
       path: pathSegment,
       absolutePath,
@@ -209,6 +228,7 @@ export function parseRouteConfig(config: any[], parentPath = ''): RouteRegistryE
       isLazy,
       title,
       loadedChildren,
+      lazyImportPath,
     };
   });
 }

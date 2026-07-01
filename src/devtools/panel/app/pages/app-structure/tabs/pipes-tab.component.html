@@ -16,8 +16,8 @@
         @if (p.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
       </span>
       <span class="flex-1 min-w-0">
-        @if (p.pure) { <span class="tag-pure">pure</span> }
-        @else { <span class="tag-impure">impure</span> }
+        @if (p.pure) { <span class="tag-pure" title="Pure Pipe: Only executes transformations when inputs change by reference. Extremely performant.">pure</span> }
+        @else { <span class="tag-impure" title="Impure Pipe: Executes on every change detection cycle, regardless of reference changes. Watch out for performance lag!">impure</span> }
       </span>
     </div>
   }

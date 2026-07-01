@@ -20,16 +20,15 @@
         </span>
         <span class="flex-1 min-w-0">
           <div class="chips">
-            @for (r of g.routes.slice(0, 6); track r) {
+            @for (r of g.routes; track r) {
               @if (g.filePath && !isPackageOnly(g.filePath)) {
                 <button type="button" class="chip route-path text-blue-300 hover:text-indigo-400 cursor-pointer transition-colors"
-                  [title]="'Jump to Route ' + r"
+                  [title]="'Route Pathway: ' + r + '\nDynamic path mapped in active route configurations protected by this Guard.'"
                   (click)="openProperty(g.filePath, r, g.className)">{{ r }}</button>
               } @else {
-                <span class="chip route-path text-blue-300">{{ r }}</span>
+                <span class="chip route-path text-blue-300" [title]="'Route Pathway: ' + r + '\nDynamic path mapped in active route configurations protected by this Guard.'">{{ r }}</span>
               }
             }
-            @if (g.routes.length > 6) { <span class="cell-dim">+{{ g.routes.length - 6 }}</span> }
             @if (!g.routes.length) { <span class="cell-dim">—</span> }
           </div>
         </span>

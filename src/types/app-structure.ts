@@ -84,6 +84,8 @@ export interface RouteRegistryEntry {
   title: string | null;
   /** True when lazy children (loadChildren) have already been fetched */
   loadedChildren: boolean;
+  /** The string representation of the lazy import function if available */
+  lazyImportPath?: string | null;
 }
 
 /** One entry in the currently active route tree (from router.routerState.snapshot) */

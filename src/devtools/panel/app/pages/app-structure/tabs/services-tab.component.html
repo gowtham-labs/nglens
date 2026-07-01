@@ -21,9 +21,9 @@
       </span>
       <span class="flex-1 flex-shrink-0">
         <div class="chips">
-          @if (s.roles.includes('guard'))       { <span class="tag-guard">guard</span> }
-          @if (s.roles.includes('interceptor')) { <span class="tag-iceptor">interceptor</span> }
-          @if (s.roles.includes('resolver'))    { <span class="tag-resolver">resolver</span> }
+          @if (s.roles.includes('guard'))       { <span class="tag-guard" title="Route Guard: Provides pathway verification checks like CanActivate or CanMatch to allow or reject routing access.">guard</span> }
+          @if (s.roles.includes('interceptor')) { <span class="tag-iceptor" title="HTTP Interceptor: Transforms outgoing HTTP requests or handles/modifies incoming response streams.">interceptor</span> }
+          @if (s.roles.includes('resolver'))    { <span class="tag-resolver" title="Route Resolver: Blocks route loading until asynchronous data has been successfully pre-fetched and prepared.">resolver</span> }
         </div>
       </span>
     </div>

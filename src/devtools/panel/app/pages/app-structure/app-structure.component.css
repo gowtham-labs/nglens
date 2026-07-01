@@ -28,6 +28,8 @@
 .cell-dim    { @apply text-gray-500 text-[10px]; }
 .chips       { @apply flex flex-wrap gap-1; }
 .chip        { @apply px-1 py-0.5 bg-gray-700 rounded text-[10px] text-gray-300 font-mono; }
+.chip-input  { @apply px-1 py-0.5 bg-green-950/60 rounded text-[10px] text-green-300 font-mono border border-green-800/40; }
+.chip-output { @apply px-1 py-0.5 bg-amber-950/60 rounded text-[10px] text-amber-300 font-mono border border-amber-800/40; }
 .chip-signal   { @apply px-1 py-0.5 bg-indigo-900/50 rounded text-[10px] text-indigo-300 font-mono border border-indigo-700/30; }
 .chip-computed { @apply px-1 py-0.5 bg-violet-900/50 rounded text-[10px] text-violet-300 font-mono border border-violet-700/30; }
 .chip-subject  { @apply px-1 py-0.5 bg-red-900/50 rounded text-[10px] text-red-300 font-mono border border-red-700/30; }

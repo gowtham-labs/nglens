@@ -82,6 +82,7 @@ export function flattenRoutes(
       title: r.title ?? null,
       loadedChildren: r.loadedChildren ?? false,
       isActive: activePaths.has(absPath),
+      lazyImportPath: r.lazyImportPath ?? null,
     });
     result.push(...flattenRoutes(r.children, depth + 1, absPath, activePaths));
   }

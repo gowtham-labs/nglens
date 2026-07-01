@@ -20,10 +20,10 @@
         @if (t.multi) {
           @if (t.filePath && !isPackageOnly(t.filePath)) {
             <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
-              title="Jump to InjectionToken multi property"
+              title="InjectionToken configuration property: multi&#10;Registers multiple providers for this key under an array value rather than a single instance override (e.g. HTTP_INTERCEPTORS)."
               (click)="openProperty(t.filePath, 'multi', t.name)">multi</button>
           } @else {
-            <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50">multi</span>
+            <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" title="InjectionToken configuration property: multi&#10;Registers multiple providers for this key under an array value rather than a single instance override (e.g. HTTP_INTERCEPTORS).">multi</span>
           }
         }
       </span>

@@ -22,44 +22,62 @@
         @if (signalMap().get(c.className); as sig) {
           <div class="chips">
             @if (sig.writableSignals.length) {
-              <span class="chip-signal" [title]="signalTooltip(sig.writableSignals)">
-                ⚡{{ sig.writableSignals.length - privateCount(sig.writableSignals) }}
-                @if (privateCount(sig.writableSignals) > 0) {
-                  <span class="opacity-50" [title]="'private (underscore-prefixed): ' + sig.writableSignals.filter(s => s.startsWith('_')).join(', ')">+{{ privateCount(sig.writableSignals) }}🔒</span>
+              @for (ws of sig.writableSignals; track ws) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="chip-signal hover:text-indigo-400 cursor-pointer transition-colors"
+                    [title]="'Writable Signal: ' + ws + '\nAllows reading and direct writing/updating of reactive state properties in the component class.'"
+                    (click)="openProperty(c.filePath, ws, c.className)">⚡{{ ws }}</button>
+                } @else {
+                  <span class="chip-signal" [title]="'Writable Signal: ' + ws + '\nAllows reading and direct writing/updating of reactive state properties in the component class.'">⚡{{ ws }}</span>
                 }
-              </span>
+              }
             }
             @if (sig.computedSignals.length) {
-              <span class="chip-computed" [title]="signalTooltip(sig.computedSignals)">
-                ⊕{{ sig.computedSignals.length - privateCount(sig.computedSignals) }}
-                @if (privateCount(sig.computedSignals) > 0) {
-                  <span class="opacity-50">+{{ privateCount(sig.computedSignals) }}🔒</span>
+              @for (cs of sig.computedSignals; track cs) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="chip-computed hover:text-indigo-400 cursor-pointer transition-colors"
+                    [title]="'Computed Signal: ' + cs + '()\nDerived reactive state that automatically re-calculates when its dependencies change.'"
+                    (click)="openProperty(c.filePath, cs, c.className)">⊕{{ cs }}()</button>
+                } @else {
+                  <span class="chip-computed" [title]="'Computed Signal: ' + cs + '()\nDerived reactive state that automatically re-calculates when its dependencies change.'">⊕{{ cs }}()</span>
                 }
-              </span>
+              }
             }
             @if (sig.effects.length) {
-              <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50" [title]="signalTooltip(sig.effects)">⬡{{ sig.effects.length }}</span>
+              @for (ef of sig.effects; track ef) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50 hover:bg-rose-900 cursor-pointer transition-colors"
+                    [title]="'Effect: ' + ef + '\nAn operation that runs asynchronously whenever one or more reactive signals it references change.'"
+                    (click)="openProperty(c.filePath, ef, c.className)">⬡{{ ef }}</button>
+                } @else {
+                  <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50" [title]="'Effect: ' + ef + '\nAn operation that runs asynchronously whenever one or more reactive signals it references change.'">⬡{{ ef }}</span>
+                }
+              }
             }
           </div>
         }
         @if (c.signalInputs.length || c.modelInputs.length) {
           <div class="chips mt-0.5">
             @if (c.signalInputs.length) {
-              @if (c.filePath && !isPackageOnly(c.filePath)) {
-                <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
-                  [title]="'input(): ' + c.signalInputs.join(', ')"
-                  (click)="openFile(c.filePath, c.className)">↩{{ c.signalInputs.length }}</button>
-              } @else {
-                <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" [title]="'input(): ' + c.signalInputs.join(', ')">↩{{ c.signalInputs.length }}</span>
+              @for (si of c.signalInputs; track si) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors font-mono"
+                    [title]="'Signal Input: ' + si + '\nReactive input parameter whose value is exposed as a Signal and updates automatically.'"
+                    (click)="openProperty(c.filePath, si, c.className)">↩{{ si }}</button>
+                } @else {
+                  <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 font-mono" [title]="'Signal Input: ' + si + '\nReactive input parameter whose value is exposed as a Signal and updates automatically.'">↩{{ si }}</span>
+                }
               }
             }
             @if (c.modelInputs.length) {
-              @if (c.filePath && !isPackageOnly(c.filePath)) {
-                <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
-                  [title]="'model(): ' + c.modelInputs.join(', ')"
-                  (click)="openFile(c.filePath, c.className)">⇄{{ c.modelInputs.length }}</button>
-              } @else {
-                <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50" [title]="'model(): ' + c.modelInputs.join(', ')">⇄{{ c.modelInputs.length }}</span>
+              @for (mi of c.modelInputs; track mi) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors font-mono"
+                    [title]="'Model Input: ' + mi + '\nReactive input that supports two-way data-binding, allowing parent components to write back updates.'"
+                    (click)="openProperty(c.filePath, mi, c.className)">⇄{{ mi }}</button>
+                } @else {
+                  <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 font-mono" [title]="'Model Input: ' + mi + '\nReactive input that supports two-way data-binding, allowing parent components to write back updates.'">⇄{{ mi }}</span>
+                }
               }
             }
           </div>
@@ -71,26 +89,23 @@
       <span class="flex-1 min-w-0">
         @if (c.inputs.length || c.outputs.length) {
           <div class="chips">
-            @for (inp of c.inputs.slice(0, 5); track inp) {
+            @for (inp of c.inputs; track inp) {
               @if (c.filePath && !isPackageOnly(c.filePath)) {
-                <button type="button" class="chip text-green-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                  [title]="'Jump to @Input ' + inp + ' in Sources'"
+                <button type="button" class="chip-input hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the component.'"
                   (click)="openProperty(c.filePath, inp, c.className)">&#64;{{ inp }}</button>
               } @else {
-                <span class="chip text-green-400">&#64;{{ inp }}</span>
+                <span class="chip-input" [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the component.'">&#64;{{ inp }}</span>
               }
             }
-            @for (out of c.outputs.slice(0, 4); track out) {
+            @for (out of c.outputs; track out) {
               @if (c.filePath && !isPackageOnly(c.filePath)) {
-                <button type="button" class="chip text-amber-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                  [title]="'Jump to @Output ' + out + ' in Sources'"
+                <button type="button" class="chip-output hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the component.'"
                   (click)="openProperty(c.filePath, out, c.className)">{{ out }}</button>
               } @else {
-                <span class="chip text-amber-400">{{ out }}</span>
+                <span class="chip-output" [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the component.'">{{ out }}</span>
               }
-            }
-            @if (c.inputs.length + c.outputs.length > 9) {
-              <span class="cell-dim">+{{ c.inputs.length + c.outputs.length - 9 }}</span>
             }
           </div>
         } @else { <span class="cell-dim">—</span> }

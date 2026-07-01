@@ -16,4 +16,5 @@ export interface FlatRoute {
   title: string | null;
   loadedChildren: boolean;
   isActive: boolean;
+  lazyImportPath?: string | null;
 }
