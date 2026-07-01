@@ -42,6 +42,8 @@ export interface FlowEvent {
   /** For route changes: from → to */
   fromRoute?: string;
   toRoute?: string;
+  /** Timestamp of the user interaction that caused this flow event (for grouping) */
+  triggeredByInteractionTs?: number;
 }
 
 /** A batch of flow events dispatched from the page script. */

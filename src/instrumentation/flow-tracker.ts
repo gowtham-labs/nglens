@@ -80,21 +80,43 @@ export class FlowTracker {
     this.patchedSubjectProto = subjectProto;
     const tracker = this;
     const originalNext = this.originalSubjectNext;
+    let inHook = false;
 
     subjectProto.next = function(this: any, value: any): void {
-      if (tracker.isRunning) {
-        const ownerInfo = tracker.inferSubjectOwner(this);
-        tracker.buffer.push({
-          id: `flow-${++tracker.eventId}`,
-          type: 'subject-emit',
-          timestamp: Date.now(),
-          label: ownerInfo
-            ? `${ownerInfo.className}.${ownerInfo.propName}.next()`
-            : 'Subject.next()',
-          ownerClass: ownerInfo?.className,
-          propertyName: ownerInfo?.propName,
-          detail: tracker.summarizeValue(value),
-        });
+      if (tracker.isRunning && !inHook) {
+        inHook = true;
+        try {
+          const ownerInfo = tracker.inferSubjectOwner(this);
+
+          // Detect NgRx store dispatch: value is an action object with a `type` string
+          const isNgrxAction = value && typeof value === 'object' && typeof value.type === 'string'
+            && value.type.length > 2 && value.type.includes(']');
+
+          let label: string;
+          let detail: string;
+
+          if (isNgrxAction) {
+            label = `Store: ${value.type}`;
+            detail = tracker.summarizeValue(value, true);
+          } else {
+            label = ownerInfo
+              ? `${ownerInfo.className}.${ownerInfo.propName}.next()`
+              : 'Subject.next()';
+            detail = tracker.summarizeValue(value);
+          }
+
+          tracker.buffer.push({
+            id: `flow-${++tracker.eventId}`,
+            type: 'subject-emit',
+            timestamp: Date.now(),
+            label,
+            ownerClass: isNgrxAction ? 'Store' : ownerInfo?.className,
+            propertyName: isNgrxAction ? value.type : ownerInfo?.propName,
+            detail,
+            triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+          });
+        } catch { /* ignore instrumentation errors */ }
+        finally { inHook = false; }
       }
       return originalNext.call(this, value);
     };
@@ -231,9 +253,11 @@ export class FlowTracker {
       const shortUrl = tracker.shortenUrl(url);
       // Capture initiator at CALL time (which component is most likely the caller)
       const initiator = tracker.detectCurrentComponent();
+      // Capture the interaction context at CALL time (which click caused this fetch)
+      const interactionTs = tracker.getActiveInteractionTimestamp();
 
       return originalFetch.call(globalThis, input, init).then((response: Response) => {
-        if (tracker.isRunning) {
+        if (tracker.isRunning && tracker.isApiCall(url, response.headers.get('content-type'))) {
           tracker.buffer.push({
             id: `flow-${++tracker.eventId}`,
             type: 'http-response',
@@ -241,6 +265,7 @@ export class FlowTracker {
             label: `${method} ${shortUrl} → ${response.status}`,
             detail: `${method} ${shortUrl} (${response.status} ${response.statusText})`,
             ownerClass: initiator ?? undefined,
+            triggeredByInteractionTs: interactionTs,
           });
         }
         return response;
@@ -276,13 +301,17 @@ export class FlowTracker {
       xhr.addEventListener('load', () => {
         if (tracker.isRunning) {
           const shortUrl = tracker.shortenUrl(xhr.__nglens_url ?? '');
-          tracker.buffer.push({
-            id: `flow-${++tracker.eventId}`,
-            type: 'http-response',
-            timestamp: Date.now(),
-            label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
-            detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
-          });
+          const ct = xhr.getResponseHeader?.('content-type') ?? null;
+          if (tracker.isApiCall(xhr.__nglens_url ?? '', ct)) {
+            tracker.buffer.push({
+              id: `flow-${++tracker.eventId}`,
+              type: 'http-response',
+              timestamp: Date.now(),
+              label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
+              detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
+              triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+            });
+          }
         }
       }, { once: true });
       return (tracker.originalXhrSend as Function).apply(this, args);
@@ -403,6 +432,7 @@ export class FlowTracker {
           ownerClass: className,
           propertyName: propName,
           detail: tracker.summarizeValue(value),
+          triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
         });
       }
       return original.apply(this, args);
@@ -474,16 +504,17 @@ export class FlowTracker {
 
   // ═══ Helpers ════════════════════════════════════════════════════════════════
 
-  private summarizeValue(value: any): string {
+  private summarizeValue(value: any, skipType = false): string {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
     if (typeof value === 'string') return value.length > 30 ? `"${value.slice(0, 30)}…"` : `"${value}"`;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
     if (Array.isArray(value)) return `Array(${value.length})`;
     if (typeof value === 'object') {
+      const keys = Object.keys(value).filter(k => skipType ? k !== 'type' : true);
+      if (keys.length === 0) return '{}';
       const name = value.constructor?.name;
-      if (name && name !== 'Object') return name;
-      const keys = Object.keys(value);
+      if (name && name !== 'Object' && !skipType) return name;
       return keys.length <= 3 ? `{${keys.join(', ')}}` : `{${keys.slice(0, 3).join(', ')}, …}`;
     }
     return typeof value;
@@ -508,6 +539,47 @@ export class FlowTracker {
       // Use a simple heuristic — the component that rendered most recently is likely the caller
       return null;
     } catch { return null; }
+  }
+
+  /** Get the timestamp of the active user interaction (if any). Captured at call time. */
+  private getActiveInteractionTimestamp(): number | undefined {
+    try {
+      const renderTracker = (globalThis as any).__nglens_render_tracker_ref;
+      if (renderTracker?.lastInteraction) {
+        return renderTracker.lastInteraction.timestamp;
+      }
+    } catch { /* ignore */ }
+    return undefined;
+  }
+
+  /**
+   * Decide whether a request is a REST API call worth tracking.
+   * Uses content-type when available; falls back to URL heuristics for
+   * cross-origin responses where the content-type header isn't readable.
+   */
+  private isApiCall(url: string, contentType: string | null): boolean {
+    // If content-type is readable, trust it: JSON = API, known asset types = skip
+    if (contentType) {
+      const ct = contentType.toLowerCase();
+      if (ct.includes('json')) return true;
+      if (ct.includes('image/') || ct.includes('text/css') || ct.includes('javascript') ||
+          ct.includes('font') || ct.includes('text/html') || ct.includes('text/plain')) return false;
+      // Other content types (xml, octet-stream) — treat as API if URL looks like one
+    }
+    // Fallback: URL-based heuristic (content-type hidden by CORS or missing)
+    const lower = url.toLowerCase().split('?')[0];
+    // Skip static asset extensions
+    if (/\.(png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|css|js|mjs|map|html?|mp4|webm|wasm)$/.test(lower)) {
+      return false;
+    }
+    // Skip analytics/tracking
+    if (lower.includes('/collect') || lower.includes('google-analytics') || lower.includes('gtm') ||
+        lower.includes('/beacon') || lower.includes('hotjar') || lower.includes('mixpanel')) {
+      return false;
+    }
+    // Skip extension internals
+    if (lower.startsWith('chrome-extension://') || lower.startsWith('data:')) return false;
+    return true;
   }
 
   private shortenUrl(url: string): string {

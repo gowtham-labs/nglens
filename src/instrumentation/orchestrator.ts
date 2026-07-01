@@ -136,9 +136,7 @@ function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[]
  * Checks Angular version support, then starts all continuous detectors.
  */
 function handleStartTracking(): void {
-  // console.log('[ngLens] START_TRACKING received');
   const versionResult = checkAngularVersion();
-  // console.log('[ngLens] Angular version check:', versionResult);
   if (!versionResult.supported) {
     // Emit an error back to the content script
     dispatchToContent('ERROR', {

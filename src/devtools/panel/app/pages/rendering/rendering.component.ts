@@ -37,6 +37,20 @@ interface ActionReplay {
   framesDropped: number;
   timeline: TimelineEntry[];
   tree: CascadeNode[];
+  /** Flow events (API, RxJS, Signals) in this action window */
+  flowEntries: FlowEntry[];
+}
+
+/** A single flow event entry (API call, subject emission, signal write) */
+interface FlowEntry {
+  id: string;
+  icon: string;
+  type: string;
+  label: string;
+  detail: string;
+  colorClass: string;
+  timestamp: number;
+  ownerClass?: string;
 }
 
 /** A node in the render cascade tree. */
@@ -114,6 +128,15 @@ interface CascadeNode {
                 <div class="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
                   <span><strong class="text-gray-300">{{ action.totalRenders }}</strong> renders</span>
                   <span><strong class="text-gray-300">{{ action.uniqueComponents }}</strong> components</span>
+                  @if (countFlowType(action, 'http-response') > 0) {
+                    <span class="text-cyan-400"><strong>{{ countFlowType(action, 'http-response') }}</strong> API</span>
+                  }
+                  @if (countFlowType(action, 'subject-emit') > 0) {
+                    <span class="text-purple-400"><strong>{{ countFlowType(action, 'subject-emit') }}</strong> RxJS</span>
+                  }
+                  @if (countFlowType(action, 'signal-write') > 0) {
+                    <span class="text-green-400"><strong>{{ countFlowType(action, 'signal-write') }}</strong> signals</span>
+                  }
                   <span>{{ action.duration.toFixed(0) }}ms</span>
                   <span class="text-gray-600">{{ formatTime(action.timestamp) }}</span>
                 </div>
@@ -121,13 +144,90 @@ interface CascadeNode {
               <span class="text-gray-600 text-sm">{{ expandedActions().has(action.id) ? '▾' : '▸' }}</span>
             </div>
 
-            <!-- Expanded: unified timeline showing flow events + render cascade -->
+            <!-- Expanded: organized flow showing Data Flow → Render Cascade → Performance -->
             @if (expandedActions().has(action.id)) {
               <div class="border-t border-gray-700/50 bg-gray-900/40">
 
-                <!-- Frame budget warning -->
+                <!-- ═══ DATA FLOW Section (unattributed — couldn't link to a component) ═══ -->
+                @if (unattributedFlows(action).length > 0) {
+                  <div class="px-4 py-2.5 border-b border-gray-800/60">
+                    <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center gap-1.5 cursor-pointer select-none hover:text-gray-300"
+                         (click)="toggleDataFlow(action.id)">
+                      <span class="text-[10px]">{{ expandedDataFlow().has(action.id) ? '▼' : '▶' }}</span>
+                      <span>Data Flow</span>
+                      <span class="text-cyan-400 normal-case">· {{ unattributedFlows(action).length }} call{{ unattributedFlows(action).length > 1 ? 's' : '' }}</span>
+                      <span class="text-gray-600 normal-case">· not linked to a component</span>
+                    </div>
+                    @if (expandedDataFlow().has(action.id)) {
+                      @for (flow of unattributedFlows(action); track flow.id) {
+                        <div class="flex items-center gap-2.5 py-1.5 rounded hover:bg-gray-800/30"
+                             [title]="flow.label + (flow.detail ? ' — ' + flow.detail : '')">
+                          <span class="text-sm flex-shrink-0 w-5 text-center">{{ flow.icon }}</span>
+                          <span class="text-[11px] font-medium truncate" [ngClass]="flow.colorClass">
+                            {{ flow.label }}
+                          </span>
+                          @if (flow.detail) {
+                            <span class="text-[10px] text-gray-500 truncate flex-1 min-w-0 text-right">{{ flow.detail }}</span>
+                          }
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+
+                <!-- ═══ RENDER CASCADE Section ═══ -->
+                <div class="px-4 py-2.5">
+                  <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center justify-between">
+                    <span>Render Cascade</span>
+                    <span class="text-gray-600 normal-case">{{ hotCount(action) }} hot · click row to inspect</span>
+                  </div>
+                  @for (node of flattenTree(action.tree); track node.componentName + '-' + node.depth) {
+                    <div class="flex items-center gap-2 py-1.5 px-1.5 rounded transition-colors"
+                         [ngClass]="rowClass(node)"
+                         [style.marginLeft.px]="node.depth * 16"
+                         [title]="node.componentName + ' — rendered ' + node.count + '× (' + node.totalDuration.toFixed(1) + 'ms). ' + renderHint(node)">
+                      @if (node.depth > 0) {
+                        <span class="text-gray-600 text-[10px] flex-shrink-0">↳</span>
+                      }
+                      <span class="text-xs flex-shrink-0 w-4 text-center">{{ renderSeverity(node) === 'high' ? '🔥' : renderSeverity(node) === 'medium' ? '⚠️' : '🔄' }}</span>
+                      <span class="text-[11px] min-w-0 truncate"
+                            [ngClass]="node.depth === 0 ? 'text-white font-semibold' : 'text-gray-200'">
+                        {{ displayName(node.componentName) }}
+                      </span>
+                      @if (node.count > 1) {
+                        <span class="text-[9px] px-1.5 rounded flex-shrink-0 font-bold"
+                              [ngClass]="renderSeverity(node) === 'high' ? 'bg-red-500/25 text-red-300' : renderSeverity(node) === 'medium' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-700/60 text-gray-300'">
+                          ×{{ node.count }}
+                        </span>
+                      }
+                      <span class="text-[9px] text-gray-500 truncate flex-1 min-w-0">{{ formatCauseSource(node.cause) }}</span>
+                      <span class="text-[10px] font-mono w-14 text-right flex-shrink-0"
+                            [ngClass]="node.totalDuration > 16 ? 'text-red-400' : node.totalDuration > 5 ? 'text-amber-400' : 'text-gray-600'">
+                        {{ node.totalDuration.toFixed(1) }}ms
+                      </span>
+                    </div>
+                    @if (renderSeverity(node) !== 'none') {
+                      <div class="text-[10px] text-gray-400 pl-8 pb-1 pt-0.5"
+                           [style.marginLeft.px]="node.depth * 16">
+                        <span [ngClass]="renderSeverity(node) === 'high' ? 'text-red-300' : 'text-amber-300'">{{ renderHint(node) }}</span>
+                      </div>
+                    }
+                    <!-- API/store/state events triggered by this component -->
+                    @for (flow of flowsForComponent(action, node.componentName); track flow.id) {
+                      <div class="flex items-center gap-2 py-1 px-1.5 rounded"
+                           [style.marginLeft.px]="(node.depth + 1) * 16"
+                           [title]="flow.label + (flow.detail ? ' — ' + flow.detail : '')">
+                        <span class="text-gray-600 text-[10px] flex-shrink-0">↳</span>
+                        <span class="text-xs flex-shrink-0 w-4 text-center">{{ flow.icon }}</span>
+                        <span class="text-[10px] truncate min-w-0" [ngClass]="flow.colorClass">{{ flow.label }}</span>
+                      </div>
+                    }
+                  }
+                </div>
+
+                <!-- ═══ PERFORMANCE Section ═══ -->
                 @if (action.frameBudgetExceeded) {
-                  <div class="px-4 py-2 bg-red-950/30 border-b border-red-900/30 flex items-center gap-2">
+                  <div class="px-4 py-2 border-t border-gray-800/60 bg-red-950/20 flex items-center gap-2">
                     <span class="text-red-400 text-[10px] font-semibold">⚠ JANK</span>
                     <span class="text-[10px] text-red-300">
                       {{ action.duration.toFixed(0) }}ms total — {{ action.framesDropped }} frames dropped (budget: 16ms/frame)
@@ -135,65 +235,9 @@ interface CascadeNode {
                   </div>
                 }
 
-                <!-- Unified timeline -->
-                <div class="px-2 py-2">
-                  <div class="text-[9px] text-gray-600 uppercase tracking-wide font-semibold px-2 mb-1.5">
-                    Timeline
-                  </div>
-                  @for (entry of action.timeline; track entry.id) {
-                    <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-800/40"
-                         [style.paddingLeft.px]="entry.depth * 16 + 8"
-                         [title]="entry.label + ' — ' + entry.detail + (entry.duration ? ' (' + entry.duration.toFixed(1) + 'ms)' : '')">
-                      <!-- Icon -->
-                      <span class="text-xs flex-shrink-0 w-4 text-center">{{ entry.icon }}</span>
-                      <!-- Label -->
-                      <span class="text-[11px] flex-1 min-w-0 truncate" [ngClass]="entry.colorClass">
-                        {{ entry.label }}
-                      </span>
-                      <!-- Detail -->
-                      @if (entry.detail) {
-                        <span class="text-[9px] text-gray-400 truncate max-w-[140px] flex-shrink-0">{{ entry.detail }}</span>
-                      }
-                      <!-- Count -->
-                      @if (entry.count && entry.count > 1) {
-                        <span class="text-[9px] text-gray-400 flex-shrink-0">×{{ entry.count }}</span>
-                      }
-                      <!-- Duration -->
-                      @if (entry.duration) {
-                        <span class="text-[10px] font-mono w-14 text-right flex-shrink-0"
-                              [ngClass]="entry.duration > 16 ? 'text-red-400' : entry.duration > 5 ? 'text-amber-400' : 'text-gray-600'">
-                          {{ entry.duration.toFixed(1) }}ms
-                        </span>
-                      }
-                    </div>
-                    <!-- Nested flow details (API calls, state changes) — collapsed by default -->
-                    @if (entry.flowDetails && entry.flowDetails.length > 0) {
-                      <div class="flex items-center gap-2 py-1 px-2 cursor-pointer hover:bg-gray-800/40 rounded select-none"
-                           [style.paddingLeft.px]="(entry.depth + 1) * 16 + 16"
-                           (click)="toggleFlowDetails(entry.id)">
-                        <span class="text-[9px] text-gray-600">{{ expandedFlows().has(entry.id) ? '▾' : '▸' }}</span>
-                        <span class="text-[10px] text-cyan-400 font-medium">{{ entry.flowDetails.length }} API/state event{{ entry.flowDetails.length > 1 ? 's' : '' }}</span>
-                      </div>
-                      @if (expandedFlows().has(entry.id)) {
-                        @for (flow of entry.flowDetails; track flow.label) {
-                          <div class="flex items-center gap-2 py-1 px-2"
-                               [style.paddingLeft.px]="(entry.depth + 1) * 16 + 28"
-                               [title]="flow.label + (flow.detail ? ' — ' + flow.detail : '')">
-                            <span class="text-[10px] flex-shrink-0 w-4 text-center">{{ flow.icon }}</span>
-                            <span class="text-[10px] truncate flex-1 font-medium" [ngClass]="flow.colorClass">{{ flow.label }}</span>
-                            @if (flow.detail) {
-                              <span class="text-[9px] text-gray-500 truncate max-w-[180px] flex-shrink-0" [title]="flow.detail">{{ flow.detail }}</span>
-                            }
-                          </div>
-                        }
-                      }
-                    }
-                  }
-                </div>
-
-                <!-- Fix suggestion (brief, inline) -->
+                <!-- Fix suggestion -->
                 @if (getSuggestion(action)) {
-                  <div class="px-4 py-2 border-t border-gray-800 bg-indigo-950/20">
+                  <div class="px-4 py-2 border-t border-gray-800/60 bg-indigo-950/20">
                     <span class="text-[9px] text-gray-500 uppercase font-semibold">Suggestion</span>
                     <p class="text-[11px] text-indigo-300 mt-0.5">{{ getSuggestion(action) }}</p>
                   </div>
@@ -215,6 +259,7 @@ export class RenderingComponent {
   private readonly commandService = inject(CommandService);
   readonly expandedActions = signal(new Set<string>());
   readonly expandedFlows = signal(new Set<string>());
+  readonly expandedDataFlow = signal(new Set<string>());
 
   // ── Action Replays ────────────────────────────────────────────────────────
 
@@ -232,8 +277,27 @@ export class RenderingComponent {
     const firstEventTs = allEvents[0]?.timestamp ?? 0;
     const pageLoadCutoff = firstEventTs + this.PAGE_LOAD_WINDOW;
 
-    const pageLoadEvents = allEvents.filter(e => e.timestamp <= pageLoadCutoff);
-    const postLoadEvents = allEvents.filter(e => e.timestamp > pageLoadCutoff);
+    // Find timestamps of all user interactions to exclude their surrounding events
+    const interactionTimestamps = allEvents
+      .filter(e => e.interactionComponent)
+      .map(e => e.timestamp);
+
+    // An event belongs to page load only if:
+    // 1. It's within the page load window AND
+    // 2. It has no interaction AND
+    // 3. It's not within 500ms after any user interaction (cascade from click)
+    const isPageLoadEvent = (e: RenderEvent): boolean => {
+      if (e.timestamp > pageLoadCutoff) return false;
+      if (e.interactionComponent) return false;
+      // Check if this event is a cascade from a recent interaction
+      for (const iTs of interactionTimestamps) {
+        if (e.timestamp >= iTs && e.timestamp - iTs < 500) return false;
+      }
+      return true;
+    };
+
+    const pageLoadEvents = allEvents.filter(isPageLoadEvent);
+    const postLoadEvents = allEvents.filter(e => !isPageLoadEvent(e));
 
     const results: ActionReplay[] = [];
 
@@ -285,6 +349,7 @@ export class RenderingComponent {
         framesDropped: Math.max(0, Math.floor(pageLoadEvents.reduce((s, e) => s + e.duration, 0) / 16.67) - 1),
         timeline: this.buildTimeline(pageLoadEvents, pageLoadFlow),
         tree: this.buildCascadeTree(pageLoadEvents),
+        flowEntries: this.buildFlowEntries(pageLoadFlow),
         _pageLoadSuggestion: loadSuggestion,
       } as ActionReplay & { _pageLoadSuggestion: string | null });
     }
@@ -299,6 +364,9 @@ export class RenderingComponent {
         : profiles;
       results.push(...relevantProfiles.slice(0, 30).map(p => this.buildReplay(p, allEvents)));
     }
+
+    // Sort all cards chronologically (oldest first = natural reading order)
+    results.sort((a, b) => a.timestamp - b.timestamp);
 
     return results;
   });
@@ -317,6 +385,16 @@ export class RenderingComponent {
     this.expandedFlows.set(next);
   }
 
+  toggleDataFlow(actionId: string): void {
+    const next = new Set(this.expandedDataFlow());
+    if (next.has(actionId)) { next.delete(actionId); } else { next.add(actionId); }
+    this.expandedDataFlow.set(next);
+  }
+
+  countFlowType(action: ActionReplay, type: string): number {
+    return action.flowEntries.filter(f => f.type === type).length;
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   formatTime(ts: number): string {
@@ -330,6 +408,9 @@ export class RenderingComponent {
 
   formatCauseSource(cause: RenderCause): string {
     const src = cause.source ?? cause.type;
+    if (cause.type === 'parent') {
+      return src ? `by ${displayName(src)}` : 'parent cascade';
+    }
     if (src.startsWith('addEventListener:')) return src.replace('addEventListener:', '') + ' event';
     if (src === 'setTimeout') return 'timer';
     if (src === 'setInterval') return 'interval';
@@ -351,14 +432,87 @@ export class RenderingComponent {
 
   flattenTree(tree: CascadeNode[]): CascadeNode[] {
     const result: CascadeNode[] = [];
-    const walk = (nodes: CascadeNode[]): void => {
-      for (const node of nodes) {
-        result.push(node);
-        walk(node.children);
+    const seen = new Set<string>();
+    const walk = (nodes: CascadeNode[], level: number): void => {
+      const sorted = [...nodes].sort((a, b) => b.count - a.count || b.totalDuration - a.totalDuration);
+      for (const node of sorted) {
+        if (seen.has(node.componentName)) continue; // cycle guard
+        seen.add(node.componentName);
+        result.push({ ...node, depth: level });
+        walk(node.children, level + 1);
       }
     };
-    walk(tree);
+    walk(tree, 0);
     return result;
+  }
+
+  /** Severity of a component's render count — drives highlighting. */
+  renderSeverity(node: CascadeNode): 'high' | 'medium' | 'none' {
+    if (node.count >= 6) return 'high';
+    if (node.count >= 3) return 'medium';
+    return 'none';
+  }
+
+  /** Row styling based on severity — hot components stand out. */
+  rowClass(node: CascadeNode): string {
+    const sev = this.renderSeverity(node);
+    if (sev === 'high') return 'bg-red-950/30 hover:bg-red-950/50 border-l-2 border-red-500';
+    if (sev === 'medium') return 'bg-amber-950/20 hover:bg-amber-950/40 border-l-2 border-amber-500/60';
+    return 'hover:bg-gray-800/40 border-l-2 border-transparent';
+  }
+
+  /** Actionable hint explaining why a component is flagged and what to do. */
+  renderHint(node: CascadeNode): string {
+    const sev = this.renderSeverity(node);
+    if (sev === 'none') return '';
+    const cause = node.cause.type;
+    const src = node.cause.source ?? '';
+
+    if (cause === 'parent') {
+      return `Re-rendered ${node.count}× by its parent. Add OnPush so it only updates when its own @Input() refs change.`;
+    }
+    if (src.includes('setInterval') || src.includes('setTimeout')) {
+      return `Re-rendered ${node.count}× by timers. Run the timer outside Angular (ngZone.runOutsideAngular) and update state via signals.`;
+    }
+    if (src.includes('fetch') || src.includes('XMLHttpRequest') || src.includes('Promise')) {
+      return `Re-rendered ${node.count}× by async/API responses. Batch responses (forkJoin) or update state once instead of per-response.`;
+    }
+    if (src.includes('requestAnimationFrame')) {
+      return `Re-rendered ${node.count}× by animation frames. Move the animation loop outside Angular's zone.`;
+    }
+    return `Re-rendered ${node.count}× in this action. Consider OnPush + signals to reduce unnecessary cycles.`;
+  }
+
+  /** Count of hot components in an action — shown in the section header. */
+  hotCount(action: ActionReplay): number {
+    return this.flattenTree(action.tree).filter(n => this.renderSeverity(n) !== 'none').length;
+  }
+
+  /** Select a component to highlight it in the page and open the Why panel. */
+  inspectComponent(componentName: string): void {
+    this.state.selectedComponent.set(componentName);
+  }
+
+  /** Flow events (API/store/state) attributed to a specific component via ownerClass. */
+  flowsForComponent(action: ActionReplay, componentName: string): FlowEntry[] {
+    return action.flowEntries.filter(f =>
+      f.ownerClass && this.displayName(f.ownerClass) === this.displayName(componentName)
+    );
+  }
+
+  /** Flow events with no component attribution — shown in the Data Flow section. */
+  unattributedFlows(action: ActionReplay): FlowEntry[] {
+    const attributed = new Set(
+      action.flowEntries
+        .filter(f => f.ownerClass)
+        .map(f => this.displayName(f.ownerClass!))
+    );
+    // A flow is unattributed if its owner isn't a component in this action's tree
+    const treeComponents = new Set(this.flattenTree(action.tree).map(n => this.displayName(n.componentName)));
+    return action.flowEntries.filter(f => {
+      if (!f.ownerClass) return true;
+      return !treeComponents.has(this.displayName(f.ownerClass));
+    });
   }
 
   // ── Private: build action replays ─────────────────────────────────────────
@@ -367,9 +521,12 @@ export class RenderingComponent {
     const events = allEvents.filter(e =>
       e.timestamp >= profile.startTime && e.timestamp <= profile.endTime
     );
-    const flowEvents = this.state.flowEvents().filter(f =>
-      f.timestamp >= profile.startTime && f.timestamp <= profile.endTime
-    );
+    const flowEvents = this.state.flowEvents().filter(f => {
+      if (f.triggeredByInteractionTs != null) {
+        return f.triggeredByInteractionTs >= profile.startTime - 100 && f.triggeredByInteractionTs <= profile.endTime + 100;
+      }
+      return f.timestamp >= profile.startTime - 100 && f.timestamp <= profile.endTime + 2000;
+    });
     const interaction = events.find(e => e.interactionComponent);
     const duration = profile.duration;
     return {
@@ -386,6 +543,7 @@ export class RenderingComponent {
       framesDropped: Math.max(0, Math.floor(events.reduce((s, e) => s + e.duration, 0) / 16.67) - 1),
       timeline: this.buildTimeline(events, flowEvents),
       tree: this.buildCascadeTree(events),
+      flowEntries: this.buildFlowEntries(flowEvents),
     };
   }
 
@@ -405,6 +563,7 @@ export class RenderingComponent {
     if (current.length > 0) rawGroups.push(current);
 
     // ── Merge rapid input events on the same element (within 500ms) ──
+    // ── Also merge async cascades that follow a user interaction (API responses) ──
     const merged: RenderEvent[][] = [];
     for (let i = 0; i < rawGroups.length; i++) {
       const group = rawGroups[i];
@@ -419,8 +578,13 @@ export class RenderingComponent {
         prevInteraction.causes[0]?.source?.includes('input') &&
         group[0].timestamp - prev[prev.length - 1].timestamp < 500;
 
-      if (isSameInputElement) {
-        // Merge into previous group
+      // Merge non-interactive groups that follow a user interaction within 2s
+      // (these are typically API response renders triggered by the click)
+      const isAsyncCascade =
+        prev && prevInteraction && !groupInteraction &&
+        group[0].timestamp - prev[prev.length - 1].timestamp < 2000;
+
+      if (isSameInputElement || isAsyncCascade) {
         prev.push(...group);
       } else {
         merged.push(group);
@@ -437,7 +601,14 @@ export class RenderingComponent {
       const startTs = group[0].timestamp;
       const endTs = group[group.length - 1].timestamp;
       const duration = endTs - startTs || group.reduce((s, e) => s + e.duration, 0);
-      const flowInWindow = allFlow.filter(f => f.timestamp >= startTs - 50 && f.timestamp <= endTs + 50);
+      const flowInWindow = allFlow.filter(f => {
+        // Match by causal link: flow event was triggered by an interaction in this group
+        if (f.triggeredByInteractionTs != null) {
+          return f.triggeredByInteractionTs >= startTs - 100 && f.triggeredByInteractionTs <= endTs + 100;
+        }
+        // Fallback: time proximity for flow events without interaction stamp
+        return f.timestamp >= startTs - 100 && f.timestamp <= endTs + 2000;
+      });
 
       // Count how many input keystrokes were merged
       const inputCount = group.filter(e => e.causes[0]?.source?.includes('input')).length;
@@ -461,18 +632,34 @@ export class RenderingComponent {
         framesDropped: Math.max(0, Math.floor(group.reduce((s, e) => s + e.duration, 0) / 16.67) - 1),
         timeline: this.buildTimeline(group, flowInWindow),
         tree: this.buildCascadeTree(group),
+        flowEntries: this.buildFlowEntries(flowInWindow),
       };
     });
   }
 
   private buildCascadeTree(events: RenderEvent[]): CascadeNode[] {
     // Build tree using the depth and parentComponent from instrumentation
+    // Skip minified names (1-2 char) — they're not useful to developers
+    const filteredEvents = events.filter(e => e.componentName.length > 2);
     const nodeMap = new Map<string, CascadeNode>();
+    // Definitive parent per component (first non-null parent wins, ignoring self-parent)
+    const parentOf = new Map<string, string>();
+    // Track last counted render timestamp per component to coalesce a single
+    // mount/CD cycle (Angular emits several DOM mutations for one render).
+    const lastCountedTs = new Map<string, number>();
+    const SAME_CYCLE_MS = 50;
 
-    for (const event of events) {
+    for (const event of filteredEvents) {
       const existing = nodeMap.get(event.componentName);
+      const lastTs = lastCountedTs.get(event.componentName);
+      // Only count as a distinct render if it's outside the same-cycle window
+      const isDistinctRender = lastTs == null || (event.timestamp - lastTs) >= SAME_CYCLE_MS;
+
       if (existing) {
-        existing.count++;
+        if (isDistinctRender) {
+          existing.count++;
+          lastCountedTs.set(event.componentName, event.timestamp);
+        }
         existing.totalDuration += event.duration;
       } else {
         nodeMap.set(event.componentName, {
@@ -483,21 +670,28 @@ export class RenderingComponent {
           depth: event.depth ?? 0,
           children: [],
         });
+        lastCountedTs.set(event.componentName, event.timestamp);
+      }
+
+      // Record a stable parent for this component (skip self-reference)
+      const p = event.parentComponent;
+      if (p && p !== event.componentName && !parentOf.has(event.componentName)) {
+        parentOf.set(event.componentName, p);
       }
     }
 
-    // Build parent→child relationships
+    // Build parent→child relationships using the definitive parent map.
+    // A node is a root if it has no parent in this action's node set.
     const roots: CascadeNode[] = [];
-    for (const event of events) {
-      const node = nodeMap.get(event.componentName);
-      if (!node) continue;
-
-      if (event.parentComponent && nodeMap.has(event.parentComponent)) {
-        const parent = nodeMap.get(event.parentComponent)!;
+    for (const [name, node] of nodeMap) {
+      const parentName = parentOf.get(name);
+      // Guard against parent pointing to a node not in this set, or a cycle
+      if (parentName && nodeMap.has(parentName) && !this.wouldCycle(name, parentName, parentOf)) {
+        const parent = nodeMap.get(parentName)!;
         if (!parent.children.includes(node)) {
           parent.children.push(node);
         }
-      } else if (!roots.includes(node)) {
+      } else {
         roots.push(node);
       }
     }
@@ -512,12 +706,26 @@ export class RenderingComponent {
     return roots;
   }
 
+  /** Detect whether linking child→parent would create a cycle. */
+  private wouldCycle(child: string, parent: string, parentOf: Map<string, string>): boolean {
+    let current: string | undefined = parent;
+    const visited = new Set<string>();
+    while (current) {
+      if (current === child) return true;
+      if (visited.has(current)) return true;
+      visited.add(current);
+      current = parentOf.get(current);
+    }
+    return false;
+  }
+
   private buildTimeline(renderEvents: RenderEvent[], flowEvents: FlowEvent[]): TimelineEntry[] {
     const entries: TimelineEntry[] = [];
     let entryId = 0;
 
-    // Only show component renders in the timeline (not flow events at top level)
+    // Only show component renders in the timeline — skip minified names (1-2 char)
     for (const r of renderEvents) {
+      if (r.componentName.length <= 2) continue;
       entries.push({
         id: `t-${entryId++}`,
         timestamp: r.timestamp,
@@ -535,7 +743,7 @@ export class RenderingComponent {
     // Sort by timestamp
     entries.sort((a, b) => a.timestamp - b.timestamp);
 
-    // Deduplicate consecutive renders of the same component
+    // Deduplicate consecutive renders of the same component at the same depth
     const deduped: TimelineEntry[] = [];
     for (const entry of entries) {
       const last = deduped[deduped.length - 1];
@@ -548,20 +756,84 @@ export class RenderingComponent {
       }
     }
 
+    // Collapse repeated sibling groups at same depth (e.g., TrFilter + SearchByKey repeated 20×)
+    const collapsed: TimelineEntry[] = [];
+    let i = 0;
+    while (i < deduped.length) {
+      const entry = deduped[i];
+      // Look for repeating patterns of siblings at the same depth (depth > 0)
+      if (entry.depth > 0 && entry.detail === 'parent cascade') {
+        // Find the pattern: consecutive entries at the same depth form a "group"
+        let patternEnd = i + 1;
+        while (patternEnd < deduped.length &&
+               deduped[patternEnd].depth >= entry.depth &&
+               deduped[patternEnd].detail === 'parent cascade') {
+          patternEnd++;
+        }
+        const groupSize = patternEnd - i;
+
+        // If group has > 4 entries at this depth, try to detect repeating pattern
+        if (groupSize > 4) {
+          // Count occurrences of each component name at this exact depth
+          const nameCountsAtDepth = new Map<string, number>();
+          for (let j = i; j < patternEnd; j++) {
+            if (deduped[j].depth === entry.depth) {
+              nameCountsAtDepth.set(deduped[j].label, (nameCountsAtDepth.get(deduped[j].label) ?? 0) + 1);
+            }
+          }
+          // If any component repeats > 3× at this depth, collapse all at this depth into grouped entries
+          const hasRepeats = Array.from(nameCountsAtDepth.values()).some(c => c > 3);
+          if (hasRepeats) {
+            // Emit one collapsed entry per unique component at this depth level
+            for (const [name, count] of nameCountsAtDepth) {
+              collapsed.push({
+                ...entry,
+                id: `t-collapsed-${entry.id}-${name}`,
+                label: name,
+                count,
+                duration: deduped.filter((e, idx) => idx >= i && idx < patternEnd && e.label === name && e.depth === entry.depth)
+                  .reduce((sum, e) => sum + (e.duration ?? 0), 0),
+              });
+            }
+            // Also include deeper children as a single collapsed line
+            const childNames = new Map<string, number>();
+            for (let j = i; j < patternEnd; j++) {
+              if (deduped[j].depth > entry.depth) {
+                childNames.set(deduped[j].label, (childNames.get(deduped[j].label) ?? 0) + (deduped[j].count ?? 1));
+              }
+            }
+            for (const [name, count] of childNames) {
+              collapsed.push({
+                ...entry,
+                id: `t-collapsed-child-${entry.id}-${name}`,
+                label: name,
+                depth: entry.depth + 1,
+                count,
+                duration: 0,
+              });
+            }
+            i = patternEnd;
+            continue;
+          }
+        }
+      }
+      collapsed.push(deduped[i]);
+      i++;
+    }
+
     // Attach flow events to the component that initiated them (via ownerClass)
     // or fallback to nearest render in time
+    // (Flow is now shown in its own section, but keep flowDetails for tooltip context)
     for (const f of flowEvents) {
       let target: TimelineEntry | null = null;
 
-      // Strategy 1: Match by ownerClass (the component that triggered the API call)
       if (f.ownerClass) {
-        target = deduped.find(e => e.kind === 'render' && e.label === this.displayName(f.ownerClass!)) ?? null;
+        target = collapsed.find(e => e.kind === 'render' && e.label === this.displayName(f.ownerClass!)) ?? null;
       }
 
-      // Strategy 2: Nearest render in time (within 500ms)
       if (!target) {
         let minDistance = 500;
-        for (const entry of deduped) {
+        for (const entry of collapsed) {
           if (entry.kind !== 'render') continue;
           const distance = Math.abs(entry.timestamp - f.timestamp);
           if (distance < minDistance) {
@@ -569,11 +841,6 @@ export class RenderingComponent {
             target = entry;
           }
         }
-      }
-
-      // Strategy 3: Attach to last render entry as fallback
-      if (!target && deduped.length > 0) {
-        target = deduped[deduped.length - 1];
       }
 
       if (target) {
@@ -587,7 +854,35 @@ export class RenderingComponent {
       }
     }
 
-    return deduped;
+    return collapsed;
+  }
+
+  private buildFlowEntries(flowEvents: FlowEvent[]): FlowEntry[] {
+    return flowEvents
+      .filter(f => !this.isNoiseFlow(f))
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((f, i) => {
+        const isStoreAction = f.label.startsWith('Store:');
+        return {
+          id: `flow-${i}-${f.timestamp}`,
+          icon: isStoreAction ? '🏪' : this.flowIcon(f.type),
+          type: f.type,
+          label: f.label,
+          detail: f.detail ?? '',
+          colorClass: isStoreAction ? 'text-orange-300' : this.flowColor(f.type),
+          timestamp: f.timestamp,
+          ownerClass: f.ownerClass,
+        };
+      });
+  }
+
+  /** Filter out remaining noisy flow events not caught at source */
+  private isNoiseFlow(f: FlowEvent): boolean {
+    if (f.type !== 'http-response') return false;
+    const url = (f.detail ?? f.label).toLowerCase();
+    // Chrome extension internal requests
+    if (url.includes('chrome-extension://')) return true;
+    return false;
   }
 
   private flowIcon(type: string): string {
@@ -710,12 +1005,25 @@ export class RenderingComponent {
     // Use interaction data if available
     const interaction = events.find(e => e.interactionComponent);
     if (interaction?.causes[0]?.source) {
+      const src = interaction.causes[0].source;
+      if (src.startsWith('addEventListener:')) {
+        return src.replace('addEventListener:', '') + ' event';
+      }
       return this.formatCauseSource(interaction.causes[0]);
     }
-    // Fall back to most common cause source
+    // If there's an interaction component but no clear source, it's still a click
+    if (interaction) return 'click event';
+
+    // Detect navigation: many components re-rendering with parent cascade = route change
+    const uniqueComponents = new Set(events.map(e => e.componentName)).size;
+    if (uniqueComponents >= 5) return 'navigation';
+
+    // Fall back to most common cause source (skip parent-cascade noise)
     const sources = new Map<string, number>();
     for (const e of events) {
-      const s = e.causes[0]?.source ?? e.causes[0]?.type ?? 'unknown';
+      const c = e.causes[0];
+      if (!c || c.type === 'parent') continue; // parent cascade isn't a trigger
+      const s = c.source ?? c.type;
       if (s !== 'unknown') sources.set(s, (sources.get(s) ?? 0) + 1);
     }
     if (sources.size === 0) return 'Page activity';
@@ -724,7 +1032,8 @@ export class RenderingComponent {
   }
 
   private detectIcon(events: RenderEvent[]): string {
-    const src = events[0]?.causes[0]?.source ?? '';
+    const interaction = events.find(e => e.interactionComponent);
+    const src = interaction?.causes[0]?.source ?? events[0]?.causes[0]?.source ?? '';
     if (src.includes('click')) return '🖱️';
     if (src.includes('input') || src.includes('key')) return '⌨️';
     if (src.includes('scroll')) return '📜';
@@ -732,6 +1041,8 @@ export class RenderingComponent {
     if (src.includes('setTimeout') || src.includes('setInterval')) return '⏱️';
     if (src.includes('Promise')) return '⚡';
     if (src.includes('navigation') || src.includes('route')) return '🧭';
+    // Many components re-rendering = likely navigation
+    if (new Set(events.map(e => e.componentName)).size >= 5) return '🧭';
     return '▸';
   }
 }

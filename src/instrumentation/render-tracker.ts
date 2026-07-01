@@ -42,14 +42,9 @@ const INTERNAL_NAMES = new Set([
 ]);
 
 function isInternalName(name: string): boolean {
-  if (!name || name.length <= 2) return true;
+  if (!name || name.length === 0) return true;
   if (INTERNAL_NAMES.has(name)) return true;
   if (name.startsWith('ɵ') || name.startsWith('Ɵ') || name.startsWith('__')) return true;
-  if (name.startsWith('_') && name.length <= 3) return true;
-  // Angular internal patterns: single uppercase letter followed by digits
-  if (/^[A-Z]\d*$/.test(name)) return true;
-  // Common minified patterns
-  if (/^[a-z]$/.test(name)) return true;
   // Names that look like Angular internals
   if (name.includes('Context') && !name.includes('Component')) return true;
   return false;
@@ -465,32 +460,41 @@ export class RenderTracker {
   // ═══ Hierarchy Builder ══════════════════════════════════════════════════════
 
   private buildHierarchy(elements: [Element, string][]): Array<{ name: string; element: Element; parent: string | null; depth: number }> {
-    // Sort elements by DOM order (parent elements come before children)
-    const sorted = elements.sort((a, b) => {
-      if (a[0].contains(b[0])) return -1;
-      if (b[0].contains(a[0])) return 1;
-      return 0;
-    });
-
     const result: Array<{ name: string; element: Element; parent: string | null; depth: number }> = [];
 
-    for (const [element, name] of sorted) {
-      // Find the nearest ancestor in the result that contains this element
-      let parent: string | null = null;
-      let depth = 0;
-
-      for (let i = result.length - 1; i >= 0; i--) {
-        if (result[i].element.contains(element) && result[i].element !== element) {
-          parent = result[i].name;
-          depth = result[i].depth + 1;
-          break;
-        }
-      }
-
+    for (const [element, name] of elements) {
+      // Find the real parent component by walking UP the actual DOM tree,
+      // looking for the nearest ancestor element that is a registered component.
+      // This works across mutation batches (timer renders, async, etc.) because
+      // it uses the persistent componentElements registry, not just same-batch elements.
+      const { parent, depth } = this.findDomAncestorComponent(element);
       result.push({ name, element, parent, depth });
     }
 
     return result;
+  }
+
+  /**
+   * Walks up the DOM from the given element to find the nearest ancestor that is
+   * a registered component, and counts how many component ancestors exist (= depth).
+   */
+  private findDomAncestorComponent(element: Element): { parent: string | null; depth: number } {
+    let current: Element | null = element.parentElement;
+    let parent: string | null = null;
+    let depth = 0;
+
+    while (current) {
+      const name = this.componentElements.get(current);
+      if (name && !isInternalName(name)) {
+        if (parent === null) {
+          parent = name; // nearest ancestor component = direct parent
+        }
+        depth++;
+      }
+      current = current.parentElement;
+    }
+
+    return { parent, depth };
   }
 
   // ═══ Element Lookup ═════════════════════════════════════════════════════════
@@ -499,14 +503,15 @@ export class RenderTracker {
     const ng = (globalThis as any).ng;
     const hasDevApi = !!ng?.getComponent;
     let current: Element | null = element;
+    let depth = 0;
 
     while (current) {
-      const name = this.componentElements.get(current);
-      if (name && !isInternalName(name)) return { element: current, name };
+      try {
+        const name = this.componentElements.get(current);
+        if (name && !isInternalName(name)) return { element: current, name };
 
-      // On-demand discovery: if element isn't registered yet, try to discover it now
-      if (hasDevApi && !this.componentElements.has(current)) {
-        try {
+        // On-demand discovery: if element isn't registered yet, try to discover it now
+        if (hasDevApi && !this.componentElements.has(current)) {
           const component = ng.getComponent(current);
           if (component) {
             const cName = component.constructor?.name ?? '';
@@ -515,13 +520,16 @@ export class RenderTracker {
               return { element: current, name: cName };
             }
           }
-        } catch { /* not a component */ }
-      }
+        }
+      } catch { /* skip this element — SVG or detached node */ }
 
       current = current.parentElement;
+      depth++;
     }
     return null;
   }
+
+  private _loggedUnresolved = false;
 
   private findOwnerComponent(element: Element): string | null {
     const entry = this.findOwnerEntry(element);

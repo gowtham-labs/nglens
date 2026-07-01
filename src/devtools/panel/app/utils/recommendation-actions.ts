@@ -34,11 +34,27 @@ export interface RecommendationActionInput {
 }
 
 export function buildRecommendationActions(input: RecommendationActionInput): RecommendationAction[] {
+  // Collect components that already have dedicated OnPush or hotspot actions
+  // so renderDiagnosticActions won't duplicate them.
+  const onPushComponents = new Set(
+    deduplicateOnPush(
+      input.onPushRecommendations
+        .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
+    ).map((item) => item.component)
+  );
+  const hotspotComponents = new Set(
+    input.hotspots
+      .filter((hotspot) => hotspot.score >= 40)
+      .map((h) => h.componentName)
+  );
+  const excludeFromDiagnostics = new Set([...onPushComponents, ...hotspotComponents]);
+
   return [
     ...input.trackByIssues.map(trackByAction),
-    ...input.onPushRecommendations
-      .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
-      .map(onPushAction),
+    ...deduplicateOnPush(
+      input.onPushRecommendations
+        .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
+    ).map(onPushAction),
     ...input.zonePollutionSources
       .filter((source) => source.severity !== 'low')
       .map(zoneAction),
@@ -46,7 +62,7 @@ export function buildRecommendationActions(input: RecommendationActionInput): Re
       .filter((hotspot) => hotspot.score >= 40)
       .map(hotspotAction),
     ...groupedMemoryActions(input.leakEvents),
-    ...renderDiagnosticActions(input.componentStats ?? []),
+    ...renderDiagnosticActions(input.componentStats ?? [], excludeFromDiagnostics),
   ].sort((a, b) => {
     if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
     return kindPriority(a.kind) - kindPriority(b.kind);
@@ -229,6 +245,18 @@ function normalizedOnPushScore(item: OnPushScore): number {
   return Math.round(item.score <= 1 ? item.score * 100 : item.score);
 }
 
+/** Keep only the highest-scoring entry per component to avoid duplicate cards. */
+function deduplicateOnPush(items: OnPushScore[]): OnPushScore[] {
+  const best = new Map<string, OnPushScore>();
+  for (const item of items) {
+    const existing = best.get(item.component);
+    if (!existing || normalizedOnPushScore(item) > normalizedOnPushScore(existing)) {
+      best.set(item.component, item);
+    }
+  }
+  return Array.from(best.values());
+}
+
 function severityScore(severity: PollutionSourceMetrics['severity']): number {
   switch (severity) {
     case 'critical': return 95;
@@ -295,11 +323,12 @@ function leakFix(type: LeakEvent['leakType']): string {
   }
 }
 
-function renderDiagnosticActions(stats: ComponentStats[]): RecommendationAction[] {
+function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set<string>): RecommendationAction[] {
   const actions: RecommendationAction[] = [];
 
   for (const stat of stats) {
     if (stat.renderCount < 3) continue;
+    if (excludeComponents.has(stat.componentName)) continue;
 
     const topCause = getTopCauseFromBreakdown(stat.causesBreakdown);
 
