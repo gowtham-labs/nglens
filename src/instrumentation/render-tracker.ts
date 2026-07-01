@@ -87,6 +87,9 @@ export class RenderTracker {
   // Discovery
   private discoveryInterval: ReturnType<typeof setInterval> | null = null;
   private rootComponentElement: Element | null = null;
+  
+  // Initial discovery timeouts
+  private initialDiscoveryTimeouts: ReturnType<typeof setTimeout>[] = [];
 
   private constructor() {}
 
@@ -113,10 +116,10 @@ export class RenderTracker {
     (globalThis as any).__nglens_render_tracker_ref = this;
 
     // Aggressive discovery during first 3 seconds (page load components mounting)
-    setTimeout(() => this.discoverComponents(), 200);
-    setTimeout(() => this.discoverComponents(), 500);
-    setTimeout(() => this.discoverComponents(), 1000);
-    setTimeout(() => this.discoverComponents(), 2000);
+    this.initialDiscoveryTimeouts.push(setTimeout(() => this.discoverComponents(), 200));
+    this.initialDiscoveryTimeouts.push(setTimeout(() => this.discoverComponents(), 500));
+    this.initialDiscoveryTimeouts.push(setTimeout(() => this.discoverComponents(), 1000));
+    this.initialDiscoveryTimeouts.push(setTimeout(() => this.discoverComponents(), 2000));
   }
 
   stop(): void {
@@ -126,6 +129,7 @@ export class RenderTracker {
     if (this.mutationObserver) { this.mutationObserver.disconnect(); this.mutationObserver = null; }
     this.stopBatching();
     this.stopComponentDiscovery();
+    this.clearInitialDiscoveryTimeouts();
     this.cancelPendingFrame();
     this.unhookZoneJs();
     this.componentElements.clear();
@@ -194,6 +198,13 @@ export class RenderTracker {
     document.removeEventListener('keydown', this.onInteraction, true);
     if (this.interactionTimeout) { clearTimeout(this.interactionTimeout); this.interactionTimeout = null; }
     if (this.noRenderTimeout) { clearTimeout(this.noRenderTimeout); this.noRenderTimeout = null; }
+  }
+
+  private clearInitialDiscoveryTimeouts(): void {
+    for (const timeoutId of this.initialDiscoveryTimeouts) {
+      clearTimeout(timeoutId);
+    }
+    this.initialDiscoveryTimeouts = [];
   }
 
   private buildSelector(el: Element): string {

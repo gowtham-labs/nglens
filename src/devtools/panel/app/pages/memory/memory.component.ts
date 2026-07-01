@@ -42,8 +42,8 @@ interface DestroyedComponent {
           <div class="flex items-center gap-2 text-[11px]">
             <span class="text-gray-500">{{ liveComponents().length }} active</span>
             <span class="text-gray-700">·</span>
-            <span [ngClass]="destroyedWithLeaks().length > 0 ? 'text-red-400' : 'text-green-400'">
-              {{ destroyedWithLeaks().length }} leaked
+            <span [ngClass]="totalLeakedCount() > 0 ? 'text-red-400' : 'text-green-400'">
+              {{ totalLeakedCount() }} leaked
             </span>
           </div>
         </div>
@@ -87,10 +87,10 @@ interface DestroyedComponent {
             <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
               <div class="text-[9px] text-gray-500 uppercase tracking-wide">Confirmed Leaks</div>
               <div class="text-xl font-bold mt-1"
-                   [ngClass]="destroyedWithLeaks().length > 0 ? 'text-red-400' : 'text-green-400'">
-                {{ destroyedWithLeaks().length }}
+                   [ngClass]="totalLeakedCount() > 0 ? 'text-red-400' : 'text-green-400'">
+                {{ totalLeakedCount() }}
               </div>
-              <div class="text-[9px] text-gray-500 mt-0.5">components destroyed without cleanup</div>
+              <div class="text-[9px] text-gray-500 mt-0.5">resource leaks in {{ destroyedWithLeaks().length }} component{{ destroyedWithLeaks().length > 1 ? 's' : '' }}</div>
             </div>
           </div>
 
@@ -286,6 +286,10 @@ export class MemoryComponent {
 
   readonly atRiskCount = computed(() =>
     this.liveComponents().filter(c => c.status === 'at-risk').length
+  );
+
+  readonly totalLeakedCount = computed(() =>
+    this.destroyedWithLeaks().reduce((sum, comp) => sum + comp.leakedCount, 0)
   );
 
   // ── Leak Report: components that were destroyed without cleanup ──

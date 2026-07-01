@@ -398,12 +398,7 @@ export class RenderingComponent {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   formatTime(ts: number): string {
-    const now = Date.now();
-    const diffMs = now - ts;
-    if (diffMs < 5000) return 'just now';
-    if (diffMs < 60000) return `${Math.floor(diffMs / 1000)}s ago`;
-    if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)}m ago`;
-    return new Date(ts).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit' });
+    return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   formatCauseSource(cause: RenderCause): string {
