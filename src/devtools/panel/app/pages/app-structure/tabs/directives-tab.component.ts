@@ -1,5 +1,4 @@
 import { Component, ChangeDetectionStrategy, computed, inject, input } from '@angular/core';
-import { NgClass } from '@angular/common';
 import { PanelState } from '../../../state/panel.state';
 import { CommandService } from '../../../services/command.service';
 import type { DirectiveRegistryEntry, HostListenerIssue } from '../../../../../../types/app-structure';
@@ -9,7 +8,7 @@ import { isExternalPkg, isPackageOnly, shortPath } from './tab-utils';
   selector: 'app-directives-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
+  imports: [],
   templateUrl: './directives-tab.component.html',
   styleUrl: '../app-structure.component.css',
 })
