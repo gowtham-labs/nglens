@@ -1,0 +1,29 @@
+@for (m of filteredModules(); track m.className) {
+  <div class="px-3 py-2 border-b border-gray-800">
+    <div class="flex items-center gap-2 mb-1.5 font-mono">
+      <span class="tag-module">NgModule</span>
+      <button type="button" class="text-xs font-mono font-medium text-gray-100 hover:text-indigo-400 cursor-pointer transition-colors text-left"
+        title="Open in Sources" (click)="openFile(m.className, m.filePath)">{{ m.className }}</button>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+      @for (group of [
+        { label: 'Declarations', items: m.declarations, desc: 'Declarations: Components, Directives, and Pipes compiled in this NgModule.' },
+        { label: 'Imports',      items: m.imports,      desc: 'Imports: External NgModules whose exported components and directives are needed.' },
+        { label: 'Exports',      items: m.exports,      desc: 'Exports: Components, Directives, and Pipes visible and reusable to importing Modules.' },
+        { label: 'Providers',    items: m.providers,    desc: 'Providers: Services and InjectionTokens registered to be available in this Module\'s injector scope.' }
+      ]; track group.label) {
+        <div>
+          <span class="text-gray-500 uppercase tracking-wide" [title]="group.desc">{{ group.label }}</span>
+          <div class="chips mt-0.5">
+            @for (item of group.items; track item) {
+              <button type="button" class="chip hover:text-indigo-400 cursor-pointer transition-colors text-left font-mono text-[10px]"
+                [title]="group.desc + '\n' + item" (click)="openFile(item, null)">{{ item }}</button>
+            }
+            @if (!group.items.length) { <span class="cell-dim">—</span> }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+@if (!filteredModules().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }

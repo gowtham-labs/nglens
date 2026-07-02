@@ -1,0 +1,35 @@
+<div>
+  <div class="note-box">
+    <span>ℹ</span>
+    <span>
+      InjectionTokens serve as Angular's runtime <strong class="text-gray-300">config</strong> mechanism.
+      Use <code class="font-mono text-[10px]">new InjectionToken('MY_CONFIG')</code> to expose app configuration here.
+    </span>
+  </div>
+  <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+    <span class="col-hdr flex-1">Token name</span>
+    <span class="col-hdr w-16">Multi</span>
+  </div>
+  @for (t of filteredTokens(); track t.name) {
+    <div class="row">
+      <span class="flex-1 font-mono text-violet-300 truncate" [title]="t.name">
+        <button type="button" class="font-mono text-violet-300 hover:text-violet-400 cursor-pointer transition-colors text-left"
+          (click)="openFile(t.name, t.filePath)" title="Open in Sources">{{ t.name }}</button>
+      </span>
+      <span class="w-16 flex-shrink-0">
+        @if (t.multi) {
+          @if (t.filePath && !isPackageOnly(t.filePath)) {
+            <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
+              title="InjectionToken configuration property: multi&#10;Registers multiple providers for this key under an array value rather than a single instance override (e.g. HTTP_INTERCEPTORS)."
+              (click)="openProperty(t.filePath, 'multi', t.name)">multi</button>
+          } @else {
+            <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50" title="InjectionToken configuration property: multi&#10;Registers multiple providers for this key under an array value rather than a single instance override (e.g. HTTP_INTERCEPTORS).">multi</span>
+          }
+        }
+      </span>
+    </div>
+  }
+  @if (!filteredTokens().length) {
+    <div class="py-8 text-center text-xs text-gray-500">No injection tokens detected</div>
+  }
+</div>

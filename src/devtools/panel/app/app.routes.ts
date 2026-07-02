@@ -7,4 +7,5 @@ export const routes: Routes = [
   { path: 'profiler', redirectTo: 'rendering', pathMatch: 'full' },
   { path: 'memory', loadComponent: () => import('./pages/memory/memory.component').then(m => m.MemoryComponent) },
   { path: 'recommendations', loadComponent: () => import('./pages/recommendations/recommendations.component').then(m => m.RecommendationsComponent) },
+  { path: 'app-structure', loadComponent: () => import('./pages/app-structure/app-structure.component').then(m => m.AppStructureComponent) },
 ];

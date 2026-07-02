@@ -1,0 +1,153 @@
+<div class="p-2">
+  <!-- Routing strategy header -->
+  @if (data()!.routerInfo) {
+    <div class="flex items-center gap-3 mb-2 px-1 py-1.5 bg-gray-800/40 rounded text-[10px]">
+      <span class="text-gray-500">Strategy:</span>
+      @if (data()!.routerInfo!.strategy === 'path') {
+        <span class="tag-prod">HTML5 History</span>
+      } @else if (data()!.routerInfo!.strategy === 'hash') {
+        <span class="tag-impure">Hash-based</span>
+      } @else {
+        <span class="cell-dim">unknown</span>
+      }
+      <span class="text-gray-500 ml-2">Base href:</span>
+      <code class="font-mono text-gray-300">{{ data()!.routerInfo!.baseHref ?? '/' }}</code>
+      <span class="text-gray-500 ml-2">Total:</span>
+      <span class="text-gray-300">{{ data()!.routerInfo!.totalRoutes }}</span>
+      @if (data()!.routerInfo!.hasLazyRoutes) {
+        <span class="tag-lazy ml-1">lazy</span>
+      }
+    </div>
+  }
+
+  <!-- Active Route Tree -->
+  @if ((data()?.activeRoutes ?? []).length > 0) {
+    <div class="mb-3 border border-indigo-800/40 rounded overflow-hidden">
+      <div class="px-3 py-1.5 bg-indigo-900/30 border-b border-indigo-800/40 text-[10px] font-semibold text-indigo-300 uppercase tracking-wide flex items-center gap-2">
+        <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-400"></span>
+        Active Route → Component Map
+      </div>
+      <div class="divide-y divide-indigo-800/20">
+        @for (ar of data()!.activeRoutes; track ar.absolutePath + ar.outlet) {
+          <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
+            <span class="font-mono text-indigo-300 flex-shrink-0">{{ ar.absolutePath }}</span>
+            @if (ar.outlet !== 'primary') {
+              <span class="badge bg-gray-700 text-gray-400 border border-gray-600">[{{ ar.outlet }}]</span>
+            }
+            <span class="text-gray-600 flex-1">→</span>
+            <button type="button"
+              class="chip font-mono flex-shrink-0 hover:text-indigo-400 cursor-pointer transition-colors"
+              [title]="'Open in Sources: ' + ar.component"
+              (click)="openComponent(ar.component)">{{ ar.component }}</button>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Route Configuration Tree -->
+  <div class="section-title -mx-2 mb-1">Route Configuration</div>
+  @if (!filteredFlatRoutes().length) {
+    <div class="py-8 text-center text-xs text-gray-500">No routes found</div>
+  } @else {
+    @for (r of filteredFlatRoutes(); track r.key + r.depth) {
+      <div class="flex items-start gap-1.5 py-1.5 border-b border-gray-800/50 text-xs"
+           [style.paddingLeft.px]="r.depth * 14 + 6"
+           [ngClass]="r.isActive ? 'bg-indigo-950/40' : ''">
+        @if (r.depth > 0) { <span class="text-gray-600 select-none flex-shrink-0 mt-0.5">└</span> }
+        <span class="route-path flex-shrink-0 min-w-0" [title]="r.absolutePath">{{ r.absolutePath }}</span>
+        @if (r.redirectTo !== null) {
+          <span class="text-amber-400 text-[10px] flex-shrink-0">→ {{ r.redirectTo }}</span>
+        }
+        @if (r.title) {
+          <span class="text-gray-500 text-[10px] truncate italic flex-shrink min-w-0" [title]="r.title">{{ r.title }}</span>
+        }
+        <span class="flex-1 min-w-0">
+          <div class="chips">
+            @if (r.isActive) {
+              <span class="badge bg-green-900/60 text-green-300 border border-green-700/60">● active</span>
+            }
+            @if (r.isLazy && r.loadedChildren) {
+              <button type="button" class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50 hover:border-indigo-500 cursor-pointer transition-colors"
+                [title]="r.lazyImportPath ? 'Lazy Route (Resolved): loaded children from \'' + r.lazyImportPath + '\'\nClick to open file and copy path.' : 'Lazy Route (Resolved): loaded children'"
+                (click)="handleLazyClick(r.lazyImportPath)">lazy ✓</button>
+            } @else if (r.isLazy) {
+              <button type="button" class="tag-lazy hover:border-indigo-500 cursor-pointer transition-colors"
+                [title]="r.lazyImportPath ? 'Lazy Route (Pending): imports bundle path \'' + r.lazyImportPath + '\'\nClick to open file and copy path.' : 'Lazy Route (Pending)'"
+                (click)="handleLazyClick(r.lazyImportPath)">lazy</button>
+            }
+            @for (g of r.guards; track g) {
+              <button type="button" class="tag-guard cursor-pointer hover:opacity-75 transition-opacity"
+                [title]="'Open in Sources: ' + g" (click)="openGuard(g)">{{ g }}</button>
+            }
+            @for (res of r.resolvers; track res) {
+              <button type="button" class="tag-resolver cursor-pointer hover:opacity-75 transition-opacity"
+                [title]="'Open in Sources: ' + res" (click)="openResolver(res)">{{ res }}</button>
+            }
+          </div>
+        </span>
+        @if (r.component) {
+          <button type="button"
+            class="chip flex-shrink-0 max-w-[10rem] truncate font-mono hover:text-indigo-400 cursor-pointer transition-colors"
+            [title]="'Open in Sources: ' + r.component"
+            (click)="openComponent(r.component)">{{ r.component }}</button>
+        }
+      </div>
+    }
+  }
+
+  <!-- ── Eager Routes That Could Be Lazy #6 ── -->
+  @if (eagerRoutes().length) {
+    <div class="section-title -mx-2 mb-1 mt-3">
+      ⚠ Eagerly Loaded Routes
+      <span class="normal-case font-normal ml-1 text-gray-500">— consider loadComponent / loadChildren for lazy loading</span>
+    </div>
+    <div class="flex gap-2 px-1 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr flex-1">Absolute path</span>
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-24">Child routes</span>
+    </div>
+    @for (r of eagerRoutes(); track r.absolutePath) {
+      <div class="flex items-center gap-2 px-1 py-1.5 border-b border-gray-800/50 text-xs">
+        <span class="flex-1 route-path truncate" [title]="r.absolutePath">{{ r.absolutePath }}</span>
+        <button type="button"
+          class="w-48 font-mono text-gray-300 truncate text-left hover:text-indigo-400 cursor-pointer transition-colors"
+          [title]="'Open in Sources: ' + r.component"
+          (click)="openComponent(r.component)">{{ r.component }}</button>
+        <span class="w-24"><span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ r.childRouteCount }} children</span></span>
+      </div>
+    }
+  }
+
+  <!-- N11: Missing Preloading Strategy -->
+  @if (preloadingStrategy(); as ps) {
+    @if (ps.hasLazyRoutes) {
+      <div class="section-title -mx-2 mb-1 mt-3">
+        @if (!ps.hasPreloadingStrategy) {
+          ⚠ No Router Preloading Strategy Configured
+        } @else {
+          ✓ Router Preloading Strategy
+        }
+      </div>
+      <div class="flex items-start gap-3 px-2 py-2 rounded border text-xs"
+           [ngClass]="ps.hasPreloadingStrategy ? 'bg-green-950/40 border-green-800/60' : 'bg-amber-950/40 border-amber-800/60'">
+        <span class="text-lg leading-none">{{ ps.hasPreloadingStrategy ? '✓' : '⚠' }}</span>
+        <div class="flex-1 min-w-0">
+          @if (ps.hasPreloadingStrategy) {
+            <p class="text-green-300 font-medium">Preloading is configured</p>
+            @if (ps.strategyName) {
+              <p class="text-gray-400 mt-0.5">Strategy: <span class="font-mono text-sky-300">{{ ps.strategyName }}</span></p>
+            }
+          } @else {
+            <p class="text-amber-300 font-medium">This app has lazy routes but no preloading strategy</p>
+            <p class="text-gray-400 mt-0.5">
+              Lazy modules are only fetched when the user navigates to that route.
+              Add <span class="font-mono text-sky-300">withPreloading(PreloadAllModules)</span> or a
+              custom strategy to prefetch bundles in the background after initial load.
+            </p>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>

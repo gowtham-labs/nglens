@@ -54,6 +54,8 @@ const MESSAGE_TYPES: ReadonlySet<string> = new Set([
   'DEGRADED_MODE',
   'ZONE_POLLUTION_EVENT',
   'ROUTE_CHANGED',
+  'SCAN_APP_STRUCTURE',
+  'APP_STRUCTURE_RESULT',
 ]);
 
 const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
@@ -67,6 +69,7 @@ const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
   'TRACKING_STOPPED',
   'ERROR',
   'ZONE_POLLUTION_EVENT',
+  'APP_STRUCTURE_RESULT',
 ]);
 
 // --- Panel Port Connection Handling ---
@@ -146,7 +149,8 @@ function isPanelCommand(type: string): boolean {
     type === 'START_TRACKING' ||
     type === 'STOP_TRACKING' ||
     type === 'SELECT_COMPONENT' ||
-    type === 'CLEAR_DATA'
+    type === 'CLEAR_DATA' ||
+    type === 'SCAN_APP_STRUCTURE'
   );
 }
 

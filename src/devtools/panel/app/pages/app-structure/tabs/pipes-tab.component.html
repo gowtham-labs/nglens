@@ -1,0 +1,47 @@
+<div>
+  <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+    <span class="col-hdr w-40">Pipe name</span>
+    <span class="col-hdr w-48">Class</span>
+    <span class="col-hdr flex-1">Purity</span>
+  </div>
+  @for (p of filteredPipes(); track p.className) {
+    <div class="row">
+      <span class="w-40 font-mono text-yellow-300">
+        <button type="button" class="font-mono text-yellow-300 hover:text-yellow-400 cursor-pointer transition-colors text-left"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.name }}</button>
+      </span>
+      <span class="w-48 flex items-center gap-1">
+        <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.className }}</button>
+        @if (p.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
+      </span>
+      <span class="flex-1 min-w-0">
+        @if (p.pure) { <span class="tag-pure" title="Pure Pipe: Only executes transformations when inputs change by reference. Extremely performant.">pure</span> }
+        @else { <span class="tag-impure" title="Impure Pipe: Executes on every change detection cycle, regardless of reference changes. Watch out for performance lag!">impure</span> }
+      </span>
+    </div>
+  }
+  @if (!filteredPipes().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+
+  <!-- ── Impure Pipe Performance Issues ── -->
+  @if (impurePipeIssues().length) {
+    <div class="section-title mt-2">
+      ⚠ Impure Pipe Issues
+      <span class="normal-case font-normal ml-1 text-gray-500">— re-execute on every CD cycle; prefer pure pipes or memoization</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-40">Pipe name</span>
+      <span class="col-hdr flex-1">Class</span>
+    </div>
+    @for (p of impurePipeIssues(); track p.className) {
+      <div class="row">
+        <span class="w-40 font-mono text-orange-300">
+          <button type="button" class="font-mono text-orange-300 hover:text-orange-400 cursor-pointer transition-colors text-left"
+            title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.name }}</button>
+        </span>
+        <button type="button" class="flex-1 cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(p.className, p.filePath)">{{ p.className }}</button>
+      </div>
+    }
+  }
+</div>

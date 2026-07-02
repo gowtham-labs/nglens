@@ -1,0 +1,77 @@
+<div>
+  @if (filteredNgrx().length) {
+    <div class="section-title">NgRx</div>
+    @for (n of filteredNgrx(); track n.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate">{{ n.className }}</span>
+        <span class="w-32 flex-shrink-0">
+          <span class="badge"
+            [ngClass]="n.storeType === 'store'          ? 'bg-red-900/50 text-red-300 border border-red-700/50'
+                     : n.storeType === 'component-store' ? 'bg-orange-900/50 text-orange-300 border border-orange-700/50'
+                     : n.storeType === 'signal-store'    ? 'bg-violet-900/50 text-violet-300 border border-violet-700/50'
+                     : n.storeType === 'actions'         ? 'bg-yellow-900/50 text-yellow-300 border border-yellow-700/50'
+                     : 'bg-gray-700 text-gray-300 border border-gray-600'">
+            {{ n.storeType }}
+          </span>
+        </span>
+        <span class="flex-1 min-w-0">
+          @if (n.features.length) {
+            <div class="chips">
+              @for (f of n.features; track f) { <span class="chip">{{ f }}</span> }
+            </div>
+          } @else { <span class="cell-dim">no features detected</span> }
+        </span>
+      </div>
+    }
+  }
+
+  @if (filteredSignalState().length) {
+    <div class="section-title">Signal State</div>
+    @for (s of filteredSignalState(); track s.className) {
+      <div class="row flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <span class="cell-primary">{{ s.className }}</span>
+          <span class="badge bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">{{ s.entityType }}</span>
+          @if (s.effects.length) {
+            <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50">{{ s.effects.length }} effect{{ s.effects.length !== 1 ? 's' : '' }}</span>
+          }
+        </div>
+        <div class="chips">
+          @for (p of s.writableSignals; track p) { <span class="chip-signal" title="Writable Signal: ⚡{{ p }}&#10;Direct state value property that can be safely updated over time.">⚡{{ p }}</span> }
+          @for (p of s.computedSignals; track p) { <span class="chip-computed" title="Computed Signal: ⊕{{ p }}()&#10;Derived reactive output evaluating lazily on dependency updates.">⊕{{ p }}()</span> }
+          @for (p of s.effects; track p) { <span class="badge bg-rose-900/40 text-rose-300 border border-rose-700/40" title="Effect: ⬡{{ p }}&#10;Runs side effect actions asynchronously when read signals execute updates.">⬡{{ p }}</span> }
+        </div>
+        <div class="text-[10px] text-gray-500">
+          {{ s.writableSignals.length }} writable · {{ s.computedSignals.length }} computed
+          @if (s.effects.length) { · {{ s.effects.length }} effect{{ s.effects.length !== 1 ? 's' : '' }} }
+        </div>
+      </div>
+    }
+  }
+
+  @if (filteredObservableState().length) {
+    <div class="section-title">Observable / Subject State</div>
+    @for (o of filteredObservableState(); track o.className) {
+      <div class="row flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <span class="cell-primary">{{ o.className }}</span>
+          <span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50">{{ o.entityType }}</span>
+        </div>
+        <div class="chips">
+          @for (s of o.subjects; track s)      { <span class="chip-subject">{{ s }}$</span> }
+          @for (obs of o.observables; track obs) { <span class="chip-obs">{{ obs }}</span> }
+        </div>
+        <div class="text-[10px] text-gray-500">
+          {{ o.subjects.length }} subjects · {{ o.observables.length }} observables
+        </div>
+      </div>
+    }
+  }
+
+  @if (!filteredNgrx().length && !filteredSignalState().length && !filteredObservableState().length) {
+    <div class="py-8 text-center text-xs text-gray-500">
+      No state management patterns detected.<br>
+      <span class="text-gray-600">Make sure tracking is active and components are rendered.</span>
+    </div>
+  }
+</div>

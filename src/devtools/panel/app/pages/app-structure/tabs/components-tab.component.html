@@ -1,0 +1,600 @@
+<div>
+  <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+    <span class="col-hdr w-40">Selector</span>
+    <span class="col-hdr w-48">Class</span>
+    <span class="col-hdr w-20">Strategy</span>
+    <span class="col-hdr w-24">Signals</span>
+    <span class="col-hdr flex-1">Inputs / Outputs</span>
+  </div>
+  @for (c of filteredComponents(); track c.className) {
+    <div class="row">
+      <span class="w-40 cell-primary truncate" [title]="c.selector">{{ c.selector || '—' }}</span>
+      <span class="w-48 flex items-center gap-1 min-w-0">
+        <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+          title="Open in Sources" (click)="openFile(c.filePath, c.className)">{{ c.className }}</button>
+        @if (c.standalone) { <span class="tag-standalone" title="Standalone">SA</span> }
+      </span>
+      <span class="w-20 flex-shrink-0">
+        @if (c.changeDetection === 'OnPush') { <span class="tag-onpush">OnPush</span> }
+        @else { <span class="tag-default">Default</span> }
+      </span>
+      <span class="w-24 flex-shrink-0">
+        @if (signalMap().get(c.className); as sig) {
+          <div class="chips">
+            @if (sig.writableSignals.length) {
+              @for (ws of sig.writableSignals; track ws) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="chip-signal hover:text-indigo-400 cursor-pointer transition-colors"
+                    [title]="'Writable Signal: ' + ws + '\nAllows reading and direct writing/updating of reactive state properties in the component class.'"
+                    (click)="openProperty(c.filePath, ws, c.className)">⚡{{ ws }}</button>
+                } @else {
+                  <span class="chip-signal" [title]="'Writable Signal: ' + ws + '\nAllows reading and direct writing/updating of reactive state properties in the component class.'">⚡{{ ws }}</span>
+                }
+              }
+            }
+            @if (sig.computedSignals.length) {
+              @for (cs of sig.computedSignals; track cs) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="chip-computed hover:text-indigo-400 cursor-pointer transition-colors"
+                    [title]="'Computed Signal: ' + cs + '()\nDerived reactive state that automatically re-calculates when its dependencies change.'"
+                    (click)="openProperty(c.filePath, cs, c.className)">⊕{{ cs }}()</button>
+                } @else {
+                  <span class="chip-computed" [title]="'Computed Signal: ' + cs + '()\nDerived reactive state that automatically re-calculates when its dependencies change.'">⊕{{ cs }}()</span>
+                }
+              }
+            }
+            @if (sig.effects.length) {
+              @for (ef of sig.effects; track ef) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50 hover:bg-rose-900 cursor-pointer transition-colors"
+                    [title]="'Effect: ' + ef + '\nAn operation that runs asynchronously whenever one or more reactive signals it references change.'"
+                    (click)="openProperty(c.filePath, ef, c.className)">⬡{{ ef }}</button>
+                } @else {
+                  <span class="badge bg-rose-900/50 text-rose-300 border border-rose-700/50" [title]="'Effect: ' + ef + '\nAn operation that runs asynchronously whenever one or more reactive signals it references change.'">⬡{{ ef }}</span>
+                }
+              }
+            }
+          </div>
+        }
+        @if (c.signalInputs.length || c.modelInputs.length) {
+          <div class="chips mt-0.5">
+            @if (c.signalInputs.length) {
+              @for (si of c.signalInputs; track si) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors font-mono"
+                    [title]="'Signal Input: ' + si + '\nReactive input parameter whose value is exposed as a Signal and updates automatically.'"
+                    (click)="openProperty(c.filePath, si, c.className)">↩{{ si }}</button>
+                } @else {
+                  <span class="badge bg-teal-900/50 text-teal-300 border border-teal-700/50 font-mono" [title]="'Signal Input: ' + si + '\nReactive input parameter whose value is exposed as a Signal and updates automatically.'">↩{{ si }}</span>
+                }
+              }
+            }
+            @if (c.modelInputs.length) {
+              @for (mi of c.modelInputs; track mi) {
+                @if (c.filePath && !isPackageOnly(c.filePath)) {
+                  <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors font-mono"
+                    [title]="'Model Input: ' + mi + '\nReactive input that supports two-way data-binding, allowing parent components to write back updates.'"
+                    (click)="openProperty(c.filePath, mi, c.className)">⇄{{ mi }}</button>
+                } @else {
+                  <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 font-mono" [title]="'Model Input: ' + mi + '\nReactive input that supports two-way data-binding, allowing parent components to write back updates.'">⇄{{ mi }}</span>
+                }
+              }
+            }
+          </div>
+        }
+        @if (!signalMap().get(c.className) && !c.signalInputs.length && !c.modelInputs.length) {
+          <span class="cell-dim">—</span>
+        }
+      </span>
+      <span class="flex-1 min-w-0">
+        @if (c.inputs.length || c.outputs.length) {
+          <div class="chips">
+            @for (inp of c.inputs; track inp) {
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="chip-input hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the component.'"
+                  (click)="openProperty(c.filePath, inp, c.className)">&#64;{{ inp }}</button>
+              } @else {
+                <span class="chip-input" [title]="'Decorator-based Input: ' + inp + '\nStandard Angular @Input property allowing parent templates to pass data into the component.'">&#64;{{ inp }}</span>
+              }
+            }
+            @for (out of c.outputs; track out) {
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="chip-output hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the component.'"
+                  (click)="openProperty(c.filePath, out, c.className)">{{ out }}</button>
+              } @else {
+                <span class="chip-output" [title]="'Decorator-based Output: ' + out + '\nStandard Angular @Output property emitting Events out of the component.'">{{ out }}</span>
+              }
+            }
+          </div>
+        } @else { <span class="cell-dim">—</span> }
+      </span>
+    </div>
+    <!-- Dependencies & Transitive Dependencies Sub-row (Direct + Transitive) -->
+    @if (c.dependencies.length > 0 || getTransitiveDependencies(c.className).length > c.dependencies.length) {
+      <div class="row bg-gray-950/20 -mt-1 border-t border-gray-800/10 text-[10px] pl-6 flex flex-col gap-1 py-1 text-gray-500">
+        @if (c.dependencies.length > 0) {
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-400">Direct Dependent Components / Directives / Pipes:</span>
+            <div class="chips">
+              @for (dep of c.dependencies; track dep) {
+                <button type="button" class="chip text-indigo-300 hover:text-indigo-400 cursor-pointer transition-colors font-mono"
+                  [title]="'Open ' + dep + ' in Sources'"
+                  (click)="openInSources(dep)">{{ dep }}</button>
+              }
+            </div>
+          </div>
+        }
+        @if (getTransitiveDependencies(c.className).length > c.dependencies.length) {
+          @let trans = getTransitiveDependencies(c.className);
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-400">Transitive Dependent Components / Directives / Pipes:</span>
+            <div class="chips">
+              @for (dep of trans; track dep) {
+                @if (!c.dependencies.includes(dep)) {
+                  <button type="button" class="chip text-violet-300 hover:text-violet-400 cursor-pointer transition-colors font-mono"
+                    [title]="'Open ' + dep + ' in Sources'"
+                    (click)="openInSources(dep)">{{ dep }}</button>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  }
+  @if (!filteredComponents().length) { <div class="py-8 text-center text-xs text-gray-500">No results</div> }
+
+  <!-- ── Model Inputs ── -->
+  @if (filteredModelComponents().length) {
+    <div class="section-title mt-2">
+      Model Inputs
+      <span class="normal-case font-normal ml-1 text-gray-500">— two-way bindings via <code class="font-mono text-[10px]">model()</code></span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">model() properties</span>
+    </div>
+    @for (c of filteredModelComponents(); track c.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="c.className">{{ c.className }}</span>
+        <div class="flex-1 min-w-0">
+          <div class="chips">
+            @for (m of c.modelInputs; track m) {
+              @if (c.filePath && !isPackageOnly(c.filePath)) {
+                <button type="button" class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50 hover:border-indigo-500/50 cursor-pointer transition-colors"
+                  [title]="'Jump to model() property ' + m + ' in Sources'"
+                  (click)="openProperty(c.filePath, m, c.className)">⇄ {{ m }}</button>
+              } @else {
+                <span class="badge bg-sky-900/50 text-sky-300 border border-sky-700/50">⇄ {{ m }}</span>
+              }
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Change Detection Performance                                          -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- CD Strategy Mismatches #8 -->
+  @if (cdMismatches().length) {
+    <div class="section-title mt-2">
+      ⚠ CD Strategy Mismatch
+      <span class="normal-case font-normal ml-1 text-gray-500">— OnPush child under Default parent; OnPush gains nothing</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Child (OnPush)</span>
+      <span class="col-hdr w-44">Parent (Default)</span>
+      <span class="col-hdr w-32">Child selector</span>
+      <span class="col-hdr flex-1">Parent selector</span>
+    </div>
+    @for (m of cdMismatches(); track m.childClassName) {
+      <div class="row">
+        <span class="w-44 font-mono text-green-300 truncate" [title]="m.childClassName">{{ m.childClassName }}</span>
+        <span class="w-44 font-mono text-gray-300 truncate" [title]="m.parentClassName">{{ m.parentClassName }}</span>
+        <span class="w-32 cell-dim font-mono truncate">{{ m.childSelector || '—' }}</span>
+        <span class="flex-1 cell-dim font-mono truncate">{{ m.parentSelector || '—' }}</span>
+      </div>
+    }
+  }
+
+  <!-- CD Ref Abuse #7 -->
+  @if (cdRefAbuse().length) {
+    <div class="section-title mt-2">
+      ⚠ detectChanges / markForCheck in Lifecycle Hooks
+      <span class="normal-case font-normal ml-1 text-gray-500">— causes redundant CD cycles on every hook call</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-28">CD method</span>
+      <span class="col-hdr flex-1">Called in hooks</span>
+    </div>
+    @for (a of cdRefAbuse(); track (a.className + a.method)) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="a.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(a.filePath, a.className)">{{ a.className }}</button>
+        </span>
+        <span class="w-28"><span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ a.method }}()</span></span>
+        <span class="flex-1 chips">
+          @for (h of a.inHooks; track h) { <span class="chip text-amber-300">{{ h }}</span> }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- Heavy Lifecycle Hooks #4 -->
+  @if (heavyHooks().length) {
+    <div class="section-title mt-2">
+      ⚠ Heavy ngDoCheck / ngAfterViewChecked / ngAfterContentChecked
+      <span class="normal-case font-normal ml-1 text-gray-500">— run on every CD cycle</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">Hooks (body size)</span>
+    </div>
+    @for (h of heavyHooks(); track h.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="h.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(h.filePath, h.className)">{{ h.className }}</button>
+        </span>
+        <span class="flex-1 chips">
+          @for (hook of h.hooks; track hook.name) {
+            <span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50" [title]="hook.name + ': ' + hook.bodyLength + ' chars'">
+              {{ hook.name }} <span class="ml-1 opacity-60">{{ hook.bodyLength }}c</span>
+            </span>
+          }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- OnPush Mutation Risk #9 -->
+  @if (onPushRisks().length) {
+    <div class="section-title mt-2">
+      ⚠ OnPush + Object &#64;Input() — Mutation Risk
+      <span class="normal-case font-normal ml-1 text-gray-500">— in-place mutation bypasses change detection</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Object-like &#64;Input() names</span>
+    </div>
+    @for (r of onPushRisks(); track r.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="r.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(r.filePath, r.className)">{{ r.className }}</button>
+        </span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ r.selector || '—' }}</span>
+        <span class="flex-1 chips">
+          @for (inp of r.objectInputs; track inp) {
+            <button type="button" class="chip text-green-400 hover:text-indigo-400 transition-colors"
+              [title]="'Jump to @Input ' + inp"
+              (click)="openProperty(r.filePath, inp, r.className)">&#64;{{ inp }}</button>
+          }
+        </span>
+        @if (r.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(r.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + r.filePath"
+            (click)="openFile(r.filePath, r.className)">{{ shortPath(r.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
+      </div>
+    }
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Template & Rendering Performance                                      -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Large Lists #3 -->
+  @if (largeLists().length) {
+    <div class="section-title mt-2">
+      ⚠ Large *ngFor / &#64;for Without Virtual Scroll
+      <span class="normal-case font-normal ml-1 text-gray-500">— consider CDK virtual scrolling</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr w-24">Items</span>
+      <span class="col-hdr flex-1">Virtual scroll</span>
+    </div>
+    @for (l of largeLists(); track l.componentName) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="l.componentName">{{ l.componentName }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ l.selector || '—' }}</span>
+        <span class="w-24"><span class="badge bg-orange-900/50 text-orange-300 border border-orange-700/50">{{ l.estimatedItemCount }}</span></span>
+        <span class="flex-1">
+          @if (l.hasVirtualScroll) {
+            <span class="badge bg-green-900/50 text-green-300 border border-green-700/50">cdk-virtual-scroll ✓</span>
+          } @else {
+            <span class="badge bg-red-900/50 text-red-300 border border-red-700/50">no virtual scroll</span>
+          }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- Import Bloat #16 -->
+  @if (importBloat().length) {
+    <div class="section-title mt-2">
+      ⚠ Standalone Components Importing Full NgModules
+      <span class="normal-case font-normal ml-1 text-gray-500">— hurts tree-shaking; prefer individual imports</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Imported NgModules</span>
+    </div>
+    @for (b of importBloat(); track b.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="b.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(b.filePath, b.className)">{{ b.className }}</button>
+        </span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ b.selector || '—' }}</span>
+        <span class="flex-1 chips">
+          @for (m of b.moduleImports; track m) { <span class="badge bg-amber-900/50 text-amber-300 border border-amber-700/50">{{ m }}</span> }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- Defer Opportunities #10 -->
+  @if (deferOpps().length) {
+    <div class="section-title mt-2">
+      ⚡ &#64;defer Opportunities — Large Subtrees
+      <span class="normal-case font-normal ml-1 text-gray-500">— lazy-render below the fold or on interaction</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr w-20">Nodes</span>
+      <span class="col-hdr flex-1">Reason</span>
+    </div>
+    @for (d of deferOpps(); track d.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="d.className">{{ d.className }}</span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ d.selector || '—' }}</span>
+        <span class="w-20"><span class="badge bg-violet-900/50 text-violet-300 border border-violet-700/50">{{ d.subtreeNodeCount }}</span></span>
+        <span class="flex-1 cell-dim">{{ d.reason }}</span>
+      </div>
+    }
+  }
+
+  <!-- Animation Issues #17 -->
+  @if (animationIssues().length) {
+    <div class="section-title mt-2">
+      ⚠ Animations Using Layout-Triggering CSS Properties
+      <span class="normal-case font-normal ml-1 text-gray-500">— use transform/opacity for compositor performance</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Trigger(s)</span>
+      <span class="col-hdr flex-1">Layout-triggering properties</span>
+    </div>
+    @for (a of animationIssues(); track a.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="a.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(a.filePath, a.className)">{{ a.className }}</button>
+        </span>
+        <span class="w-32 chips font-mono">
+          @for (t of a.triggerNames; track t) { <span class="badge bg-fuchsia-900/50 text-fuchsia-300 border border-fuchsia-700/50">{{ t }}</span> }
+        </span>
+        <span class="flex-1 chips font-mono">
+          @for (p of a.layoutTriggeringProps; track p) { <span class="badge bg-red-900/50 text-red-300 border border-red-700/50 font-mono">{{ p }}</span> }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- Forms Mixing #13 -->
+  @if (formsMixing().length) {
+    <div class="section-title mt-2">
+      ⚠ Reactive + Template-Driven Forms Mixed in One Component
+      <span class="normal-case font-normal ml-1 text-gray-500">— pick one paradigm per component</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-48">Component</span>
+      <span class="col-hdr w-32">Selector</span>
+      <span class="col-hdr flex-1">Paradigms</span>
+    </div>
+    @for (f of formsMixing(); track f.className) {
+      <div class="row">
+        <span class="w-48 cell-primary truncate" [title]="f.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(f.filePath, f.className)">{{ f.className }}</button>
+        </span>
+        <span class="w-32 font-mono text-gray-400 truncate">{{ f.selector || '—' }}</span>
+        <span class="flex-1 chips font-mono">
+          @if (f.usesReactiveForms) { <span class="badge bg-lime-900/50 text-lime-300 border border-lime-700/50">ReactiveFormsModule</span> }
+          @if (f.usesTemplateForms) { <span class="badge bg-cyan-900/50 text-cyan-300 border border-cyan-700/50">NgModel / FormsModule</span> }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- QueryList Overuse #14 -->
+  @if (queryListOveruse().length) {
+    <div class="section-title mt-2">
+      ⚠ &#64;ViewChildren / &#64;ContentChildren QueryList Properties
+      <span class="normal-case font-normal ml-1 text-gray-500">— .changes triggers CD on every list mutation</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr flex-1">QueryList properties</span>
+    </div>
+    @for (q of queryListOveruse(); track q.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="q.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(q.filePath, q.className)">{{ q.className }}</button>
+        </span>
+        <span class="flex-1 chips font-mono">
+          @for (p of q.queryListProperties; track p) {
+            <button type="button" class="chip text-sky-400 hover:text-indigo-400 transition-colors font-mono"
+              [title]="'Jump to QueryList property ' + p"
+              (click)="openProperty(q.filePath, p, q.className)">{{ p }}</button>
+          }
+        </span>
+      </div>
+    }
+  }
+
+  <!-- N1: Template Method Calls -->
+  @if (templateFunctionCalls().length) {
+    <div class="section-title mt-2">
+      ⚠ Template Method Calls
+      <span class="normal-case font-normal ml-1 text-gray-500">— methods called in binding expressions re-execute on every CD cycle; use a pipe or computed signal instead</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Component</span>
+      <span class="col-hdr w-28">Selector</span>
+      <span class="col-hdr flex-1">Called methods</span>
+      <span class="col-hdr w-32">File</span>
+    </div>
+    @for (t of templateFunctionCalls(); track t.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate" [title]="t.className">{{ t.className }}</span>
+        <span class="w-28 text-xs text-gray-400 truncate" [title]="t.selector">{{ t.selector }}</span>
+        <span class="flex-1 chips">
+          @for (m of t.calledMethods; track m) {
+            <button type="button" class="chip text-amber-400 hover:text-indigo-400 transition-colors"
+              [title]="'Jump to method ' + m"
+              (click)="openProperty(t.filePath, m, t.className)">{{ m }}()</button>
+          }
+        </span>
+        @if (t.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(t.filePath) ? 'w-32 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'w-32 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + t.filePath"
+            (click)="openFile(t.filePath, t.className)">{{ shortPath(t.filePath) }}</button>
+        } @else {
+          <span class="w-32 cell-dim">—</span>
+        }
+      </div>
+    }
+  }
+
+  <!-- N2: *ngFor Without trackBy -->
+  @if (ngForWithoutTrackBy().length) {
+    <div class="section-title mt-2">
+      ⚠ *ngFor Without trackBy
+      <span class="normal-case font-normal ml-1 text-gray-500">— full DOM rebuild on every array change; add trackBy to tell Angular which items changed</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr w-36">Selector</span>
+      <span class="col-hdr flex-1">File</span>
+    </div>
+    @for (n of ngForWithoutTrackBy(); track n.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="n.className">{{ n.className }}</span>
+        <span class="w-36 text-xs text-gray-400 truncate" [title]="n.selector">{{ n.selector }}</span>
+        @if (n.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(n.filePath) ? 'flex-1 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'flex-1 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + n.filePath"
+            (click)="openFile(n.filePath, n.className)">{{ shortPath(n.filePath) }}</button>
+        } @else {
+          <span class="flex-1 cell-dim">—</span>
+        }
+      </div>
+    }
+  }
+
+  <!-- N5: Observable Subscription Leaks -->
+  @if (subscriptionLeaks().length) {
+    <div class="section-title mt-2">
+      ⚠ Observable Subscription Leaks
+      <span class="normal-case font-normal ml-1 text-gray-500">— subscribe() called without takeUntil / takeUntilDestroyed / unsubscribe; use takeUntilDestroyed()</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Component</span>
+      <span class="col-hdr w-36">Leaky hooks</span>
+      <span class="col-hdr w-28">ngOnDestroy</span>
+      <span class="col-hdr flex-1">File</span>
+    </div>
+    @for (s of subscriptionLeaks(); track s.className) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="s.className">{{ s.className }}</span>
+        <span class="w-36 chips">
+          @for (h of s.inHooks; track h) { <span class="chip text-red-400">{{ h }}</span> }
+        </span>
+        <span class="w-28">
+          @if (s.hasDestroyHook) {
+            <span class="badge-warning">present</span>
+          } @else {
+            <span class="badge-error">missing</span>
+          }
+        </span>
+        @if (s.filePath) {
+          <button type="button"
+            [class]="isExternalPkg(s.filePath) ? 'flex-1 pkg-badge truncate cursor-pointer hover:opacity-75 transition-opacity text-left' : 'flex-1 src-path cursor-pointer hover:text-indigo-400 transition-colors text-left truncate'"
+            [title]="'Open in Sources: ' + s.filePath"
+            (click)="openFile(s.filePath, s.className)">{{ shortPath(s.filePath) }}</button>
+        } @else {
+          <span class="flex-1 cell-dim">—</span>
+        }
+      </div>
+    }
+  }
+
+  <!-- N8: Deep Component Nesting -->
+  @if (deepNesting().length) {
+    <div class="section-title mt-2">
+      ⚠ Deep Component Nesting (&gt;{{ 15 }} Angular elements deep)
+      <span class="normal-case font-normal ml-1 text-gray-500">— deeply nested trees increase CD traversal cost; consider flattening or using OnPush</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-52">Leaf component</span>
+      <span class="col-hdr w-36">Selector</span>
+      <span class="col-hdr w-24 text-right">Depth</span>
+    </div>
+    @for (d of deepNesting(); track d.leafClassName) {
+      <div class="row">
+        <span class="w-52 cell-primary truncate" [title]="d.leafClassName">{{ d.leafClassName }}</span>
+        <span class="w-36 text-xs text-gray-400 truncate" [title]="d.leafSelector">{{ d.leafSelector }}</span>
+        <span class="w-24 text-right">
+          <span class="chip" [ngClass]="d.depth > 25 ? 'text-red-400' : 'text-amber-400'">{{ d.depth }}</span>
+        </span>
+      </div>
+    }
+  }
+
+  <!-- N14: Direct DOM Manipulation via ElementRef -->
+  @if (directDomManipulation().length) {
+    <div class="section-title mt-2">
+      ⚠ Direct DOM Manipulation via ElementRef
+      <span class="normal-case font-normal ml-1 text-gray-500">— bypasses Angular's rendering pipeline; use Renderer2, &#64;HostBinding, or animations API instead</span>
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Component</span>
+      <span class="col-hdr w-36">Hooks</span>
+      <span class="col-hdr flex-1">Patterns</span>
+    </div>
+    @for (d of directDomManipulation(); track d.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate" [title]="d.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(d.filePath, d.className)">{{ d.className }}</button>
+        </span>
+        <span class="w-36 chips font-mono">
+          @for (h of d.inHooks; track h) { <span class="chip text-violet-400">{{ h }}</span> }
+        </span>
+        <span class="flex-1 chips font-mono">
+          @for (p of d.patterns; track p) { <span class="chip text-orange-400">{{ p }}</span> }
+        </span>
+      </div>
+    }
+  }
+</div>

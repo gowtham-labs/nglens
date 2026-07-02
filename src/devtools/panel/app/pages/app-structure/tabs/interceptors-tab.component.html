@@ -1,0 +1,37 @@
+<div>
+  @if (filteredInterceptors().length) {
+    <div class="px-3 py-2.5 bg-gray-800/40 border-b border-gray-700 text-[10px] text-gray-500">
+      {{ filteredInterceptors().length }} HTTP interceptor{{ filteredInterceptors().length !== 1 ? 's' : '' }} detected
+      — execution order is left-to-right (#1 runs first)
+    </div>
+    <div class="sticky top-0 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-8">#</span>
+      <span class="col-hdr w-52">Class</span>
+      <span class="col-hdr flex-1">Style</span>
+    </div>
+    @for (i of filteredInterceptors(); track i.className) {
+      <div class="row">
+        <span class="w-8 flex-shrink-0 text-gray-500 font-mono text-[10px]">#{{ i.order + 1 }}</span>
+        <span class="w-52 cell-primary truncate" [title]="i.className">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openInSources(i)">{{ i.className }}</button>
+        </span>
+        <span class="flex-1 flex-shrink-0">
+          @if (i.functional) {
+            <span class="badge bg-gray-700 text-gray-300 border border-gray-600" title="Functional Request Interceptor: Modern, non-class based function interceptor mapping directly to HTTP flows.">functional</span>
+          } @else {
+            <span class="tag-iceptor" title="Class-based HttpInterceptor: An Injectable class registered under HTTP_INTERCEPTORS multi provider queue.">class</span>
+          }
+        </span>
+      </div>
+    }
+  } @else {
+    <div class="py-8 text-center text-xs text-gray-500">
+      No HTTP interceptors detected.
+      <span class="block text-gray-600 mt-0.5">
+        Interceptors registered via <code class="font-mono">withInterceptors()</code> or
+        <code class="font-mono">HTTP_INTERCEPTORS</code> will appear here after scanning.
+      </span>
+    </div>
+  }
+</div>

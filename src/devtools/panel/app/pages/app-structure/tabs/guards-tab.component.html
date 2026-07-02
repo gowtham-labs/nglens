@@ -1,0 +1,41 @@
+<div>
+  @if (filteredGuards().length) {
+    <div class="section-title">Guards</div>
+    <div class="sticky top-8 z-10 flex gap-2 px-3 py-1.5 bg-gray-900 border-b border-gray-700">
+      <span class="col-hdr w-44">Class</span>
+      <span class="col-hdr w-32">Type</span>
+      <span class="col-hdr flex-1">Routes</span>
+    </div>
+    @for (g of filteredGuards(); track g.className) {
+      <div class="row">
+        <span class="w-44 cell-primary truncate">
+          <button type="button" class="cell-primary hover:text-indigo-400 cursor-pointer transition-colors text-left truncate font-medium"
+            title="Open in Sources" (click)="openFile(g.className, g.filePath)">{{ g.className }}</button>
+        </span>
+        <span class="w-32 flex-shrink-0">
+          <div class="chips">
+            @for (t of g.guardTypes; track t) { <span class="tag-guard">{{ t }}</span> }
+            @if (g.functional) { <span class="badge bg-gray-700 text-gray-300 border border-gray-600">fn</span> }
+          </div>
+        </span>
+        <span class="flex-1 min-w-0">
+          <div class="chips">
+            @for (r of g.routes; track r) {
+              @if (g.filePath && !isPackageOnly(g.filePath)) {
+                <button type="button" class="chip route-path text-blue-300 hover:text-indigo-400 cursor-pointer transition-colors"
+                  [title]="'Route Pathway: ' + r + '\nDynamic path mapped in active route configurations protected by this Guard.'"
+                  (click)="openProperty(g.filePath, r, g.className)">{{ r }}</button>
+              } @else {
+                <span class="chip route-path text-blue-300" [title]="'Route Pathway: ' + r + '\nDynamic path mapped in active route configurations protected by this Guard.'">{{ r }}</span>
+              }
+            }
+            @if (!g.routes.length) { <span class="cell-dim">—</span> }
+          </div>
+        </span>
+      </div>
+    }
+  }
+  @if (!filteredGuards().length) {
+    <div class="py-8 text-center text-xs text-gray-500">No guards detected</div>
+  }
+</div>

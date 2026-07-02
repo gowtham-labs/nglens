@@ -30,6 +30,8 @@ const MESSAGE_TYPES = [
   'DEGRADED_MODE',
   'ZONE_POLLUTION_EVENT',
   'ROUTE_CHANGED',
+  'SCAN_APP_STRUCTURE',
+  'APP_STRUCTURE_RESULT',
 ] as const satisfies readonly MessageType[];
 
 const PAGE_SCRIPT_RESPONSE_TYPES = [
@@ -49,6 +51,7 @@ const PAGE_SCRIPT_ASYNC_EVENT_TYPES = [
   'TRACKING_STOPPED',
   'ERROR',
   'ZONE_POLLUTION_EVENT',
+  'APP_STRUCTURE_RESULT',
 ] as const satisfies readonly MessageType[];
 
 const PANEL_COMMAND_TYPES = [
@@ -56,6 +59,7 @@ const PANEL_COMMAND_TYPES = [
   'STOP_TRACKING',
   'SELECT_COMPONENT',
   'CLEAR_DATA',
+  'SCAN_APP_STRUCTURE',
 ] as const satisfies readonly MessageType[];
 
 const messageTypeSet = new Set<string>(MESSAGE_TYPES);

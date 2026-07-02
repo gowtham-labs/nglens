@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
+import { CommandService } from '../../services/command.service';
 import { displayName } from '../../utils/display-name';
 import {
   ActionConfidence,
@@ -85,37 +86,57 @@ interface ComponentGroup {
         <div class="space-y-2">
           @for (group of filteredGroups(); track group.componentName) {
             <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
-              <!-- Component header (clickable to expand) -->
-              <button
-                type="button"
-                class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
-                (click)="toggleGroup(group.componentName)"
-              >
-                <span class="text-[10px] text-gray-500">
-                  {{ isExpanded(group.componentName) ? '▼' : '▶' }}
-                </span>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                      {{ group.totalCount }} {{ group.totalCount === 1 ? 'issue' : 'issues' }}
-                    </span>
-                  </div>
-                  <div class="flex gap-1.5 mt-1">
-                    @for (action of group.actions.slice(0, 3); track action.id) {
-                      <span class="kind-pill" [ngClass]="kindClass(action.kind)">
-                        {{ kindLabel(action.kind) }}
+              <!-- Component header -->
+              <div class="flex items-stretch">
+                <!-- Expand / collapse -->
+                <button
+                  type="button"
+                  class="flex-1 min-w-0 text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
+                  (click)="toggleGroup(group.componentName)"
+                >
+                  <span class="text-[10px] text-gray-500 flex-shrink-0">
+                    {{ isExpanded(group.componentName) ? '▼' : '▶' }}
+                  </span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-sm font-semibold text-gray-100">{{ group.displayName }}</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                        {{ group.totalCount }} {{ group.totalCount === 1 ? 'issue' : 'issues' }}
                       </span>
-                    }
-                    @if (group.actions.length > 3) {
-                      <span class="text-[10px] text-gray-500">+{{ group.actions.length - 3 }} more</span>
-                    }
+                    </div>
+                    <div class="flex gap-1.5 mt-1">
+                      @for (action of group.actions.slice(0, 3); track action.id) {
+                        <span class="kind-pill" [ngClass]="kindClass(action.kind)">
+                          {{ kindLabel(action.kind) }}
+                        </span>
+                      }
+                      @if (group.actions.length > 3) {
+                        <span class="text-[10px] text-gray-500">+{{ group.actions.length - 3 }} more</span>
+                      }
+                    </div>
                   </div>
-                </div>
-                <span class="badge" [ngClass]="confidenceClass(group.highestConfidence)">
-                  {{ group.highestConfidence }}
-                </span>
-              </button>
+                  <span class="badge" [ngClass]="confidenceClass(group.highestConfidence)">
+                    {{ group.highestConfidence }}
+                  </span>
+                </button>
+                <!-- Open component file in Sources panel -->
+                <button
+                  type="button"
+                  class="flex-shrink-0 px-3 flex items-center text-gray-600 hover:text-blue-400 transition-colors border-l border-gray-800"
+                  title="Open component file in Sources panel"
+                  (click)="openInSources(group.componentName)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </button>
+              </div>
 
               <!-- Expanded: issues grouped by category -->
               @if (isExpanded(group.componentName)) {
@@ -134,10 +155,10 @@ interface ComponentGroup {
                           <p class="text-xs text-gray-500 mt-1 italic">Fix: {{ action.suggestedFix }}</p>
                         </div>
                         <div class="flex gap-1 flex-shrink-0">
-                          <span class="badge" [ngClass]="confidenceClass(action.confidence)">
+                          <span class="badge" [ngClass]="confidenceClass(action.confidence)" title="Confidence level of this recommendation">
                             {{ action.confidence }}
                           </span>
-                          <span class="badge" [ngClass]="gainClass(action.expectedGain)">
+                          <span class="badge" [ngClass]="gainClass(action.expectedGain)" title="Expected gain from this recommendation">
                             {{ action.expectedGain }}
                           </span>
                         </div>
@@ -235,6 +256,7 @@ interface ComponentGroup {
 })
 export class RecommendationsComponent {
   readonly state = inject(PanelState);
+  private readonly commandService = inject(CommandService);
   readonly displayName = displayName;
   readonly confidenceClass = confidenceClass;
   readonly difficultyClass = difficultyClass;
@@ -327,6 +349,10 @@ export class RecommendationsComponent {
 
   isExpanded(componentName: string): boolean {
     return this.expandedComponents().has(componentName);
+  }
+
+  openInSources(componentName: string): void {
+    this.commandService.openInSources(componentName);
   }
 
   kindLabel(kind: ActionKind): string {

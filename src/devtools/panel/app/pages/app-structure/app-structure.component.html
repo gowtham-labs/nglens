@@ -1,0 +1,97 @@
+<div class="h-full flex flex-col overflow-hidden">
+
+  <!-- ── Header ── -->
+  <div class="flex-shrink-0 px-4 py-3 border-b border-gray-800 flex items-center gap-3">
+    <div class="flex-1">
+      <h2 class="text-sm font-semibold text-gray-100">App Map</h2>
+    </div>
+    @if (data()) {
+      <span class="text-[10px] text-gray-500">
+        {{ formatTime(data()!.collectedAt) }}
+        @if (data()!.angularVersion) { · v{{ data()!.angularVersion }} }
+      </span>
+    }
+    <button
+      (click)="scan()"
+      [disabled]="scanning()"
+      class="px-3 py-1.5 text-xs rounded border transition-colors"
+      [class.border-gray-600]="scanning()"
+      [class.text-gray-500]="scanning()"
+      [class.cursor-not-allowed]="scanning()"
+      [class.border-indigo-500]="!scanning()"
+      [class.text-indigo-400]="!scanning()"
+      [class.hover:bg-indigo-500/10]="!scanning()">
+      {{ scanning() ? 'Scanning…' : data() ? 'Re-scan' : 'Scan App' }}
+    </button>
+  </div>
+
+  <!-- ── Empty / Loading ── -->
+  @if (!data() && !scanning()) {
+    <div class="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
+      <div class="text-4xl opacity-30">🔭</div>
+      <div>
+        <p class="text-sm font-medium text-gray-300">No registry data yet</p>
+        <p class="text-xs text-gray-500 mt-1">
+          Click <strong class="text-gray-300">Scan App</strong> to collect the full Angular registry from the inspected page.
+        </p>
+      </div>
+    </div>
+  } @else if (scanning()) {
+    <div class="flex-1 flex items-center justify-center gap-2 text-gray-400 text-sm">
+      <span class="animate-spin">⟳</span> Collecting Angular registry…
+    </div>
+  } @else {
+
+    <!-- ── Tab bar ── -->
+    <div class="flex-shrink-0 flex gap-0 border-b border-gray-800 bg-gray-900/50 overflow-x-auto">
+      @for (tab of tabs; track tab.id) {
+        <button
+          class="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap text-xs border-b-2 -mb-px transition-colors"
+          [class.border-indigo-500]="activeTab() === tab.id"
+          [class.text-white]="activeTab() === tab.id"
+          [class.bg-gray-800/30]="activeTab() === tab.id"
+          [class.border-transparent]="activeTab() !== tab.id"
+          [class.text-gray-400]="activeTab() !== tab.id"
+          (click)="activeTab.set(tab.id)">
+          <span>{{ tab.icon }}</span>
+          {{ tab.label }}
+          @if (tab.count() > 0) {
+            <span class="px-1 py-0.5 rounded-full text-[10px]"
+              [class.bg-indigo-600]="activeTab() === tab.id"
+              [class.text-white]="activeTab() === tab.id"
+              [class.bg-gray-700]="activeTab() !== tab.id"
+              [class.text-gray-400]="activeTab() !== tab.id">
+              {{ tab.count() }}
+            </span>
+          }
+        </button>
+      }
+    </div>
+
+    <!-- ── Search ── -->
+    <div class="flex-shrink-0 px-3 py-2 border-b border-gray-800">
+      <input type="search" placeholder="Filter…"
+        [value]="searchQuery()"
+        (input)="searchQuery.set($any($event.target).value)"
+        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500" />
+    </div>
+
+
+    <!-- ── Tab content ── -->
+    <div class="flex-1 overflow-auto">
+      @if (activeTab() === 'app')          { <app-app-info-tab      [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'components')   { <app-components-tab    [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'directives')   { <app-directives-tab    [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'pipes')        { <app-pipes-tab         [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'services')     { <app-services-tab      [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'modules')      { <app-modules-tab       [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'routes')       { <app-routes-tab        [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'guards')       { <app-guards-tab        [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'interceptors') { <app-interceptors-tab  [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'resolvers')    { <app-resolvers-tab     [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'classes')      { <app-classes-tab       [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'tokens')       { <app-tokens-tab        [searchQuery]="searchQuery()" /> }
+      @if (activeTab() === 'app-config')   { <app-app-config-tab    [searchQuery]="searchQuery()" /> }
+    </div>
+  }
+</div>
